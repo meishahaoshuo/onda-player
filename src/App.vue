@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import Sidebar from '@/components/Sidebar.vue'
 import PlayerBar from '@/components/PlayerBar.vue'
 import SongsView from '@/views/SongsView.vue'
 import FoldersView from '@/views/FoldersView.vue'
+import AlbumsView from '@/views/AlbumsView.vue'
+import AlbumDetailView from '@/views/AlbumDetailView.vue'
+import ArtistsView from '@/views/ArtistsView.vue'
+import GenresView from '@/views/GenresView.vue'
 import PlaceholderView from '@/views/PlaceholderView.vue'
 import { useUiStore } from '@/stores/ui'
 import { useLibraryStore } from '@/stores/library'
@@ -27,6 +31,7 @@ const viewTitles: Record<ViewId, string> = {
 }
 
 const title = computed(() => viewTitles[ui.activeView])
+const selectedRootId = ref<string | null>(null)
 
 function addFolder() {
   library.addFolder()
@@ -49,12 +54,18 @@ onMounted(async () => {
         </header>
         <section class="view-body">
           <SongsView v-show="ui.activeView === 'songs'" @add-folder="addFolder" />
-          <FoldersView v-if="ui.activeView === 'folders'" @add-folder="addFolder" />
-          <PlaceholderView
-            v-else-if="ui.activeView !== 'songs'"
-            :key="ui.activeView"
-            :title="title"
-          />
+
+          <template v-if="ui.activeView === 'albums'">
+            <AlbumDetailView v-if="ui.detailKey" :album-key="ui.detailKey" />
+            <AlbumsView v-else />
+          </template>
+
+          <ArtistsView v-else-if="ui.activeView === 'artists'" />
+          <GenresView v-else-if="ui.activeView === 'genres'" />
+
+          <FoldersView v-else-if="ui.activeView === 'folders'" v-model:selected-root="selectedRootId" @add-folder="addFolder" />
+
+          <PlaceholderView v-else-if="ui.activeView !== 'songs'" :key="ui.activeView" :title="title" />
         </section>
       </main>
     </div>

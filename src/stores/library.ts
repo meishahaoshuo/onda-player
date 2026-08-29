@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import * as db from '@/services/db'
 import { pickFolder, queryPermission, removeFolder, requestPermission, type PermissionState } from '@/services/fs'
 import { scanRoot, type ScanTask } from '@/services/scanner'
-import type { FolderRoot, ScanProgress, SongRecord } from '@/types'
+import type { AlbumSummary, FolderRoot, ScanProgress, SongRecord } from '@/types'
 
 /**
  * 音乐库：根文件夹、歌曲数据、扫描进度、封面 URL 缓存
@@ -30,6 +30,63 @@ export const useLibraryStore = defineStore('library', () => {
         a.title.localeCompare(b.title, 'zh-Hans-CN') || a.path.localeCompare(b.path),
     ),
   )
+
+  /* ---------- 聚合视图数据 ---------- */
+
+  const albums = computed<AlbumSummary[]>(() => {
+    const map = new Map<string, SongRecord[]>()
+    for (const s of songs.value) {
+      const key = `${s.album}\n${s.albumArtist}`
+      const list = map.get(key)
+      if (list) list.push(s)
+      else map.set(key, [s])
+    }
+    return [...map.entries()].map(([key, list]) => {
+      const sorted = [...list].sort(
+        (a, b) =>
+          (a.discNo ?? 1) - (b.discNo ?? 1) ||
+          (a.trackNo ?? 9999) - (b.trackNo ?? 9999) ||
+          a.title.localeCompare(b.title, 'zh-Hans-CN'),
+      )
+      const withYear = sorted.find((s) => s.year !== null)
+      return {
+        key,
+        name: sorted[0].album,
+        artist: sorted[0].albumArtist,
+        year: withYear?.year ?? null,
+        songs: sorted,
+        coverId: sorted.find((s) => s.coverId)?.coverId ?? null,
+        totalDuration: sorted.reduce((sum, s) => sum + s.durationSec, 0),
+      }
+    })
+  })
+
+  const artists = computed(() => {
+    const map = new Map<string, SongRecord[]>()
+    for (const s of songs.value) {
+      for (const name of s.artist.split(' / ').map((x) => x.trim()).filter(Boolean)) {
+        const list = map.get(name)
+        if (list) list.push(s)
+        else map.set(name, [s])
+      }
+    }
+    return [...map.entries()]
+      .map(([name, list]) => ({ name, songs: list, coverId: list.find((s) => s.coverId)?.coverId ?? null }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
+  })
+
+  const genres = computed(() => {
+    const map = new Map<string, SongRecord[]>()
+    for (const s of songs.value) {
+      const g = s.genre || '未知曲风'
+      const list = map.get(g)
+      if (list) list.push(s)
+      else map.set(g, [s])
+    }
+    return [...map.entries()]
+      .map(([name, list]) => ({ name, songs: list }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
+  })
 
   /** 启动：从 DB 恢复歌曲列表与根文件夹（权限需用户点击确认后才恢复） */
   async function init() {
@@ -133,6 +190,9 @@ export const useLibraryStore = defineStore('library', () => {
     roots,
     songs,
     sortedSongs,
+    albums,
+    artists,
+    genres,
     loaded,
     scanning,
     scanProgress,

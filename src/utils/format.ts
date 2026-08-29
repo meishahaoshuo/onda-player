@@ -16,5 +16,6 @@ export function formatTotalDuration(sec: number): string {
   const h = Math.floor(total / 3600)
   const m = Math.floor((total % 3600) / 60)
   if (h > 0) return `${h} 小时 ${m} 分钟`
-  return `${m} 分钟`
+  if (m > 0) return `${m} 分钟`
+  return `${total} 秒`
 }

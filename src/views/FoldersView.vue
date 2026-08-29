@@ -1,21 +1,26 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import SongList from '@/components/SongList.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { useLibraryStore } from '@/stores/library'
+import { usePlayerStore } from '@/stores/player'
+import type { SongRecord } from '@/types'
 
+/** 文件夹页：按根目录浏览歌曲 + 管理入口 */
 const library = useLibraryStore()
+const player = usePlayerStore()
 
 const emit = defineEmits<{ addFolder: [] }>()
 
-const songCountByRoot = computed(() => {
-  const map = new Map<string, number>()
-  for (const s of library.songs) {
-    map.set(s.rootId, (map.get(s.rootId) ?? 0) + 1)
-  }
-  return map
-})
+const selectedRootId = defineModel<string | null>('selectedRoot')
 
-const permLabel = { granted: '已授权', prompt: '待确认权限', denied: '无法访问' }
+const rootSongs = computed(() =>
+  selectedRootId.value ? library.sortedSongs.filter((s) => s.rootId === selectedRootId.value) : [],
+)
+
+function onPlay(song: SongRecord) {
+  void player.playSong(song, rootSongs.value)
+}
 </script>
 
 <template>
@@ -31,33 +36,47 @@ const permLabel = { granted: '已授权', prompt: '待确认权限', denied: '�
 
     <div v-if="library.roots.length === 0" class="empty-hint">还没有添加音乐文件夹</div>
 
-    <div v-else class="root-list">
-      <div v-for="r in library.roots" :key="r.id" class="root-row">
-        <AppIcon name="folder" :size="20" class="root-icon" />
-        <div class="root-meta">
-          <div class="root-name">{{ r.name }}</div>
-          <div class="root-sub">
-            {{ songCountByRoot.get(r.id) ?? 0 }} 首 · {{ permLabel[r.permission] }}
-          </div>
-        </div>
+    <template v-else>
+      <div class="root-list">
         <button
-          v-if="r.permission !== 'granted'"
-          class="ghost-btn"
-          @click="library.restorePermission(r.id)"
+          v-for="r in library.roots"
+          :key="r.id"
+          class="root-row"
+          :class="{ active: selectedRootId === r.id }"
+          @click="selectedRootId = selectedRootId === r.id ? null : r.id"
         >
-          恢复权限
+          <AppIcon name="folder" :size="20" class="root-icon" />
+          <div class="root-meta">
+            <div class="root-name">{{ r.name }}</div>
+            <div class="root-sub">
+              {{ library.songs.filter((s) => s.rootId === r.id).length }} 首 ·
+              {{ { granted: '已授权', prompt: '待确认权限', denied: '无法访问' }[r.permission] }}
+            </div>
+          </div>
+          <span v-if="r.permission !== 'granted'" class="root-action" @click.stop="library.restorePermission(r.id)">
+            恢复权限
+          </span>
+          <span class="root-action danger" @click.stop="library.removeFolderById(r.id)">移除</span>
         </button>
-        <button class="ghost-btn danger" @click="library.removeFolderById(r.id)">移除</button>
       </div>
-    </div>
+
+      <SongList
+        v-if="selectedRootId && rootSongs.length > 0"
+        :songs="rootSongs"
+        :current-path="player.currentPath"
+        @play="onPlay"
+        class="list"
+      />
+    </template>
   </div>
 </template>
 
 <style scoped>
 .folders-view {
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .toolbar {
@@ -100,31 +119,30 @@ const permLabel = { granted: '已授权', prompt: '待确认权限', denied: '�
   cursor: default;
 }
 
-.ghost-btn.danger:hover {
-  color: #e05555;
-  border-color: rgba(224, 85, 85, 0.4);
-}
-
-.empty-hint {
-  color: var(--text-tertiary);
-  padding: 40px 0;
-  text-align: center;
-}
-
 .root-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .root-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 10px 16px;
   border-radius: 10px;
   background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.root-row:hover {
+  background: var(--bg-hover);
+}
+
+.root-row.active {
+  border-color: var(--accent);
 }
 
 .root-icon {
@@ -143,5 +161,31 @@ const permLabel = { granted: '已授权', prompt: '待确认权限', denied: '�
 .root-sub {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.root-action {
+  font-size: 12px;
+  color: var(--accent);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.root-action:hover {
+  background: var(--bg-hover);
+}
+
+.root-action.danger:hover {
+  color: #e05555;
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+}
+
+.empty-hint {
+  color: var(--text-tertiary);
+  padding: 40px 0;
+  text-align: center;
 }
 </style>

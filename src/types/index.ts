@@ -51,6 +51,27 @@ export interface PlaylistRecord {
   createdAt: number
 }
 
+export interface AlbumSummary {
+  key: string
+  name: string
+  artist: string
+  year: number | null
+  songs: SongRecord[]
+  coverId: string | null
+  totalDuration: number
+}
+
+export interface ArtistSummary {
+  name: string
+  songs: SongRecord[]
+  coverId: string | null
+}
+
+export interface GenreSummary {
+  name: string
+  songs: SongRecord[]
+}
+
 export type Quality = 'hires' | 'lossless' | 'lossy'
 
 export type ScanPhase = 'idle' | 'enumerating' | 'parsing' | 'done'
