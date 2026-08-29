@@ -33,7 +33,7 @@ function onRowClick(song: SongRecord) {
             class="song-row"
             :class="{ playing: item.path === props.currentPath }"
             :style="{ height: `${ROW_HEIGHT}px` }"
-            @dblclick="onRowClick(item)"
+            @click="onRowClick(item)"
           >
             <span class="col-cover">
               <CoverImage :cover-id="item.coverId" :size="40" />

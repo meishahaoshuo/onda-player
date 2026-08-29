@@ -7,11 +7,13 @@ import FoldersView from '@/views/FoldersView.vue'
 import PlaceholderView from '@/views/PlaceholderView.vue'
 import { useUiStore } from '@/stores/ui'
 import { useLibraryStore } from '@/stores/library'
+import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
 import type { ViewId } from '@/types'
 
 const ui = useUiStore()
 const library = useLibraryStore()
+const player = usePlayerStore()
 const settings = useSettingsStore()
 
 const viewTitles: Record<ViewId, string> = {
@@ -30,9 +32,10 @@ function addFolder() {
   library.addFolder()
 }
 
-onMounted(() => {
+onMounted(async () => {
   settings // 触发主题初始化
-  library.init()
+  await library.init()
+  await player.restore()
 })
 </script>
 

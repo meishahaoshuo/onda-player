@@ -28,11 +28,40 @@ export async function pickFolder(): Promise<FileSystemDirectoryHandle | null> {
 }
 
 export async function removeFolder(rootId: string) {
-  await db.deleteRootHandle(rootId)
-  await db.deleteRoot(rootId)
+  await removeRootOnly(rootId)
   await db.deleteSongsByRoot(rootId)
   const order = (await db.getRootOrder()) ?? []
   await db.setRootOrder(order.filter((x) => x !== rootId))
+}
+
+export async function removeRootOnly(rootId: string) {
+  await db.deleteRootHandle(rootId)
+  await db.deleteRoot(rootId)
+}
+
+/** 把歌曲记录（"rootId/相对路径"）解析为 File 对象 */
+export async function resolveSongFile(
+  rootId: string,
+  relativePath: string,
+): Promise<File | null> {
+  const root = await db.getRootHandle(rootId)
+  if (!root) return null
+  const segments = relativePath.split('/')
+  const fileName = segments.pop()!
+  let dir = root
+  for (const seg of segments) {
+    try {
+      dir = await dir.getDirectoryHandle(seg)
+    } catch {
+      return null
+    }
+  }
+  try {
+    const fh = await dir.getFileHandle(fileName)
+    return await fh.getFile()
+  } catch {
+    return null
+  }
 }
 
 /** 枚举某根目录下全部音频文件 */

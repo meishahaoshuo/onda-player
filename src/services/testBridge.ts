@@ -1,4 +1,7 @@
 import { useLibraryStore } from '@/stores/library'
+import { usePlayerStore } from '@/stores/player'
+import * as db from './db'
+import type { PlayMode } from '@/types'
 
 /**
  * 开发/自动化测试桥（仅 import.meta.env.DEV 下加载，生产构建不含此模块）。
@@ -81,6 +84,51 @@ export function installTestBridge() {
       const library = useLibraryStore()
       await library.rescan()
       return this.status()
+    },
+    /** 播放库中第 index 首歌（context 为全库，与真实点击行为一致） */
+    async playAt(index: number) {
+      const library = useLibraryStore()
+      const player = usePlayerStore()
+      const song = library.sortedSongs[index]
+      if (!song) return false
+      await player.playSong(song, library.sortedSongs)
+      return true
+    },
+    /** 播放器当前状态快照 */
+    playerState() {
+      const p = usePlayerStore()
+      return {
+        currentPath: p.currentPath,
+        title: p.current?.title ?? null,
+        playing: p.playing,
+        currentTime: Math.round(p.currentTime * 100) / 100,
+        duration: Math.round(p.duration * 100) / 100,
+        volume: p.volume,
+        mode: p.playMode,
+        queueLen: p.queue.length,
+        index: p.index,
+      }
+    },
+    next() {
+      usePlayerStore().next()
+    },
+    prev() {
+      usePlayerStore().prev()
+    },
+    toggle() {
+      usePlayerStore().togglePlay()
+    },
+    seek(sec: number) {
+      usePlayerStore().seek(sec)
+    },
+    setVolume(v: number) {
+      usePlayerStore().setVolume(v)
+    },
+    setMode(mode: PlayMode) {
+      usePlayerStore().setPlayMode(mode)
+    },
+    async savedState() {
+      return db.kvGet('playerState')
     },
   }
 }

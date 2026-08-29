@@ -3,10 +3,17 @@ import { computed } from 'vue'
 import SongList from '@/components/SongList.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { useLibraryStore } from '@/stores/library'
+import { usePlayerStore } from '@/stores/player'
+import type { SongRecord } from '@/types'
 
 const library = useLibraryStore()
+const player = usePlayerStore()
 
 const emit = defineEmits<{ addFolder: [] }>()
+
+function onPlay(song: SongRecord) {
+  player.playSong(song, library.sortedSongs)
+}
 
 const needRestore = computed(() => library.roots.filter((r) => r.permission !== 'granted'))
 const scanPct = computed(() =>
@@ -56,7 +63,13 @@ const scanPct = computed(() =>
         <button class="scan-cancel" @click="library.cancelScan()">取消</button>
       </div>
 
-      <SongList v-if="library.sortedSongs.length > 0" :songs="library.sortedSongs" class="list" />
+      <SongList
+        v-if="library.sortedSongs.length > 0"
+        :songs="library.sortedSongs"
+        :current-path="player.currentPath"
+        @play="onPlay"
+        class="list"
+      />
       <div v-else class="empty small">
         <p class="empty-hint">尚未扫描到音频文件</p>
       </div>

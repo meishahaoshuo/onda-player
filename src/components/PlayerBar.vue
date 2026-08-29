@@ -1,72 +1,100 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
 import AppIcon from './AppIcon.vue'
+import CoverImage from './CoverImage.vue'
+import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
+import { formatDuration } from '@/utils/format'
 import type { PlayMode } from '@/types'
-import type { IconName } from './icons'
 
-/**
- * 底部播放条（第 1 阶段为静态骨架，交互在第 3 阶段接入播放内核）
- */
+/** 底部播放条（数据接自播放内核 store） */
+const player = usePlayerStore()
 const settings = useSettingsStore()
 
-const modeIcon: Record<PlayMode, IconName> = {
-  order: 'repeat',
-  loop: 'repeat',
-  one: 'repeatOne',
-  shuffle: 'shuffle',
+const MODE_META: { mode: PlayMode; icon: 'repeat' | 'repeatOne' | 'shuffle'; label: string }[] = [
+  { mode: 'order', icon: 'repeat', label: '顺序播放' },
+  { mode: 'loop', icon: 'repeat', label: '列表循环' },
+  { mode: 'one', icon: 'repeatOne', label: '单曲循环' },
+  { mode: 'shuffle', icon: 'shuffle', label: '随机播放' },
+]
+
+const modeMeta = computed(() => MODE_META.find((m) => m.mode === player.playMode)!)
+const progressPct = computed(() =>
+  player.duration > 0 ? (player.currentTime / player.duration) * 100 : 0,
+)
+
+function onSeek(e: Event) {
+  const el = e.currentTarget as HTMLElement
+  const rect = el.getBoundingClientRect()
+  const x = (e as MouseEvent).clientX - rect.left
+  player.seek((x / rect.width) * player.duration)
 }
-const playMode = ref<PlayMode>('loop')
-const volume = ref(80)
+
+function onVolumeInput(e: Event) {
+  player.setVolume(Number((e.target as HTMLInputElement).value))
+}
+
+function cycleMode() {
+  const idx = MODE_META.findIndex((m) => m.mode === player.playMode)
+  player.setPlayMode(MODE_META[(idx + 1) % MODE_META.length].mode)
+}
 </script>
 
 <template>
   <footer class="player-bar">
     <!-- 左：曲目信息 -->
     <div class="track">
-      <div class="cover">
-        <AppIcon name="music" :size="18" />
-      </div>
+      <CoverImage :cover-id="player.current?.coverId ?? null" :size="44" class="cover" />
       <div class="meta">
-        <div class="title">未在播放</div>
-        <div class="subtitle">选择文件夹以添加音乐</div>
+        <div class="title">{{ player.current?.title ?? '未在播放' }}</div>
+        <div class="subtitle">{{ player.current?.artist ?? '选择文件夹以添加音乐' }}</div>
       </div>
     </div>
 
     <!-- 中：控制区 -->
     <div class="controls">
       <div class="progress">
-        <span class="time">0:00</span>
-        <div class="bar"><div class="bar-fill" :style="{ width: '0%' }" /></div>
-        <span class="time">0:00</span>
+        <span class="time">{{ formatDuration(player.currentTime) }}</span>
+        <div class="bar" @pointerdown="onSeek">
+          <div class="bar-fill" :style="{ width: `${progressPct}%` }" />
+        </div>
+        <span class="time">{{ formatDuration(player.duration || player.current?.durationSec || 0) }}</span>
       </div>
       <div class="buttons">
-        <button
-          class="icon-btn"
-          :title="{ order: '顺序播放', loop: '列表循环', one: '单曲循环', shuffle: '随机播放' }[playMode]"
-          @click="
-            playMode =
-              playMode === 'order' ? 'loop' : playMode === 'loop' ? 'one' : playMode === 'one' ? 'shuffle' : 'order'
-          "
-        >
-          <AppIcon :name="modeIcon[playMode]" />
+        <button class="icon-btn" :title="modeMeta.label" @click="cycleMode">
+          <AppIcon :name="modeMeta.icon" />
         </button>
-        <button class="icon-btn" title="上一曲"><AppIcon name="prev" :size="20" /></button>
-        <button class="icon-btn play-btn" title="播放">
-          <AppIcon name="play" :size="22" />
+        <button class="icon-btn" title="上一曲" @click="player.prev()">
+          <AppIcon name="prev" :size="20" />
         </button>
-        <button class="icon-btn" title="下一曲"><AppIcon name="next" :size="20" /></button>
-        <button class="icon-btn" title="播放队列"><AppIcon name="queue" /></button>
+        <button class="icon-btn play-btn" :title="player.playing ? '暂停' : '播放'" @click="player.current ? player.togglePlay() : player.resumePlay()">
+          <AppIcon :name="player.playing ? 'pause' : 'play'" :size="22" />
+        </button>
+        <button class="icon-btn" title="下一曲" @click="player.next()">
+          <AppIcon name="next" :size="20" />
+        </button>
+        <button class="icon-btn" title="播放队列">
+          <AppIcon name="queue" />
+        </button>
       </div>
     </div>
 
     <!-- 右：辅助区 -->
     <div class="aux">
-      <button class="icon-btn" title="全屏歌词"><AppIcon name="expand" /></button>
-      <button class="icon-btn" :title="`音量 ${volume}%`">
-        <AppIcon :name="volume === 0 ? 'volumeMute' : 'volume'" />
+      <button class="icon-btn" title="全屏歌词">
+        <AppIcon name="expand" />
       </button>
-      <input v-model.number="volume" class="volume" type="range" min="0" max="100" />
+      <button class="icon-btn" :title="`音量 ${player.volume}%`">
+        <AppIcon :name="player.volume === 0 ? 'volumeMute' : 'volume'" />
+      </button>
+      <input
+        class="volume"
+        type="range"
+        min="0"
+        max="100"
+        :value="player.volume"
+        @input="onVolumeInput"
+      />
       <button class="icon-btn" :title="`主题：${settings.themeMode === 'system' ? '跟随系统' : settings.themeMode === 'dark' ? '深色' : '浅色'}`">
         <AppIcon name="more" />
       </button>
@@ -95,18 +123,6 @@ const volume = ref(80)
   align-items: center;
   gap: 12px;
   min-width: 0;
-}
-
-.cover {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 6px;
-  background: var(--bg-hover);
-  color: var(--text-tertiary);
-  flex-shrink: 0;
 }
 
 .meta {
@@ -167,6 +183,7 @@ const volume = ref(80)
   height: 100%;
   border-radius: 2px;
   background: var(--accent);
+  pointer-events: none;
 }
 
 .buttons {
@@ -185,7 +202,6 @@ const volume = ref(80)
 }
 
 .play-btn:hover {
-  background: var(--accent);
   opacity: 0.9;
 }
 
