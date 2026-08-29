@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import Sidebar from '@/components/Sidebar.vue'
 import PlayerBar from '@/components/PlayerBar.vue'
+import SongsView from '@/views/SongsView.vue'
+import FoldersView from '@/views/FoldersView.vue'
+import PlaceholderView from '@/views/PlaceholderView.vue'
 import { useUiStore } from '@/stores/ui'
+import { useLibraryStore } from '@/stores/library'
+import { useSettingsStore } from '@/stores/settings'
+import type { ViewId } from '@/types'
 
 const ui = useUiStore()
+const library = useLibraryStore()
+const settings = useSettingsStore()
 
-const viewTitles = {
+const viewTitles: Record<ViewId, string> = {
   songs: '歌曲',
   genres: '曲风',
   albums: '专辑',
@@ -14,9 +22,18 @@ const viewTitles = {
   folders: '文件夹',
   playlists: '歌单',
   settings: '设置',
-} as const
+}
 
 const title = computed(() => viewTitles[ui.activeView])
+
+function addFolder() {
+  library.addFolder()
+}
+
+onMounted(() => {
+  settings // 触发主题初始化
+  library.init()
+})
 </script>
 
 <template>
@@ -28,7 +45,13 @@ const title = computed(() => viewTitles[ui.activeView])
           <h1>{{ title }}</h1>
         </header>
         <section class="view-body">
-          <p class="placeholder-hint">此区域将在后续阶段实现「{{ title }}」内容</p>
+          <SongsView v-show="ui.activeView === 'songs'" @add-folder="addFolder" />
+          <FoldersView v-if="ui.activeView === 'folders'" @add-folder="addFolder" />
+          <PlaceholderView
+            v-else-if="ui.activeView !== 'songs'"
+            :key="ui.activeView"
+            :title="title"
+          />
         </section>
       </main>
     </div>
@@ -70,11 +93,5 @@ const title = computed(() => viewTitles[ui.activeView])
   min-height: 0;
   overflow: auto;
   padding: 0 24px 24px;
-}
-
-.placeholder-hint {
-  color: var(--text-tertiary);
-  padding: 48px 0;
-  text-align: center;
 }
 </style>

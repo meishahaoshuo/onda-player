@@ -1,3 +1,5 @@
+/** 数据模型（与 docs/02-技术方案.md §3 保持一致） */
+
 export type ThemeMode = 'system' | 'dark' | 'light'
 
 export type ViewId =
@@ -10,3 +12,54 @@ export type ViewId =
   | 'settings'
 
 export type PlayMode = 'order' | 'loop' | 'one' | 'shuffle'
+
+export interface SongRecord {
+  /** 相对根路径，主键，形如 "rootId/sub/dir/song.flac" */
+  path: string
+  rootId: string
+  fileName: string
+  title: string
+  artist: string
+  album: string
+  albumArtist: string
+  genre: string
+  year: number | null
+  trackNo: number | null
+  discNo: number | null
+  durationSec: number
+  bitrateKbps: number | null
+  sampleRateHz: number | null
+  bitsPerSample: number | null
+  container: string
+  fileSize: number
+  mtimeMs: number
+  hasCover: boolean
+  coverId: string | null
+}
+
+export interface FolderRoot {
+  id: string
+  name: string
+  addedAt: number
+}
+
+export interface PlaylistRecord {
+  id: string
+  name: string
+  /** 歌曲 path 有序列表 */
+  songPaths: string[]
+  createdAt: number
+}
+
+export type Quality = 'hires' | 'lossless' | 'lossy'
+
+export type ScanPhase = 'idle' | 'enumerating' | 'parsing' | 'done'
+
+export interface ScanProgress {
+  phase: ScanPhase
+  total: number
+  scanned: number
+  skipped: number
+  failed: number
+  currentFile: string
+}

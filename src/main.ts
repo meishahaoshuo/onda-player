@@ -6,3 +6,7 @@ import './styles/main.css'
 const app = createApp(App)
 app.use(createPinia())
 app.mount('#app')
+
+if (import.meta.env.DEV) {
+  import('./services/testBridge').then((m) => m.installTestBridge())
+}
