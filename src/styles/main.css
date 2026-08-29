@@ -1,7 +1,54 @@
-/* 占位样式：第 1 阶段实现完整主题体系后替换 */
-:root {
+/* =====================================================================
+   主题体系（规范见 docs/03-设计规范.md）
+   主题切换 = <html data-theme="dark" | "light">，组件只允许引用变量
+   ===================================================================== */
+
+:root,
+:root[data-theme='dark'] {
+  --bg-base: #121418;
+  --bg-sidebar: rgba(24, 27, 33, 0.72);
+  --bg-panel: rgba(30, 33, 40, 0.78);
+  --bg-playerbar: rgba(18, 20, 24, 0.82);
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(64, 132, 244, 0.22);
+  --accent: #4084f4;
+  --accent-text: #ffffff;
   --text-primary: #e8eaed;
+  --text-secondary: #9aa0a8;
+  --text-tertiary: #5f6570;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --badge-hires: #c9a227;
+  --badge-lossless: #4a8f5c;
+  --badge-lossy: #6b7280;
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.28);
+  --shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --lyric-dim: rgba(232, 234, 237, 0.45);
 }
+
+:root[data-theme='light'] {
+  --bg-base: #f3f4f6;
+  --bg-sidebar: rgba(255, 255, 255, 0.65);
+  --bg-panel: rgba(255, 255, 255, 0.72);
+  --bg-playerbar: rgba(255, 255, 255, 0.8);
+  --bg-hover: rgba(0, 0, 0, 0.05);
+  --bg-active: rgba(64, 132, 244, 0.15);
+  --accent: #2f6fe0;
+  --accent-text: #ffffff;
+  --text-primary: #1c1e21;
+  --text-secondary: #5b626c;
+  --text-tertiary: #9aa0a8;
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --badge-hires: #c9a227;
+  --badge-lossless: #4a8f5c;
+  --badge-lossy: #6b7280;
+  --scrollbar: rgba(0, 0, 0, 0.18);
+  --scrollbar-hover: rgba(0, 0, 0, 0.3);
+  --shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --lyric-dim: rgba(28, 30, 33, 0.45);
+}
+
+/* ---------- 基础 ---------- */
 
 * {
   margin: 0;
@@ -9,7 +56,76 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#app {
+  height: 100%;
+}
+
 body {
-  background: #17191c;
-  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 14px;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- 通用工具类 ---------- */
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s;
+}
+
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.icon-btn.is-active {
+  color: var(--accent);
+}
+
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
 }

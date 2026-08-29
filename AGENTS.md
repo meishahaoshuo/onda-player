@@ -38,3 +38,4 @@ npm run preview  # 预览 build 产物
 
 - 需要 Chrome / Edge 浏览器（File System Access API）
 - 页面必须通过 http(s) 访问，`file://` 打开无效
+- 开发服务器固定使用 **http://localhost:5180**（`vite.config.ts` 中 `strictPort`；本机 5173/5174 已被其他项目占用，勿改回）
