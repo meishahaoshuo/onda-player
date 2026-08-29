@@ -130,5 +130,32 @@ export function installTestBridge() {
     async savedState() {
       return db.kvGet('playerState')
     },
+    /** 歌单测试：创建/加歌/排序/快照 */
+    async pl(action: string, ...args: unknown[]) {
+      const { usePlaylistStore } = await import('@/stores/playlist')
+      const store = usePlaylistStore()
+      switch (action) {
+        case 'create':
+          return store.create(String(args[0]))
+        case 'add': {
+          const { useLibraryStore } = await import('@/stores/library')
+          const lib = useLibraryStore()
+          store.addSongs(String(args[0]), lib.sortedSongs.map((s) => s.path))
+          return store.playlists.find((p) => p.id === args[0])?.songPaths.length
+        }
+        case 'move':
+          store.moveSong(String(args[0]), Number(args[1]), Number(args[2]))
+          return store.playlists.find((p) => p.id === args[0])?.songPaths
+        case 'rename':
+          store.rename(String(args[0]), String(args[1]))
+          return store.playlists.find((p) => p.id === args[0])?.name
+        case 'snapshot':
+          return store.playlists.map((p) => ({ name: p.name, songs: p.songPaths.length }))
+        case 'dbRaw': {
+          // 直接读 DB 里的歌单，验证持久化是否落库
+          return db.getAllPlaylists()
+        }
+      }
+    },
   }
 }

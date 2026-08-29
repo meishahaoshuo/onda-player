@@ -9,10 +9,18 @@ import type { ViewId } from '@/types'
 export const useUiStore = defineStore('ui', () => {
   const activeView = ref<ViewId>('songs')
   const detailKey = ref<string | null>(null)
+  /** 侧边栏「新建歌单」请求标记，由 PlaylistsView 消费 */
+  const playlistCreateRequested = ref(false)
 
   function navigate(view: ViewId) {
     activeView.value = view
     detailKey.value = null
+  }
+
+  function requestPlaylistCreate() {
+    activeView.value = 'playlists'
+    detailKey.value = null
+    playlistCreateRequested.value = true
   }
 
   /** 进入聚合页详情（同一视图内切换） */
@@ -24,5 +32,5 @@ export const useUiStore = defineStore('ui', () => {
     detailKey.value = null
   }
 
-  return { activeView, detailKey, navigate, openDetail, closeDetail }
+  return { activeView, detailKey, playlistCreateRequested, navigate, requestPlaylistCreate, openDetail, closeDetail }
 })

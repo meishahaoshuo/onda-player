@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { useUiStore } from '@/stores/ui'
 import { useSettingsStore } from '@/stores/settings'
+import { usePlaylistStore } from '@/stores/playlist'
 import type { ViewId } from '@/types'
 import AppIcon from './AppIcon.vue'
 import type { IconName } from './icons'
 
 const ui = useUiStore()
 const settings = useSettingsStore()
+const playlistStore = usePlaylistStore()
 
 const navItems: { id: ViewId; label: string; icon: IconName }[] = [
   { id: 'songs', label: '歌曲', icon: 'music' },
@@ -17,6 +19,11 @@ const navItems: { id: ViewId; label: string; icon: IconName }[] = [
 ]
 
 const themeIcon = { system: 'monitor', dark: 'moon', light: 'sun' } as const
+
+function openPlaylist(id: string) {
+  ui.activeView = 'playlists'
+  ui.detailKey = id
+}
 </script>
 
 <template>
@@ -40,18 +47,33 @@ const themeIcon = { system: 'monitor', dark: 'moon', light: 'sun' } as const
 
       <div class="divider" />
 
-      <button class="nav-item" @click="ui.navigate('playlists')">
+      <button class="nav-item" @click="ui.requestPlaylistCreate()">
         <AppIcon name="playlistAdd" />
         <span>新建歌单</span>
       </button>
       <button
         class="nav-item"
-        :class="{ active: ui.activeView === 'playlists' }"
+        :class="{ active: ui.activeView === 'playlists' && !ui.detailKey }"
         @click="ui.navigate('playlists')"
       >
         <AppIcon name="playlist" />
         <span>歌单</span>
       </button>
+
+      <template v-if="playlistStore.playlists.length > 0">
+        <div class="divider" />
+        <button
+          v-for="p in playlistStore.playlists"
+          :key="p.id"
+          class="nav-item playlist-item"
+          :class="{ active: ui.activeView === 'playlists' && ui.detailKey === p.id }"
+          :title="p.name"
+          @click="openPlaylist(p.id)"
+        >
+          <AppIcon name="heart" :size="16" />
+          <span class="playlist-name">{{ p.name }}</span>
+        </button>
+      </template>
     </nav>
 
     <div class="bottom">
@@ -148,6 +170,13 @@ const themeIcon = { system: 'monitor', dark: 'moon', light: 'sun' } as const
   height: 1px;
   margin: 8px 12px;
   background: var(--border-subtle);
+}
+
+.playlist-name {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bottom {
