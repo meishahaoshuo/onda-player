@@ -1,0 +1,15 @@
+/* 占位样式：第 1 阶段实现完整主题体系后替换 */
+:root {
+  --text-primary: #e8eaed;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #17191c;
+  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+}
