@@ -8,7 +8,7 @@ import { useUiStore } from '@/stores/ui'
 import { formatDuration } from '@/utils/format'
 import type { PlayMode } from '@/types'
 
-/** 底部播放条（数据接自播放内核 store） */
+/** 底部播放条（数据接自播放内核 store）；点击封面打开全屏歌词 */
 const player = usePlayerStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
@@ -44,9 +44,15 @@ function cycleMode() {
 
 <template>
   <footer class="player-bar">
-    <!-- 左：曲目信息 -->
+    <!-- 左：曲目信息（点封面打开全屏歌词） -->
     <div class="track">
-      <CoverImage :cover-id="player.current?.coverId ?? null" :size="44" class="cover" />
+      <CoverImage
+        :cover-id="player.current?.coverId ?? null"
+        :size="44"
+        class="cover clickable"
+        title="打开全屏歌词"
+        @click="ui.lyricsOpen = true"
+      />
       <div class="meta">
         <div class="title">{{ player.current?.title ?? '未在播放' }}</div>
         <div class="subtitle">{{ player.current?.artist ?? '选择文件夹以添加音乐' }}</div>
@@ -125,6 +131,18 @@ function cycleMode() {
   align-items: center;
   gap: 12px;
   min-width: 0;
+}
+
+/* 封面可点击打开全屏歌词 */
+.cover.clickable {
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  border-radius: 6px;
+}
+
+.cover.clickable:hover {
+  transform: scale(1.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .meta {
