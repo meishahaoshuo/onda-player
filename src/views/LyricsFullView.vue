@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import CoverImage from '@/components/CoverImage.vue'
 import ProgressSlider from '@/components/ProgressSlider.vue'
@@ -176,15 +176,85 @@ const progressDuration = computed(() => player.duration || player.current?.durat
 function close() {
   ui.lyricsOpen = false
 }
+
+/* ---------- 封面飞入动画（FLIP 共享元素过渡，来自播放条小封面） ---------- */
+
+const closing = ref(false)
+
+function flyIn() {
+  // 源：播放条小封面；目标：本页大封面。等歌词页布局完成后取位置。
+  void nextTick().then(() => {
+    const srcEl = document.querySelector<HTMLElement>('.player-bar .track .cover')
+    const dstEl = document.querySelector<HTMLElement>('.cover-main')
+    if (!srcEl || !dstEl) return
+
+    // CoverImage 最外层本身就是 <img> 或占位 div，需同时匹配自身与子树
+    const srcInner = srcEl.matches('img') ? srcEl : srcEl.querySelector('img, .cover-fallback')
+    let flying: HTMLElement
+    if (srcInner) {
+      flying = srcInner.cloneNode(true) as HTMLElement
+    } else {
+      return
+    }
+    const s = srcEl.getBoundingClientRect()
+    const d = dstEl.getBoundingClientRect()
+
+    flying.style.position = 'fixed'
+    flying.style.margin = '0'
+    flying.style.left = `${s.left}px`
+    flying.style.top = `${s.top}px`
+    flying.style.width = `${s.width}px`
+    flying.style.height = `${s.height}px`
+    flying.style.borderRadius = '8px'
+    flying.style.boxShadow = '0 24px 64px rgba(0,0,0,0.45)'
+    flying.style.zIndex = '60'
+    flying.style.pointerEvents = 'none'
+    flying.style.transition = 'none'
+    document.body.appendChild(flying)
+
+    // 飞行期间隐藏目标封面，避免重叠
+    const dst = dstEl as HTMLElement
+    dst.style.opacity = '0'
+
+    // 强制布局后，用 WAAPI 飞到目标（520ms spring）
+    const anim = flying.animate(
+      [
+        { left: `${s.left}px`, top: `${s.top}px`, width: `${s.width}px`, height: `${s.height}px`, borderRadius: '8px' },
+        { left: `${d.left}px`, top: `${d.top}px`, width: `${d.width}px`, height: `${d.height}px`, borderRadius: '12px' },
+      ],
+      { duration: 520, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'forwards' },
+    )
+
+    const finish = () => {
+      dst.style.opacity = '1'
+      flying.remove()
+    }
+    anim.onfinish = finish
+    // 兜底：即使 onfinish 未触发（如页面切换），也清理残留在动画结束附近
+    window.setTimeout(finish, 720)
+  })
+}
+
+async function closeWithFade() {
+  closing.value = true
+  setTimeout(() => {
+    ui.lyricsOpen = false
+    closing.value = false
+  }, 240)
+}
+
+onMounted(() => {
+  flyIn()
+})
 </script>
 
 <template>
-  <div class="lyrics-full">
+  <div class="lyrics-full" :class="{ closing }">
     <!-- 背景：封面颜色构图拉伸的柔和渐变 -->
     <div class="bg" :class="{ active: bgUrl }" :style="bgUrl ? { backgroundImage: `url(${bgUrl})` } : undefined" />
 
     <!-- 关闭按钮 -->
-    <button class="icon-btn close-btn" title="退出全屏歌词" @click="close">
+    <button class="icon-btn close-btn" title="退出全屏歌词" @click="closeWithFade">
       <AppIcon name="close" :size="20" />
     </button>
 
@@ -280,6 +350,11 @@ function close() {
   overflow: hidden;
   /* 沉浸式深色底：封面模糊层之下，文字固定白色系 */
   background: #17191d;
+  transition: opacity 240ms var(--ease-out);
+}
+
+.lyrics-full.closing {
+  opacity: 0;
 }
 
 /* ---------- 背景 ---------- */
@@ -445,7 +520,7 @@ function close() {
   font-size: 15px;
 }
 
-/* ---------- 底部液态玻璃迷你播放条 ---------- */
+/* ---------- 底部液态玻璃迷你播放条（沉浸页专用：超透明，融进背景） ---------- */
 .mini-bar {
   position: absolute;
   left: 50%;
@@ -459,11 +534,30 @@ function close() {
   max-width: 72vw;
   padding: 12px 26px 14px;
   border-radius: 24px;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-2), var(--glass-highlight);
+  background: rgba(22, 17, 14, 0.28);
+  backdrop-filter: blur(52px) saturate(1.4) brightness(1.04);
+  -webkit-backdrop-filter: blur(52px) saturate(1.4) brightness(1.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow:
+    0 10px 36px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  animation: bar-in 480ms var(--ease-spring) 120ms backwards;
+}
+
+@keyframes bar-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(16px) scale(0.96);
+  }
+}
+
+/* 迷你条内进度条用白色，配沉浸页 */
+.mini-bar :deep(.ps-fill) {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.mini-bar :deep(.ps-thumb) {
+  background: #fff;
 }
 
 .mini-progress {
