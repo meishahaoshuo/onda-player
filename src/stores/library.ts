@@ -13,6 +13,8 @@ export const useLibraryStore = defineStore('library', () => {
   const songs = ref<SongRecord[]>([])
   const loaded = ref(false)
   const scanning = ref(false)
+  /** 文件夹选择/扫描的最近一次错误（供界面横幅展示） */
+  const lastError = ref<string | null>(null)
   const scanProgress = ref<ScanProgress>({
     phase: 'idle',
     total: 0,
@@ -106,7 +108,17 @@ export const useLibraryStore = defineStore('library', () => {
   }
 
   async function addFolder(): Promise<boolean> {
-    const handle = await pickFolder()
+    lastError.value = null
+    let handle: FileSystemDirectoryHandle | null
+    try {
+      handle = await pickFolder()
+    } catch (e) {
+      lastError.value =
+        e instanceof Error && /abort/i.test(e.message)
+          ? null // 用户取消了选择器，不算错误
+          : `无法打开文件夹选择器：${e instanceof Error ? e.message : String(e)}（请使用最新版 Chrome/Edge）`
+      return false
+    }
     if (!handle) return false
     await registerRoot(handle)
     await rescan()
@@ -196,6 +208,7 @@ export const useLibraryStore = defineStore('library', () => {
     loaded,
     scanning,
     scanProgress,
+    lastError,
     init,
     addFolder,
     registerRoot,

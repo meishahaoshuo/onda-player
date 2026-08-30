@@ -29,6 +29,22 @@ const scanPct = computed(() =>
 
 <template>
   <div class="songs-view">
+    <!-- 错误提示 -->
+    <div v-if="library.lastError" class="error-banner">
+      <span>{{ library.lastError }}</span>
+      <button class="scan-cancel" @click="library.lastError = null">关闭</button>
+    </div>
+
+    <!-- 常驻工具栏：任何状态下都能添加文件夹 -->
+    <div v-if="library.roots.length > 0" class="toolbar">
+      <button class="primary-btn small" @click="emit('addFolder')">
+        <AppIcon name="plus" :size="14" /> 添加文件夹
+      </button>
+      <button class="ghost-btn" :disabled="library.scanning" @click="library.rescan()">
+        <AppIcon name="scan" :size="14" /> 重新扫描
+      </button>
+    </div>
+
     <!-- 空状态：还没有音乐文件夹 -->
     <div v-if="library.roots.length === 0" class="empty">
       <AppIcon name="folder" :size="48" class="empty-icon" />
@@ -139,6 +155,57 @@ const scanPct = computed(() =>
   border: 1px solid var(--border-subtle);
   font-size: 13px;
   color: var(--text-secondary);
+}
+
+.toolbar {
+  display: flex;
+  gap: 10px;
+}
+
+.primary-btn.small {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 0;
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 13px;
+}
+
+.ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.ghost-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.ghost-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(224, 85, 85, 0.12);
+  border: 1px solid rgba(224, 85, 85, 0.4);
+  font-size: 13px;
+  color: #e05555;
 }
 
 .restore-btn {
