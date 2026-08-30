@@ -10,6 +10,7 @@ import ArtistsView from '@/views/ArtistsView.vue'
 import GenresView from '@/views/GenresView.vue'
 import PlaylistsView from '@/views/PlaylistsView.vue'
 import LyricsFullView from '@/views/LyricsFullView.vue'
+import SettingsView from '@/views/SettingsView.vue'
 import PlaceholderView from '@/views/PlaceholderView.vue'
 import { useUiStore } from '@/stores/ui'
 import { useLibraryStore } from '@/stores/library'
@@ -72,7 +73,9 @@ onMounted(async () => {
 
           <PlaylistsView v-else-if="ui.activeView === 'playlists'" />
 
-          <PlaceholderView v-else-if="ui.activeView !== 'songs'" :key="ui.activeView" :title="title" />
+          <SettingsView v-else-if="ui.activeView === 'settings'" @add-folder="addFolder" />
+
+          <PlaceholderView v-else :key="ui.activeView" :title="title" />
         </section>
       </main>
     </div>
