@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import CoverImage from '@/components/CoverImage.vue'
+import ProgressSlider from '@/components/ProgressSlider.vue'
 import { readLrcFile } from '@/services/fs'
 import { parseLrc, type LyricGroup } from '@/services/lyrics'
 import { makeAmbientGradient } from '@/services/palette'
@@ -119,13 +120,30 @@ function setLineEl(i: number) {
   }
 }
 
+/* 自定义缓动滚动：out-quart 700ms，比浏览器原生 smooth 更丝滑 */
+let scrollRaf = 0
+
+function smoothScrollTo(container: HTMLElement, target: number) {
+  cancelAnimationFrame(scrollRaf)
+  const start = container.scrollTop
+  const delta = target - start
+  const t0 = performance.now()
+  const ease = (t: number) => 1 - Math.pow(1 - t, 4)
+  const frame = (now: number) => {
+    const p = Math.min(1, (now - t0) / 700)
+    container.scrollTop = start + delta * ease(p)
+    if (p < 1) scrollRaf = requestAnimationFrame(frame)
+  }
+  scrollRaf = requestAnimationFrame(frame)
+}
+
 watch(activeIdx, async () => {
   await nextTick()
   const container = scroller.value
   const el = lineEls.value[activeIdx.value]
   if (!container || !el) return
   const offset = el.offsetTop - container.clientHeight / 3
-  container.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' })
+  smoothScrollTo(container, Math.max(0, offset))
 })
 
 function lineClass(i: number) {
@@ -153,15 +171,7 @@ function cycleMode() {
   player.setPlayMode(MODE_META[(idx + 1) % MODE_META.length].mode)
 }
 
-const progressPct = computed(() =>
-  player.duration > 0 ? (player.currentTime / player.duration) * 100 : 0,
-)
-
-function seekByBar(e: MouseEvent) {
-  const el = e.currentTarget as HTMLElement
-  const rect = el.getBoundingClientRect()
-  if (player.duration > 0) player.seek(((e.clientX - rect.left) / rect.width) * player.duration)
-}
+const progressDuration = computed(() => player.duration || player.current?.durationSec || 0)
 
 function close() {
   ui.lyricsOpen = false
@@ -211,10 +221,14 @@ function close() {
       </div>
     </div>
 
-    <!-- 底部居中：磨砂迷你播放条 -->
+    <!-- 底部居中：液态玻璃迷你播放条 -->
     <footer class="mini-bar">
-      <div class="mini-progress" @click="seekByBar">
-        <div class="mini-progress-fill" :style="{ width: `${progressPct}%` }" />
+      <div class="mini-progress">
+        <ProgressSlider
+          :current="player.currentTime"
+          :duration="progressDuration"
+          @seek="player.seek"
+        />
       </div>
       <div class="mini-left">
         <div class="mini-title">{{ player.current?.title ?? '未在播放' }}</div>
@@ -378,16 +392,23 @@ function close() {
 
 .lyric-line {
   cursor: pointer;
-  transition: opacity 0.35s;
+  transition: opacity 0.4s var(--ease-out), filter 0.4s var(--ease-out), transform 0.4s var(--ease-out);
 }
 
-.lyric-line.dim-1 { opacity: 0.5; }
-.lyric-line.dim-2 { opacity: 0.34; }
-.lyric-line.dim-3 { opacity: 0.22; }
-.lyric-line.dim-4 { opacity: 0.14; }
+/* 景深：距离越远越模糊越淡 */
+.lyric-line.dim-1 { opacity: 0.5; filter: blur(0.6px); }
+.lyric-line.dim-2 { opacity: 0.34; filter: blur(1.2px); }
+.lyric-line.dim-3 { opacity: 0.24; filter: blur(2px); }
+.lyric-line.dim-4 { opacity: 0.16; filter: blur(3px); }
 
 .lyric-line:hover {
   opacity: 1;
+  filter: blur(0);
+}
+
+.lyric-line.active {
+  transform: scale(1.02);
+  transform-origin: left center;
 }
 
 .lyric-line.active .lyric-text {
@@ -395,6 +416,7 @@ function close() {
   font-weight: 700;
   color: #fff;
   text-shadow: 0 2px 16px rgba(0, 0, 0, 0.25);
+  transition: font-size 0.35s var(--ease-spring);
 }
 
 .lyric-text {
@@ -437,37 +459,18 @@ function close() {
   max-width: 72vw;
   padding: 12px 26px 14px;
   border-radius: 24px;
-  background: linear-gradient(
-    120deg,
-    rgba(255, 255, 255, 0.14),
-    rgba(255, 255, 255, 0.05) 50%,
-    rgba(255, 255, 255, 0.1)
-  );
-  backdrop-filter: blur(36px) saturate(1.8);
-  -webkit-backdrop-filter: blur(36px) saturate(1.8);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.32),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-2), var(--glass-highlight);
 }
 
 .mini-progress {
   position: absolute;
-  top: 0;
-  left: 14px;
-  right: 14px;
-  height: 3px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.14);
-  cursor: pointer;
-  overflow: hidden;
-}
-
-.mini-progress-fill {
-  height: 100%;
-  background: rgba(255, 255, 255, 0.85);
-  pointer-events: none;
+  top: 5px;
+  left: 22px;
+  right: 22px;
 }
 
 .mini-left {

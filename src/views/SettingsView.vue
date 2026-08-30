@@ -77,7 +77,7 @@ const permLabel = { granted: '已授权', prompt: '待确认权限', denied: '�
     <section class="setting-card">
       <h2 class="section-title">关于</h2>
       <ul class="about-list">
-        <li>网页版本地音乐播放器 · 所有数据仅保存在本机浏览器中，零网络请求</li>
+        <li>Aria · 咏叹 —— 网页版本地音乐播放器 · 所有数据仅保存在本机浏览器中，零网络请求</li>
         <li>支持格式：MP3 / FLAC / OGG / OPUS / WAV / M4A（APE 等浏览器不支持的格式会被跳过）</li>
         <li>需要 Chrome / Edge 浏览器；刷新或重开后需点击一次「恢复权限」重新授权文件夹</li>
         <li>歌词：读取与音频同目录的同名 .lrc 文件，支持双语逐行显示</li>

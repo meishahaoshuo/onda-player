@@ -58,25 +58,27 @@ onMounted(async () => {
         <header class="view-header">
           <h1>{{ title }}</h1>
         </header>
-        <section class="view-body">
-          <SongsView v-show="ui.activeView === 'songs'" @add-folder="addFolder" />
+        <Transition name="view" mode="out-in">
+          <section :key="ui.activeView" class="view-body">
+            <SongsView v-if="ui.activeView === 'songs'" @add-folder="addFolder" />
 
-          <template v-if="ui.activeView === 'albums'">
-            <AlbumDetailView v-if="ui.detailKey" :album-key="ui.detailKey" />
-            <AlbumsView v-else />
-          </template>
+            <template v-if="ui.activeView === 'albums'">
+              <AlbumDetailView v-if="ui.detailKey" :album-key="ui.detailKey" />
+              <AlbumsView v-else />
+            </template>
 
-          <ArtistsView v-else-if="ui.activeView === 'artists'" />
-          <GenresView v-else-if="ui.activeView === 'genres'" />
+            <ArtistsView v-else-if="ui.activeView === 'artists'" />
+            <GenresView v-else-if="ui.activeView === 'genres'" />
 
-          <FoldersView v-else-if="ui.activeView === 'folders'" v-model:selected-root="selectedRootId" @add-folder="addFolder" />
+            <FoldersView v-else-if="ui.activeView === 'folders'" v-model:selected-root="selectedRootId" @add-folder="addFolder" />
 
-          <PlaylistsView v-else-if="ui.activeView === 'playlists'" />
+            <PlaylistsView v-else-if="ui.activeView === 'playlists'" />
 
-          <SettingsView v-else-if="ui.activeView === 'settings'" @add-folder="addFolder" />
+            <SettingsView v-else-if="ui.activeView === 'settings'" @add-folder="addFolder" />
 
-          <PlaceholderView v-else :key="ui.activeView" :title="title" />
-        </section>
+            <PlaceholderView v-else :key="ui.activeView" :title="title" />
+          </section>
+        </Transition>
       </main>
     </div>
     <PlayerBar />

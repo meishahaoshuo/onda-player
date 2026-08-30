@@ -1,51 +1,108 @@
 /* =====================================================================
-   主题体系（规范见 docs/03-设计规范.md）
+   Aria · 咏叹 设计系统
    主题切换 = <html data-theme="dark" | "light">，组件只允许引用变量
+   关键词：暖色 / 液态玻璃 / 苹果式简约 / 克制的动效
    ===================================================================== */
 
 :root,
 :root[data-theme='dark'] {
-  --bg-base: #121418;
-  --bg-sidebar: rgba(24, 27, 33, 0.72);
-  --bg-panel: rgba(30, 33, 40, 0.78);
-  --bg-playerbar: rgba(18, 20, 24, 0.82);
-  --bg-hover: rgba(255, 255, 255, 0.06);
-  --bg-active: rgba(64, 132, 244, 0.22);
-  --accent: #4084f4;
-  --accent-text: #ffffff;
-  --text-primary: #e8eaed;
-  --text-secondary: #9aa0a8;
-  --text-tertiary: #5f6570;
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --badge-hires: #c9a227;
-  --badge-lossless: #4a8f5c;
-  --badge-lossy: #6b7280;
-  --scrollbar: rgba(255, 255, 255, 0.16);
-  --scrollbar-hover: rgba(255, 255, 255, 0.28);
-  --shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.35);
-  --lyric-dim: rgba(232, 234, 237, 0.45);
+  /* 基底：暖炭色系 */
+  --bg-base: #16120f;
+  --bg-sidebar: rgba(30, 24, 19, 0.6);
+  --bg-panel: rgba(38, 31, 25, 0.66);
+  --bg-playerbar: rgba(26, 21, 17, 0.72);
+  --bg-hover: rgba(255, 236, 214, 0.06);
+  --bg-active: rgba(232, 149, 107, 0.15);
+
+  /* 强调：暖琥珀 → 珊瑚 */
+  --accent: #e8956b;
+  --accent-strong: #dd7350;
+  --accent-text: #2b1a10;
+  --accent-soft: rgba(232, 149, 107, 0.15);
+
+  /* 文字：暖白梯度 */
+  --text-primary: #f3ece3;
+  --text-secondary: #a89c8e;
+  --text-tertiary: #6f6459;
+  --border-subtle: rgba(255, 236, 214, 0.08);
+
+  /* 液态玻璃令牌 */
+  --glass-bg: linear-gradient(120deg, rgba(46, 37, 30, 0.55), rgba(38, 30, 24, 0.38) 55%, rgba(46, 36, 28, 0.5));
+  --glass-border: rgba(255, 234, 210, 0.14);
+  --glass-highlight: inset 0 1px 0 rgba(255, 240, 220, 0.22), inset 0 -1px 0 rgba(255, 240, 220, 0.05);
+  --glass-blur: blur(32px) saturate(1.7);
+
+  /* 徽标 */
+  --badge-hires: #d4a94e;
+  --badge-lossless: #6f9a6b;
+  --badge-lossy: #7a6f63;
+
+  /* 阴影：暖环境影 */
+  --shadow-1: 0 2px 10px rgba(18, 10, 5, 0.28);
+  --shadow-2: 0 16px 48px rgba(18, 10, 5, 0.4);
+  --shadow-panel: var(--shadow-2);
+
+  /* 危险色（暖红） */
+  --danger: #e06a58;
+
+  /* 滚动条 */
+  --scrollbar: rgba(255, 236, 214, 0.14);
+  --scrollbar-hover: rgba(255, 236, 214, 0.26);
+
+  /* 歌词页 */
+  --lyric-dim: rgba(243, 236, 227, 0.45);
 }
 
 :root[data-theme='light'] {
-  --bg-base: #f3f4f6;
-  --bg-sidebar: rgba(255, 255, 255, 0.65);
-  --bg-panel: rgba(255, 255, 255, 0.72);
-  --bg-playerbar: rgba(255, 255, 255, 0.8);
-  --bg-hover: rgba(0, 0, 0, 0.05);
-  --bg-active: rgba(64, 132, 244, 0.15);
-  --accent: #2f6fe0;
-  --accent-text: #ffffff;
-  --text-primary: #1c1e21;
-  --text-secondary: #5b626c;
-  --text-tertiary: #9aa0a8;
-  --border-subtle: rgba(0, 0, 0, 0.08);
-  --badge-hires: #c9a227;
-  --badge-lossless: #4a8f5c;
-  --badge-lossy: #6b7280;
-  --scrollbar: rgba(0, 0, 0, 0.18);
-  --scrollbar-hover: rgba(0, 0, 0, 0.3);
-  --shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.12);
-  --lyric-dim: rgba(28, 30, 33, 0.45);
+  --bg-base: #f4ede3;
+  --bg-sidebar: rgba(255, 250, 242, 0.58);
+  --bg-panel: rgba(255, 252, 246, 0.62);
+  --bg-playerbar: rgba(255, 250, 242, 0.7);
+  --bg-hover: rgba(110, 70, 40, 0.06);
+  --bg-active: rgba(224, 123, 84, 0.13);
+
+  --accent: #d9744a;
+  --accent-strong: #c95f38;
+  --accent-text: #fff8f0;
+  --accent-soft: rgba(217, 116, 74, 0.13);
+
+  --text-primary: #2b211a;
+  --text-secondary: #7d7061;
+  --text-tertiary: #ab9f90;
+  --border-subtle: rgba(90, 60, 30, 0.1);
+
+  --glass-bg: linear-gradient(120deg, rgba(255, 250, 242, 0.6), rgba(255, 246, 236, 0.4) 55%, rgba(255, 248, 240, 0.55));
+  --glass-border: rgba(120, 80, 45, 0.14);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(120, 80, 45, 0.05);
+  --glass-blur: blur(32px) saturate(1.6);
+
+  --badge-hires: #b98a2e;
+  --badge-lossless: #58855a;
+  --badge-lossy: #8a7e70;
+
+  --shadow-1: 0 2px 10px rgba(90, 55, 25, 0.1);
+  --shadow-2: 0 16px 48px rgba(90, 55, 25, 0.14);
+  --shadow-panel: var(--shadow-2);
+
+  --danger: #cc5040;
+
+  --scrollbar: rgba(90, 60, 30, 0.16);
+  --scrollbar-hover: rgba(90, 60, 30, 0.3);
+
+  --lyric-dim: rgba(43, 33, 26, 0.45);
+}
+
+/* ---------- 动效令牌 ---------- */
+
+:root {
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur-med: 220ms;
+  --dur-slow: 380ms;
+
+  --radius-panel: 16px;
+  --radius-item: 10px;
 }
 
 /* ---------- 基础 ---------- */
@@ -65,10 +122,12 @@ body,
 body {
   background: var(--bg-base);
   color: var(--text-primary);
-  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-family: 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
   font-size: 14px;
+  letter-spacing: 0.1px;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  transition: background var(--dur-slow) var(--ease-out);
 }
 
 button {
@@ -83,6 +142,10 @@ input,
 select {
   font: inherit;
   color: inherit;
+}
+
+::selection {
+  background: var(--accent-soft);
 }
 
 ::-webkit-scrollbar {
@@ -103,22 +166,37 @@ select {
   background: transparent;
 }
 
+/* ---------- 液态玻璃通用 ---------- */
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-panel), var(--glass-highlight);
+}
+
 /* ---------- 通用工具类 ---------- */
 
 .icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   color: var(--text-secondary);
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
 }
 
 .icon-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.icon-btn:active {
+  transform: scale(0.92);
 }
 
 .icon-btn.is-active {
@@ -128,4 +206,69 @@ select {
 .icon-btn svg {
   width: 18px;
   height: 18px;
+}
+
+/* ---------- 均衡器动画（播放中指示，全局共用） ---------- */
+
+.eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.eq i {
+  width: 3px;
+  border-radius: 1.5px;
+  background: var(--accent);
+  animation: eq-bounce 1s var(--ease-out) infinite;
+}
+
+.eq i:nth-child(1) { height: 60%; animation-delay: 0ms; }
+.eq i:nth-child(2) { height: 100%; animation-delay: 180ms; }
+.eq i:nth-child(3) { height: 75%; animation-delay: 360ms; }
+
+@keyframes eq-bounce {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
+/* ---------- 视图切换动效 ---------- */
+
+.view-enter-active {
+  transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out);
+}
+
+.view-leave-active {
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.view-enter-from {
+  opacity: 0;
+  transform: translateY(14px);
+}
+
+.view-leave-to {
+  opacity: 0;
+}
+
+/* 弹层动效 */
+
+.pop-enter-active {
+  transition: opacity var(--dur-med) var(--ease-out), transform var(--dur-med) var(--ease-spring);
+}
+
+.pop-leave-active {
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.pop-enter-from {
+  opacity: 0;
+  transform: scale(0.94) translateY(8px);
+}
+
+.pop-leave-to {
+  opacity: 0;
+  transform: scale(0.96);
 }

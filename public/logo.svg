@@ -17,10 +17,10 @@
   <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#inner)"/>
 
   <!-- 音符圆点 -->
-  <circle cx="24" cy="13.5" r="4.6" fill="#FFF8EF"/>
+  <circle cx="13.5" cy="24" r="4.6" fill="#FFF8EF"/>
 
-  <!-- 三道向上流动的声波弧线（长短递增，透明度递减） -->
-  <path d="M16.2 29.5 Q 24 21.5 31.8 29.5" fill="none" stroke="#FFF8EF" stroke-width="4" stroke-linecap="round" opacity="1"/>
-  <path d="M10.6 34 Q 24 19.8 37.4 34" fill="none" stroke="#FFF8EF" stroke-width="4" stroke-linecap="round" opacity="0.72"/>
-  <path d="M5.4 38.5 Q 24 18.2 42.6 38.5" fill="none" stroke="#FFF8EF" stroke-width="4" stroke-linecap="round" opacity="0.45"/>
+  <!-- 三行流动声波（旋律向右流淌，透明度递减） -->
+  <path d="M21.5 15.5 q 3.5 -5 7 0 t 7 0" fill="none" stroke="#FFF8EF" stroke-width="3.8" stroke-linecap="round" opacity="1"/>
+  <path d="M21.5 24 q 3.5 -5 7 0 t 7 0 t 7 0" fill="none" stroke="#FFF8EF" stroke-width="3.8" stroke-linecap="round" opacity="0.78"/>
+  <path d="M21.5 32.5 q 3.5 -5 7 0 t 7 0" fill="none" stroke="#FFF8EF" stroke-width="3.8" stroke-linecap="round" opacity="0.5"/>
 </svg>

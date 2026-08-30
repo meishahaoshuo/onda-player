@@ -2,7 +2,6 @@
 import VirtualList from '@/components/VirtualList.vue'
 import CoverImage from '@/components/CoverImage.vue'
 import QualityBadge from '@/components/QualityBadge.vue'
-import AppIcon from '@/components/AppIcon.vue'
 import { formatDuration } from '@/utils/format'
 import type { SongRecord } from '@/types'
 
@@ -53,7 +52,7 @@ function onRowClick(song: SongRecord) {
             <span class="col-artist" :title="item.artist">{{ item.artist }}</span>
             <span class="col-album" :title="item.album">{{ item.album }}</span>
             <span class="col-duration">
-              <AppIcon v-if="item.path === props.currentPath" name="check" :size="14" class="playing-check" />
+              <span v-if="item.path === props.currentPath" class="eq" aria-hidden="true"><i /><i /><i /></span>
               {{ formatDuration(item.durationSec) }}
             </span>
           </div>
@@ -93,17 +92,32 @@ function onRowClick(song: SongRecord) {
   gap: 12px;
   align-items: center;
   padding: 0 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-item);
   cursor: default;
-  transition: background 0.12s;
+  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 
 .song-row:hover {
   background: var(--bg-hover);
+  transform: translateX(2px);
 }
 
 .song-row.playing {
   background: var(--bg-active);
+}
+
+.song-row.playing .title-text {
+  color: var(--accent);
+}
+
+.song-row:hover :deep(.cover-img),
+.song-row:hover :deep(.cover-fallback) {
+  transform: scale(1.08);
+}
+
+.song-row :deep(.cover-img),
+.song-row :deep(.cover-fallback) {
+  transition: transform var(--dur-med) var(--ease-spring);
 }
 
 .col-cover {
@@ -158,9 +172,5 @@ function onRowClick(song: SongRecord) {
   font-size: 12px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
-}
-
-.playing-check {
-  color: var(--accent);
 }
 </style>

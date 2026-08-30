@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import QualityBadge from '@/components/QualityBadge.vue'
+import { makeAmbientGradient } from '@/services/palette'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
@@ -10,13 +11,38 @@ import { formatDuration, formatTotalDuration } from '@/utils/format'
 import type { SongRecord } from '@/types'
 
 /**
- * 专辑详情页（对照截图 3）：大封面头部 + 统计 + 播放/随机 + 碟片分组曲目
+ * 专辑详情页（对照截图 3）：大封面头部 + 取色环境光晕 + 统计 + 播放/随机 + 碟片分组曲目
  */
 const props = defineProps<{ albumKey: string }>()
 
 const library = useLibraryStore()
 const player = usePlayerStore()
 const ui = useUiStore()
+
+/* 封面取色环境光晕 */
+const ambientUrl = ref<string | null>(null)
+const ambientCache = new Map<string, string>()
+
+watch(
+  () => props.albumKey,
+  async (key) => {
+    ambientUrl.value = ambientCache.get(key) ?? null
+    const album = library.albums.find((a) => a.key === key)
+    if (!album?.coverId) return
+    if (ambientCache.has(key)) return
+    try {
+      const url = await library.coverUrl(album.coverId)
+      if (!url) return
+      const blob = await (await fetch(url)).blob()
+      const gradient = await makeAmbientGradient(blob)
+      ambientCache.set(key, gradient)
+      ambientUrl.value = gradient
+    } catch {
+      /* 取色失败则无光晕 */
+    }
+  },
+  { immediate: true },
+)
 
 const album = computed(() => library.albums.find((a) => a.key === props.albumKey))
 
@@ -52,7 +78,13 @@ function playSong(song: SongRecord) {
       <AppIcon name="close" :size="14" /> 返回专辑列表
     </button>
 
-    <header class="album-header">
+    <header class="album-header" :class="{ ambient: ambientUrl }">
+      <!-- 封面取色环境光晕 -->
+      <div
+        v-if="ambientUrl"
+        class="header-ambient"
+        :style="{ backgroundImage: `url(${ambientUrl})` }"
+      />
       <CoverImage :cover-id="album.coverId" :size="192" class="header-cover" />
       <div class="header-info">
         <h1 class="album-title">{{ album.name }}</h1>
@@ -131,18 +163,33 @@ function playSong(song: SongRecord) {
 }
 
 .album-header {
+  position: relative;
   display: flex;
   gap: 24px;
   align-items: flex-end;
+  padding: 28px 24px;
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+}
+
+.header-ambient {
+  position: absolute;
+  inset: -40px;
+  background-size: cover;
+  background-position: center;
+  filter: blur(56px) saturate(1.25);
+  opacity: 0.55;
 }
 
 .header-cover {
+  position: relative;
   border-radius: 8px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
   flex-shrink: 0;
 }
 
 .header-info {
+  position: relative;
   min-width: 0;
   display: flex;
   flex-direction: column;

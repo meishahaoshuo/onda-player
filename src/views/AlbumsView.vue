@@ -43,13 +43,36 @@ function openAlbum(key: string) {
   align-items: flex-start;
   gap: 8px;
   padding: 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-panel);
   text-align: left;
-  transition: background 0.15s;
+  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-med) var(--ease-spring),
+    box-shadow var(--dur-med) var(--ease-out);
+  position: relative;
+  overflow: hidden;
 }
 
 .album-card:hover {
   background: var(--bg-hover);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-2);
+}
+
+/* 光泽扫过 */
+.album-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -80%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(105deg, transparent, rgba(255, 240, 220, 0.16), transparent);
+  transform: skewX(-18deg);
+  transition: left 0.55s var(--ease-out);
+  pointer-events: none;
+}
+
+.album-card:hover::after {
+  left: 120%;
 }
 
 .album-cover {
@@ -62,6 +85,12 @@ function openAlbum(key: string) {
   width: 140px;
   height: 140px;
   border-radius: 8px;
+  transition: transform var(--dur-med) var(--ease-spring);
+}
+
+.album-card:hover .album-cover :deep(img),
+.album-card:hover .album-cover :deep(.cover-fallback) {
+  transform: scale(1.04);
 }
 
 .album-name {
