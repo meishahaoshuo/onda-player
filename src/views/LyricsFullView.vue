@@ -54,13 +54,23 @@ watch(
 
 const groups = ref<LyricGroup[]>([])
 const loading = ref(false)
+/** 歌词加载完成标记（有无歌词都置 true），飞入动画据此等布局稳定 */
+const lyricsSettled = ref(false)
+/** 切歌切换动画开关 */
+const switching = ref(false)
 
 watch(
   () => player.currentPath,
   async (path) => {
+    lyricsSettled.value = false
+    switching.value = true // 切歌：内容淡出
     groups.value = []
     const song = player.current
-    if (!path || !song) return
+    if (!path || !song) {
+      lyricsSettled.value = true
+      switching.value = false // 未播放时不应停留在淡出态
+      return
+    }
     loading.value = true
 
     // 优先同目录 .lrc 文件，其次音频内嵌歌词
@@ -71,6 +81,10 @@ watch(
       groups.value = parseEmbeddedLyrics(song.embeddedLyrics)
     }
     loading.value = false
+    lyricsSettled.value = true
+    // 新歌词就位后淡入（延迟到下一帧，等 DOM 渲染好歌词）
+    await nextTick()
+    switching.value = false
   },
   { immediate: true },
 )
@@ -182,8 +196,17 @@ function close() {
 const closing = ref(false)
 
 function flyIn() {
-  // 源：播放条小封面；目标：本页大封面。等歌词页布局完成后取位置。
-  void nextTick().then(() => {
+  // 等歌词加载完成（布局稳定），否则取到的目标坐标是歌词为空时的旧位置，
+  // 飞过去后会再被布局推到真实位置 → 卡顿。有歌词/无歌词都靠 lyricsSettled。
+  void (async () => {
+    await nextTick()
+    const t0 = performance.now()
+    while (!lyricsSettled.value && performance.now() - t0 < 450) {
+      await new Promise((r) => setTimeout(r, 30))
+    }
+    // 双 rAF：确保最终布局已提交，取到真实目标坐标
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+
     const srcEl = document.querySelector<HTMLElement>('.player-bar .track .cover')
     const dstEl = document.querySelector<HTMLElement>('.cover-main')
     if (!srcEl || !dstEl) return
@@ -210,29 +233,34 @@ function flyIn() {
     flying.style.zIndex = '60'
     flying.style.pointerEvents = 'none'
     flying.style.transition = 'none'
-    document.body.appendChild(flying)
+    flying.style.opacity = '0'
 
     // 飞行期间隐藏目标封面，避免重叠
     const dst = dstEl as HTMLElement
     dst.style.opacity = '0'
 
-    // 强制布局后，用 WAAPI 飞到目标（520ms spring）
-    const anim = flying.animate(
-      [
-        { left: `${s.left}px`, top: `${s.top}px`, width: `${s.width}px`, height: `${s.height}px`, borderRadius: '8px' },
-        { left: `${d.left}px`, top: `${d.top}px`, width: `${d.width}px`, height: `${d.height}px`, borderRadius: '12px' },
-      ],
-      { duration: 520, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'forwards' },
-    )
+    // 先以源位置渲染一帧（opacity 0），再真正动画，避免"落位后卡顿"
+    requestAnimationFrame(() => {
+      flying.style.opacity = '1'
+      const anim = flying.animate(
+        [
+          { left: `${s.left}px`, top: `${s.top}px`, width: `${s.width}px`, height: `${s.height}px`, borderRadius: '8px' },
+          { left: `${d.left}px`, top: `${d.top}px`, width: `${d.width}px`, height: `${d.height}px`, borderRadius: '12px' },
+        ],
+        { duration: 520, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'forwards' },
+      )
 
-    const finish = () => {
-      dst.style.opacity = '1'
-      flying.remove()
-    }
-    anim.onfinish = finish
-    // 兜底：即使 onfinish 未触发（如页面切换），也清理残留在动画结束附近
-    window.setTimeout(finish, 720)
-  })
+      const finish = () => {
+        dst.style.opacity = '1'
+        flying.remove()
+      }
+      anim.onfinish = finish
+      // 兜底：即使 onfinish 未触发（如页面切换），也清理残留在动画结束附近
+      window.setTimeout(finish, 760)
+    })
+
+    document.body.appendChild(flying)
+  })()
 }
 
 async function closeWithFade() {
@@ -259,7 +287,7 @@ onMounted(() => {
     </button>
 
     <!-- 主体：封面在左（带倒影），歌词在右 -->
-    <div class="main">
+    <div class="main" :class="{ switching }">
       <div class="cover-col">
         <div class="cover-main" v-if="player.current">
           <CoverImage :cover-id="player.current.coverId" :size="360" />
@@ -404,6 +432,20 @@ onMounted(() => {
   gap: 96px;
   /* 上下等距内边距 → 内容垂直居中于整个视口（迷你条为浮层，不参与占位） */
   padding: 24px 48px;
+}
+
+/* 切歌切换动画：封面与歌词淡出淡入 */
+.main .cover-col,
+.main .lyric-scroll,
+.main .no-lyrics-hint {
+  transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out);
+}
+
+.main.switching .cover-col,
+.main.switching .lyric-scroll,
+.main.switching .no-lyrics-hint {
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 .cover-col {
@@ -551,13 +593,27 @@ onMounted(() => {
   }
 }
 
-/* 迷你条内进度条用白色，配沉浸页 */
+/* 迷你条内进度条透明化：去橙，改成极淡的白玻璃，拖拽不突兀 */
+.mini-bar :deep(.ps-track) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .mini-bar :deep(.ps-fill) {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .mini-bar :deep(.ps-thumb) {
-  background: #fff;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
+}
+
+.mini-bar :deep(.pslider.dragging .ps-fill),
+.mini-bar :deep(.pslider:hover .ps-fill) {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.mini-bar :deep(.pslider.dragging .ps-track) {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .mini-progress {
