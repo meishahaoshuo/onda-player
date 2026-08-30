@@ -304,7 +304,7 @@ function close() {
   background: rgba(255, 255, 255, 0.12);
 }
 
-/* ---------- 主体：整组水平居中 ---------- */
+/* ---------- 主体：整组以整个页面为基准居中 ---------- */
 .main {
   position: relative;
   flex: 1;
@@ -312,8 +312,9 @@ function close() {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 56px;
-  padding: 32px 48px 96px;
+  gap: 96px;
+  /* 上下等距内边距 → 内容垂直居中于整个视口（迷你条为浮层，不参与占位） */
+  padding: 24px 48px;
 }
 
 .cover-col {
@@ -355,7 +356,7 @@ function close() {
 
 /* ---------- 歌词 ---------- */
 .lyric-scroll {
-  flex: 0 1 620px;
+  flex: 0 1 520px;
   min-width: 0;
   height: 100%;
   overflow-y: auto;
