@@ -43,6 +43,16 @@ async function ensureOpfsMusicDir(): Promise<FileSystemDirectoryHandle> {
     ['Test Song Alpha.wav', makeWav(2, 440)],
     ['Test Song Bravo.wav', makeWav(2, 550)],
     ['Test Song Charlie.wav', makeWav(2, 660)],
+    [
+      'Test Song Alpha.lrc',
+      new Blob(
+        [
+          '[ti:Alpha]\n[by:test]\n[00:00.30]Alpha 原文第一行\n[00:00.32]Alpha 翻译第一行\n' +
+            '[00:01.20]Alpha 原文第二行\n[00:01.22]Alpha 翻译第二行\n',
+        ],
+        { type: 'text/plain' },
+      ),
+    ],
   ]
   for (const [name, blob] of files) {
     const fh = await dir.getFileHandle(name, { create: true })

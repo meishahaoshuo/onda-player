@@ -4,12 +4,14 @@ import AppIcon from './AppIcon.vue'
 import CoverImage from './CoverImage.vue'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
+import { useUiStore } from '@/stores/ui'
 import { formatDuration } from '@/utils/format'
 import type { PlayMode } from '@/types'
 
 /** 底部播放条（数据接自播放内核 store） */
 const player = usePlayerStore()
 const settings = useSettingsStore()
+const ui = useUiStore()
 
 const MODE_META: { mode: PlayMode; icon: 'repeat' | 'repeatOne' | 'shuffle'; label: string }[] = [
   { mode: 'order', icon: 'repeat', label: '顺序播放' },
@@ -81,7 +83,7 @@ function cycleMode() {
 
     <!-- 右：辅助区 -->
     <div class="aux">
-      <button class="icon-btn" title="全屏歌词">
+      <button class="icon-btn" title="全屏歌词" @click="ui.lyricsOpen = true">
         <AppIcon name="expand" />
       </button>
       <button class="icon-btn" :title="`音量 ${player.volume}%`">

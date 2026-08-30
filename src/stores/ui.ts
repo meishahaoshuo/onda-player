@@ -11,6 +11,8 @@ export const useUiStore = defineStore('ui', () => {
   const detailKey = ref<string | null>(null)
   /** 侧边栏「新建歌单」请求标记，由 PlaylistsView 消费 */
   const playlistCreateRequested = ref(false)
+  /** 全屏歌词页开关 */
+  const lyricsOpen = ref(false)
 
   function navigate(view: ViewId) {
     activeView.value = view
@@ -32,5 +34,14 @@ export const useUiStore = defineStore('ui', () => {
     detailKey.value = null
   }
 
-  return { activeView, detailKey, playlistCreateRequested, navigate, requestPlaylistCreate, openDetail, closeDetail }
+  return {
+    activeView,
+    detailKey,
+    playlistCreateRequested,
+    lyricsOpen,
+    navigate,
+    requestPlaylistCreate,
+    openDetail,
+    closeDetail,
+  }
 })

@@ -39,6 +39,33 @@ export async function removeRootOnly(rootId: string) {
   await db.deleteRoot(rootId)
 }
 
+/** 读取歌曲同目录同名 .lrc 歌词文本 */
+export async function readLrcFile(
+  rootId: string,
+  songRelativePath: string,
+): Promise<string | null> {
+  const root = await db.getRootHandle(rootId)
+  if (!root) return null
+  const segments = songRelativePath.split('/')
+  const fileName = segments.pop()!
+  const lrcName = fileName.replace(/\.[^.]+$/, '') + '.lrc'
+  let dir = root
+  for (const seg of segments) {
+    try {
+      dir = await dir.getDirectoryHandle(seg)
+    } catch {
+      return null
+    }
+  }
+  try {
+    const fh = await dir.getFileHandle(lrcName)
+    const file = await fh.getFile()
+    return await file.text()
+  } catch {
+    return null
+  }
+}
+
 /** 把歌曲记录（"rootId/相对路径"）解析为 File 对象 */
 export async function resolveSongFile(
   rootId: string,

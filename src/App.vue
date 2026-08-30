@@ -9,6 +9,7 @@ import AlbumDetailView from '@/views/AlbumDetailView.vue'
 import ArtistsView from '@/views/ArtistsView.vue'
 import GenresView from '@/views/GenresView.vue'
 import PlaylistsView from '@/views/PlaylistsView.vue'
+import LyricsFullView from '@/views/LyricsFullView.vue'
 import PlaceholderView from '@/views/PlaceholderView.vue'
 import { useUiStore } from '@/stores/ui'
 import { useLibraryStore } from '@/stores/library'
@@ -76,6 +77,7 @@ onMounted(async () => {
       </main>
     </div>
     <PlayerBar />
+    <LyricsFullView v-if="ui.lyricsOpen" />
   </div>
 </template>
 
