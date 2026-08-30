@@ -4,18 +4,64 @@ import AppIcon from '@/components/AppIcon.vue'
 import CoverImage from '@/components/CoverImage.vue'
 import { readLrcFile } from '@/services/fs'
 import { parseLrc, type LyricGroup } from '@/services/lyrics'
+import { extractPalette } from '@/services/palette'
+import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
 import { formatDuration } from '@/utils/format'
 import type { PlayMode } from '@/types'
 
 /**
- * 全屏歌词页（对照 Salt Player 截图 1）：
- * 彩色封面模糊背景铺满；封面在左带倒影；歌词在右逐行双语；
+ * 全屏歌词页（对照 Salt Player 截图）：
+ * 背景为封面取色生成的柔和渐变；封面在左带倒影；歌词在右逐行双语；
  * 当前行放大高亮、其余按距离递减；底部居中磨砂迷你播放条。
  */
 const player = usePlayerStore()
 const ui = useUiStore()
+const library = useLibraryStore()
+
+/* ---------- 封面取色渐变背景 ---------- */
+
+const palette = ref<string[]>([])
+const paletteCache = new Map<string, string[]>()
+
+watch(
+  () => player.current?.coverId ?? null,
+  async (coverId) => {
+    palette.value = []
+    if (!coverId) return
+    const cached = paletteCache.get(coverId)
+    if (cached) {
+      palette.value = cached
+      return
+    }
+    try {
+      const url = await library.coverUrl(coverId)
+      if (!url) return
+      const blob = await (await fetch(url)).blob()
+      const colors = await extractPalette(blob, 3)
+      paletteCache.set(coverId, colors)
+      palette.value = colors
+    } catch {
+      // 取色失败则保持深色底
+    }
+  },
+  { immediate: true },
+)
+
+/** 渐变背景：主色左上、次色右下、第三色中部点缀，下压一层深色 */
+const bgStyle = computed(() => {
+  const [c0, c1, c2] = palette.value
+  if (!c0) return { background: '#17191d' }
+  return {
+    background: [
+      `radial-gradient(ellipse 90% 75% at 15% 20%, ${c0}, transparent 70%)`,
+      `radial-gradient(ellipse 100% 85% at 85% 80%, ${c1 ?? c0}, transparent 70%)`,
+      `radial-gradient(ellipse 80% 70% at 55% 55%, ${c2 ?? c1 ?? c0}, transparent 75%)`,
+      'linear-gradient(150deg, rgba(20,18,24,0.55), rgba(12,12,16,0.75))',
+    ].join(', '),
+  }
+})
 
 const groups = ref<LyricGroup[]>([])
 const loading = ref(false)
@@ -117,10 +163,9 @@ function close() {
 
 <template>
   <div class="lyrics-full">
-    <!-- 背景：封面铺满 + 大半径模糊（保留鲜艳色彩） -->
-    <div class="bg">
-      <CoverImage :cover-id="player.current?.coverId ?? null" :size="1024" class="bg-cover" />
-      <div class="bg-overlay" />
+    <!-- 背景：封面取色的柔和渐变（再叠加一层大半径模糊使色块交融） -->
+    <div class="bg" :style="bgStyle">
+      <div class="bg-smooth" />
     </div>
 
     <!-- 关闭按钮 -->
@@ -224,27 +269,12 @@ function close() {
   inset: 0;
 }
 
-.bg-cover {
-  width: 100%;
-  height: 100%;
-}
-
-.bg-cover :deep(img) {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: blur(90px) saturate(1.7) brightness(0.85);
-  transform: scale(1.4);
-}
-
-.bg-cover :deep(.cover-fallback) {
-  display: none;
-}
-
-.bg-overlay {
+/* 渐变色块之间再做一次大半径模糊，得到柔和交融的效果 */
+.bg-smooth {
   position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.35));
+  inset: -60px;
+  backdrop-filter: blur(70px) saturate(1.15);
+  -webkit-backdrop-filter: blur(70px) saturate(1.15);
 }
 
 /* ---------- 关闭 ---------- */
