@@ -44,6 +44,12 @@ async function makeThumb(picture: Uint8Array, mime: string): Promise<Blob> {
 const BATCH_YIELD_EVERY = 8
 const yieldToUi = () => new Promise<void>((r) => setTimeout(r, 0))
 
+/**
+ * 扫描格式版本：v2 开始提取内嵌歌词。
+ * 版本升级时忽略「未变化跳过」缓存，对所有文件强制重新解析一次。
+ */
+const SCANNER_VERSION = 2
+
 export async function scanRoot(
   root: FolderRoot,
   handle: FileSystemDirectoryHandle,
@@ -64,6 +70,8 @@ export async function scanRoot(
   for (const song of await db.getAllSongs()) {
     if (song.rootId === root.id) existing.set(song.path, song)
   }
+  const scannerVersion = (await db.kvGet<number>('scannerVersion')) ?? 1
+  const forceAll = scannerVersion < SCANNER_VERSION
   const seenPaths = new Set<string>()
   const pendingWrites: SongRecord[] = []
 
@@ -84,7 +92,12 @@ export async function scanRoot(
 
       const fullPath = `${root.id}/${entry.path}`
       const prev = existing.get(fullPath)
-      if (prev && prev.fileSize === entry.file.size && prev.mtimeMs === entry.file.lastModified) {
+      if (
+        !forceAll &&
+        prev &&
+        prev.fileSize === entry.file.size &&
+        prev.mtimeMs === entry.file.lastModified
+      ) {
         progress.skipped++
         if (++sinceYield >= BATCH_YIELD_EVERY) {
           sinceYield = 0
@@ -116,6 +129,15 @@ export async function scanRoot(
           }
         }
 
+        // 内嵌歌词（USLT 等，ILyricsTag.text），多段以空行连接
+        const embeddedLyrics = common.lyrics?.length
+          ? common.lyrics
+              .map((l) => (typeof l === 'string' ? l : (l.text ?? '')))
+              .map((l) => l.trim())
+              .filter(Boolean)
+              .join('\n\n')
+          : null
+
         const record: SongRecord = {
           path: fullPath,
           rootId: root.id,
@@ -137,6 +159,7 @@ export async function scanRoot(
           mtimeMs: entry.file.lastModified,
           hasCover: coverId !== null,
           coverId,
+          embeddedLyrics,
         }
         pendingWrites.push(record)
         progress.scanned++
@@ -160,6 +183,10 @@ export async function scanRoot(
   const doomed = [...existing.keys()].filter((p) => !seenPaths.has(p))
   if (doomed.length > 0 && !task.cancelled) {
     await db.deleteSongs(doomed)
+  }
+
+  if (!task.cancelled) {
+    await db.kvSet('scannerVersion', SCANNER_VERSION)
   }
 
   progress.phase = 'done'

@@ -4,7 +4,7 @@ import AppIcon from '@/components/AppIcon.vue'
 import CoverImage from '@/components/CoverImage.vue'
 import { readLrcFile } from '@/services/fs'
 import { parseLrc, type LyricGroup } from '@/services/lyrics'
-import { extractPalette } from '@/services/palette'
+import { makeAmbientGradient } from '@/services/palette'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
@@ -13,55 +13,43 @@ import type { PlayMode } from '@/types'
 
 /**
  * 全屏歌词页（对照 Salt Player 截图）：
- * 背景为封面取色生成的柔和渐变；封面在左带倒影；歌词在右逐行双语；
- * 当前行放大高亮、其余按距离递减；底部居中磨砂迷你播放条。
+ * 背景为封面颜色构图拉伸的柔和渐变；封面在左带倒影；歌词在右逐行双语；
+ * 当前行放大高亮、其余按距离递减；底部居中液态玻璃迷你播放条。
  */
 const player = usePlayerStore()
 const ui = useUiStore()
 const library = useLibraryStore()
 
-/* ---------- 封面取色渐变背景 ---------- */
+/* ---------- 封面渐变背景 ---------- */
 
-const palette = ref<string[]>([])
-const paletteCache = new Map<string, string[]>()
+const bgUrl = ref<string | null>(null)
+const bgCache = new Map<string, string>()
 
 watch(
   () => player.current?.coverId ?? null,
   async (coverId) => {
-    palette.value = []
-    if (!coverId) return
-    const cached = paletteCache.get(coverId)
+    if (!coverId) {
+      bgUrl.value = null
+      return
+    }
+    const cached = bgCache.get(coverId)
     if (cached) {
-      palette.value = cached
+      bgUrl.value = cached
       return
     }
     try {
       const url = await library.coverUrl(coverId)
       if (!url) return
       const blob = await (await fetch(url)).blob()
-      const colors = await extractPalette(blob, 3)
-      paletteCache.set(coverId, colors)
-      palette.value = colors
+      const gradient = await makeAmbientGradient(blob)
+      bgCache.set(coverId, gradient)
+      bgUrl.value = gradient
     } catch {
-      // 取色失败则保持深色底
+      // 取色失败保持深色底
     }
   },
   { immediate: true },
 )
-
-/** 渐变背景：主色左上、次色右下、第三色中部点缀，下压一层深色 */
-const bgStyle = computed(() => {
-  const [c0, c1, c2] = palette.value
-  if (!c0) return { background: '#17191d' }
-  return {
-    background: [
-      `radial-gradient(ellipse 90% 75% at 15% 20%, ${c0}, transparent 70%)`,
-      `radial-gradient(ellipse 100% 85% at 85% 80%, ${c1 ?? c0}, transparent 70%)`,
-      `radial-gradient(ellipse 80% 70% at 55% 55%, ${c2 ?? c1 ?? c0}, transparent 75%)`,
-      'linear-gradient(150deg, rgba(20,18,24,0.55), rgba(12,12,16,0.75))',
-    ].join(', '),
-  }
-})
 
 const groups = ref<LyricGroup[]>([])
 const loading = ref(false)
@@ -73,16 +61,34 @@ watch(
     const song = player.current
     if (!path || !song) return
     loading.value = true
-    const content = await readLrcFile(song.rootId, path.slice(song.rootId.length + 1))
-    groups.value = content ? parseLrc(content) : []
+
+    // 优先同目录 .lrc 文件，其次音频内嵌歌词
+    const lrc = await readLrcFile(song.rootId, path.slice(song.rootId.length + 1))
+    if (lrc && lrc.trim()) {
+      groups.value = parseLrc(lrc)
+    } else if (song.embeddedLyrics) {
+      groups.value = parseEmbeddedLyrics(song.embeddedLyrics)
+    }
     loading.value = false
   },
   { immediate: true },
 )
 
-/* 当前行：最后一个 time <= currentTime 的组 */
+/** 内嵌歌词：带时间轴的按 LRC 解析；纯文本按行静态展示 */
+function parseEmbeddedLyrics(text: string): LyricGroup[] {
+  if (/\[\d{1,3}:\d{1,2}(?:\.\d+)?\]/.test(text)) {
+    return parseLrc(text)
+  }
+  return text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => ({ time: -1, texts: [l] }))
+}
+
+/* 当前行：最后一个 time <= currentTime 的组；无时间轴的静态歌词不高亮 */
 const activeIdx = computed(() => {
-  if (groups.value.length === 0) return -1
+  if (groups.value.length === 0 || groups.value[0].time < 0) return -1
   const t = player.currentTime
   let lo = 0
   let hi = groups.value.length - 1
@@ -123,6 +129,7 @@ watch(activeIdx, async () => {
 })
 
 function lineClass(i: number) {
+  if (activeIdx.value < 0) return {} // 静态歌词（无时间轴）不高亮不递减
   const d = Math.abs(i - activeIdx.value)
   return {
     active: d === 0,
@@ -163,10 +170,8 @@ function close() {
 
 <template>
   <div class="lyrics-full">
-    <!-- 背景：封面取色的柔和渐变（再叠加一层大半径模糊使色块交融） -->
-    <div class="bg" :style="bgStyle">
-      <div class="bg-smooth" />
-    </div>
+    <!-- 背景：封面颜色构图拉伸的柔和渐变 -->
+    <div class="bg" :class="{ active: bgUrl }" :style="bgUrl ? { backgroundImage: `url(${bgUrl})` } : undefined" />
 
     <!-- 关闭按钮 -->
     <button class="icon-btn close-btn" title="退出全屏歌词" @click="close">
@@ -267,14 +272,22 @@ function close() {
 .bg {
   position: absolute;
   inset: 0;
+  background: #17191d;
+  background-size: cover;
+  background-position: center;
 }
 
-/* 渐变色块之间再做一次大半径模糊，得到柔和交融的效果 */
-.bg-smooth {
+.bg.active {
+  filter: blur(70px) saturate(1.25);
+  transform: scale(1.35);
+}
+
+/* 底部稍压暗，保证迷你条与歌词可读 */
+.bg::after {
+  content: '';
   position: absolute;
-  inset: -60px;
-  backdrop-filter: blur(70px) saturate(1.15);
-  -webkit-backdrop-filter: blur(70px) saturate(1.15);
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.3));
 }
 
 /* ---------- 关闭 ---------- */
@@ -406,7 +419,7 @@ function close() {
   font-size: 15px;
 }
 
-/* ---------- 底部磨砂迷你播放条 ---------- */
+/* ---------- 底部液态玻璃迷你播放条 ---------- */
 .mini-bar {
   position: absolute;
   left: 50%;
@@ -420,11 +433,19 @@ function close() {
   max-width: 72vw;
   padding: 10px 22px 12px;
   border-radius: 16px;
-  background: rgba(20, 22, 26, 0.55);
-  backdrop-filter: blur(24px) saturate(1.3);
-  -webkit-backdrop-filter: blur(24px) saturate(1.3);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  background: linear-gradient(
+    120deg,
+    rgba(255, 255, 255, 0.22),
+    rgba(255, 255, 255, 0.1) 55%,
+    rgba(255, 255, 255, 0.16)
+  );
+  backdrop-filter: blur(28px) saturate(1.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .mini-progress {
@@ -502,6 +523,6 @@ function close() {
 .mini-volume {
   width: 76px;
   accent-color: #fff;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 </style>

@@ -35,6 +35,8 @@ export interface SongRecord {
   mtimeMs: number
   hasCover: boolean
   coverId: string | null
+  /** 音频内嵌歌词（USLT/LRC 文本），扫描时提取 */
+  embeddedLyrics?: string | null
 }
 
 export interface FolderRoot {
