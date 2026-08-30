@@ -304,39 +304,41 @@ function close() {
   background: rgba(255, 255, 255, 0.12);
 }
 
-/* ---------- 主体 ---------- */
+/* ---------- 主体：整组水平居中 ---------- */
 .main {
   position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
   align-items: center;
-  gap: 40px;
-  padding: 32px 56px 96px;
+  justify-content: center;
+  gap: 56px;
+  padding: 32px 48px 96px;
 }
 
 .cover-col {
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  height: 100%;
 }
 
 .cover-main {
-  display: flex;
-  flex-direction: column;
+  position: relative;
 }
 
 .cover-main :deep(img),
 .cover-main :deep(.cover-fallback) {
-  width: min(42vh, 34vw);
-  height: min(42vh, 34vw);
+  display: block;
+  width: min(42vh, 30vw);
+  height: min(42vh, 30vw);
   border-radius: 12px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
 }
 
+/* 倒影脱离文档流：封面本体保持垂直居中 */
 .cover-reflection {
-  transform: scaleY(-1) translateY(-6px);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  transform: scaleY(-1);
   opacity: 0.28;
   mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.75), transparent 50%);
   -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.75), transparent 50%);
@@ -345,14 +347,15 @@ function close() {
 
 .cover-reflection :deep(img),
 .cover-reflection :deep(.cover-fallback) {
-  width: min(42vh, 34vw);
-  height: min(42vh, 34vw);
+  display: block;
+  width: min(42vh, 30vw);
+  height: min(42vh, 30vw);
   border-radius: 12px;
 }
 
 /* ---------- 歌词 ---------- */
 .lyric-scroll {
-  flex: 1;
+  flex: 0 1 620px;
   min-width: 0;
   height: 100%;
   overflow-y: auto;
@@ -431,21 +434,21 @@ function close() {
   gap: 22px;
   min-width: 460px;
   max-width: 72vw;
-  padding: 10px 22px 12px;
-  border-radius: 16px;
+  padding: 12px 26px 14px;
+  border-radius: 24px;
   background: linear-gradient(
     120deg,
-    rgba(255, 255, 255, 0.22),
-    rgba(255, 255, 255, 0.1) 55%,
-    rgba(255, 255, 255, 0.16)
+    rgba(255, 255, 255, 0.14),
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0.1)
   );
-  backdrop-filter: blur(28px) saturate(1.6);
-  -webkit-backdrop-filter: blur(28px) saturate(1.6);
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(36px) saturate(1.8);
+  -webkit-backdrop-filter: blur(36px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+    0 12px 40px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .mini-progress {
