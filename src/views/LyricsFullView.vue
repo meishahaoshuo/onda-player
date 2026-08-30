@@ -58,12 +58,17 @@ const loading = ref(false)
 const lyricsSettled = ref(false)
 /** 切歌切换动画开关 */
 const switching = ref(false)
+/** 歌词滚动容器（须在 watch 前声明，避免 immediate 访问时 TDZ） */
+const scroller = ref<HTMLElement | null>(null)
+/** 切歌淡出起始时刻（须在 watch 前声明） */
+let switchStart = 0
 
 watch(
   () => player.currentPath,
   async (path) => {
     lyricsSettled.value = false
     switching.value = true // 切歌：内容淡出
+    switchStart = performance.now()
     groups.value = []
     const song = player.current
     if (!path || !song) {
@@ -72,6 +77,7 @@ watch(
       return
     }
     loading.value = true
+    scroller.value?.scrollTo({ top: 0 })
 
     // 优先同目录 .lrc 文件，其次音频内嵌歌词
     const lrc = await readLrcFile(song.rootId, path.slice(song.rootId.length + 1))
@@ -82,9 +88,12 @@ watch(
     }
     loading.value = false
     lyricsSettled.value = true
-    // 新歌词就位后淡入（延迟到下一帧，等 DOM 渲染好歌词）
     await nextTick()
-    switching.value = false
+    // 保证淡出阶段真正可见（至少 260ms）再淡入，切歌才有丝滑过场
+    const elapsed = performance.now() - switchStart
+    window.setTimeout(() => {
+      switching.value = false
+    }, Math.max(0, 260 - elapsed))
   },
   { immediate: true },
 )
@@ -121,7 +130,6 @@ const activeIdx = computed(() => {
 })
 
 /* 自动居中滚动（活动行保持在视口上 1/3 处，符合截图观感） */
-const scroller = ref<HTMLElement | null>(null)
 const lineEls = ref<(HTMLElement | null)[]>([])
 
 watch(groups, () => {
@@ -286,15 +294,11 @@ onMounted(() => {
       <AppIcon name="close" :size="20" />
     </button>
 
-    <!-- 主体：封面在左（带倒影），歌词在右 -->
+    <!-- 主体：封面在左，歌词在右 -->
     <div class="main" :class="{ switching }">
       <div class="cover-col">
         <div class="cover-main" v-if="player.current">
           <CoverImage :cover-id="player.current.coverId" :size="360" />
-          <!-- 倒影：翻转 + 渐变遮罩 -->
-          <div class="cover-reflection">
-            <CoverImage :cover-id="player.current.coverId" :size="360" />
-          </div>
         </div>
       </div>
 
@@ -438,14 +442,14 @@ onMounted(() => {
 .main .cover-col,
 .main .lyric-scroll,
 .main .no-lyrics-hint {
-  transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out);
+  transition: opacity 300ms var(--ease-out), transform 300ms var(--ease-out);
 }
 
 .main.switching .cover-col,
 .main.switching .lyric-scroll,
 .main.switching .no-lyrics-hint {
   opacity: 0;
-  transform: translateY(8px);
+  transform: translateY(10px);
 }
 
 .cover-col {
@@ -463,26 +467,6 @@ onMounted(() => {
   height: min(42vh, 30vw);
   border-radius: 12px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
-}
-
-/* 倒影脱离文档流：封面本体保持垂直居中 */
-.cover-reflection {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  transform: scaleY(-1);
-  opacity: 0.28;
-  mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.75), transparent 50%);
-  -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.75), transparent 50%);
-  pointer-events: none;
-}
-
-.cover-reflection :deep(img),
-.cover-reflection :deep(.cover-fallback) {
-  display: block;
-  width: min(42vh, 30vw);
-  height: min(42vh, 30vw);
-  border-radius: 12px;
 }
 
 /* ---------- 歌词 ---------- */
@@ -562,7 +546,7 @@ onMounted(() => {
   font-size: 15px;
 }
 
-/* ---------- 底部液态玻璃迷你播放条（沉浸页专用：超透明，融进背景） ---------- */
+/* ---------- 底部雾面迷你播放条（沉浸页专用：无边框、极低存在感，溶进背景） ---------- */
 .mini-bar {
   position: absolute;
   left: 50%;
@@ -571,18 +555,16 @@ onMounted(() => {
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 22px;
-  min-width: 460px;
+  gap: 20px;
+  min-width: 440px;
   max-width: 72vw;
-  padding: 12px 26px 14px;
-  border-radius: 24px;
-  background: rgba(22, 17, 14, 0.28);
-  backdrop-filter: blur(52px) saturate(1.4) brightness(1.04);
-  -webkit-backdrop-filter: blur(52px) saturate(1.4) brightness(1.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow:
-    0 10px 36px rgba(0, 0, 0, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  padding: 12px 24px 14px;
+  border-radius: 28px;
+  background: rgba(20, 16, 13, 0.2);
+  backdrop-filter: blur(46px) saturate(1.35);
+  -webkit-backdrop-filter: blur(46px) saturate(1.35);
+  border: none;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
   animation: bar-in 480ms var(--ease-spring) 120ms backwards;
 }
 
@@ -593,27 +575,27 @@ onMounted(() => {
   }
 }
 
-/* 迷你条内进度条透明化：去橙，改成极淡的白玻璃，拖拽不突兀 */
+/* 迷你条内进度条透明化：极淡的白玻璃，拖拽不突兀 */
 .mini-bar :deep(.ps-track) {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .mini-bar :deep(.ps-fill) {
-  background: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .mini-bar :deep(.ps-thumb) {
-  background: rgba(255, 255, 255, 0.85);
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
 }
 
 .mini-bar :deep(.pslider.dragging .ps-fill),
 .mini-bar :deep(.pslider:hover .ps-fill) {
-  background: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .mini-bar :deep(.pslider.dragging .ps-track) {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .mini-progress {
