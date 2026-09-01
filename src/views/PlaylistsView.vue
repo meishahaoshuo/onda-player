@@ -102,16 +102,57 @@ function onPlay(song: SongRecord) {
 /* ---------- 拖拽排序 ---------- */
 
 const dragIndex = ref<number | null>(null)
+/** 当前悬停的目标行（用于画插入指示线） */
+const dragOverIndex = ref<number | null>(null)
+/** 插入到目标行的上方还是下方：由指针在行内的纵向位置决定 */
+const dropAfter = ref(false)
 
-function onDragStart(i: number) {
+function onDragStart(i: number, e: DragEvent) {
   dragIndex.value = i
+  // 让拖拽影像半透明，并告诉浏览器这是一次"移动"
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    // 部分浏览器要求设置了 data 才会触发 drop
+    e.dataTransfer.setData('text/plain', String(i))
+  }
 }
 
-function onDrop(i: number) {
-  if (current.value && dragIndex.value !== null && dragIndex.value !== i) {
-    playlistStore.moveSong(current.value.id, dragIndex.value, i)
+function onDragOver(i: number, e: DragEvent) {
+  if (dragIndex.value === null) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  const row = e.currentTarget as HTMLElement
+  const rect = row.getBoundingClientRect()
+  // 指针过半 → 插到该行下方，否则插到上方
+  dropAfter.value = e.clientY - rect.top > rect.height / 2
+  dragOverIndex.value = i
+}
+
+function onDrop(i: number, e: DragEvent) {
+  e.preventDefault()
+  const from = dragIndex.value
+  if (current.value && from !== null && from !== i) {
+    // 计算真实落点：往上插就是 i，往下插就是 i+1；
+    // moveSong 内部按"先摘除再插入"处理，from < target 时索引要左移一位。
+    const target = dropAfter.value ? i + 1 : i
+    const adjusted = from < target ? target - 1 : target
+    if (adjusted !== from) playlistStore.moveSong(current.value.id, from, adjusted)
   }
+  resetDrag()
+}
+
+/**
+ * 关键：dragend 在"松手但没落在有效放置区"时也会触发，
+ * 而 drop 不会。少了它，行会永久卡在半透明的拖拽态。
+ */
+function onDragEnd() {
+  resetDrag()
+}
+
+function resetDrag() {
   dragIndex.value = null
+  dragOverIndex.value = null
+  dropAfter.value = false
 }
 
 function confirmRemove() {
@@ -163,11 +204,17 @@ function confirmRemove() {
         v-for="(song, i) in currentSongs"
         :key="song.path"
         class="drag-row"
-        :class="{ playing: song.path === player.currentPath, dragging: dragIndex === i }"
+        :class="{
+          playing: song.path === player.currentPath,
+          dragging: dragIndex === i,
+          'drop-before': dragOverIndex === i && !dropAfter && dragIndex !== i,
+          'drop-after': dragOverIndex === i && dropAfter && dragIndex !== i,
+        }"
         draggable="true"
-        @dragstart="onDragStart(i)"
-        @dragover.prevent
-        @drop="onDrop(i)"
+        @dragstart="onDragStart(i, $event)"
+        @dragover="onDragOver(i, $event)"
+        @drop="onDrop(i, $event)"
+        @dragend="onDragEnd"
         @click="onPlay(song)"
       >
         <span class="drag-handle">⋮⋮</span>
@@ -182,7 +229,7 @@ function confirmRemove() {
 
     <!-- 重命名弹层 -->
     <teleport to="body">
-      <div v-if="showRename" class="modal-mask" @click.self="showRename = false">
+      <Transition name="modal"><div v-if="showRename" class="modal-mask" @click.self="showRename = false">
         <FrostedPanel class="modal" radius="12px">
           <h3 class="modal-title">重命名歌单</h3>
           <input v-model="renameText" class="text-input" type="text" @keyup.enter="confirmRename" />
@@ -191,12 +238,12 @@ function confirmRemove() {
             <button class="action-btn primary" @click="confirmRename">确定</button>
           </div>
         </FrostedPanel>
-      </div>
+      </div></Transition>
     </teleport>
 
     <!-- 添加歌曲弹层 -->
     <teleport to="body">
-      <div v-if="showAdd" class="modal-mask" @click.self="showAdd = false">
+      <Transition name="modal"><div v-if="showAdd" class="modal-mask" @click.self="showAdd = false">
         <FrostedPanel class="modal wide" radius="12px">
           <h3 class="modal-title">添加歌曲到「{{ current.name }}」</h3>
           <input v-model="addFilter" class="text-input" type="text" placeholder="搜索标题 / 艺术家 / 专辑" />
@@ -218,7 +265,7 @@ function confirmRemove() {
             <button class="action-btn primary" @click="showAdd = false">完成</button>
           </div>
         </FrostedPanel>
-      </div>
+      </div></Transition>
     </teleport>
   </div>
 
@@ -248,7 +295,7 @@ function confirmRemove() {
 
     <!-- 新建弹层 -->
     <teleport to="body">
-      <div v-if="showCreate" class="modal-mask" @click.self="showCreate = false">
+      <Transition name="modal"><div v-if="showCreate" class="modal-mask" @click.self="showCreate = false">
         <FrostedPanel class="modal" radius="12px">
           <h3 class="modal-title">新建歌单</h3>
           <input
@@ -263,7 +310,7 @@ function confirmRemove() {
             <button class="action-btn primary" @click="confirmCreate">创建</button>
           </div>
         </FrostedPanel>
-      </div>
+      </div></Transition>
     </teleport>
   </div>
 </template>
@@ -365,6 +412,7 @@ function confirmRemove() {
 }
 
 .drag-row {
+  position: relative;
   display: grid;
   grid-template-columns: 24px 36px 1fr 1fr 32px;
   gap: 12px;
@@ -373,7 +421,11 @@ function confirmRemove() {
   padding: 0 12px;
   border-radius: 8px;
   cursor: grab;
-  transition: background 0.12s;
+  transition: background 0.12s var(--ease-out), opacity 0.12s var(--ease-out);
+}
+
+.drag-row:active {
+  cursor: grabbing;
 }
 
 .drag-row:hover {
@@ -386,6 +438,27 @@ function confirmRemove() {
 
 .drag-row.dragging {
   opacity: 0.4;
+}
+
+/* 插入指示线：2px 品牌红贴在目标行的上/下边缘 */
+.drag-row.drop-before::before,
+.drag-row.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.drag-row.drop-before::before {
+  top: -1px;
+}
+
+.drag-row.drop-after::after {
+  bottom: -1px;
 }
 
 .drag-handle {
@@ -492,6 +565,38 @@ function confirmRemove() {
   align-items: center;
   justify-content: center;
   z-index: 100;
+}
+
+/* 弹层过渡：遮罩淡入 + 面板 spring 上浮 */
+.modal-enter-active {
+  transition: opacity var(--dur-med) var(--ease-out);
+}
+
+.modal-leave-active {
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.modal-enter-active :deep(.modal) {
+  transition: transform var(--dur-med) var(--ease-spring), opacity var(--dur-med) var(--ease-out);
+}
+
+.modal-leave-active :deep(.modal) {
+  transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-enter-from :deep(.modal) {
+  transform: translateY(14px) scale(0.96);
+  opacity: 0;
+}
+
+.modal-leave-to :deep(.modal) {
+  transform: translateY(6px) scale(0.98);
+  opacity: 0;
 }
 
 .modal {

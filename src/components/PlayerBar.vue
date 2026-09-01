@@ -170,6 +170,15 @@ function jumpTo(path: string) {
   flex-shrink: 0;
   padding: 0 20px;
   gap: 20px;
+  /* 应用启动时从底部轻滑入：一次性的入场动画，不参与后续交互 */
+  animation: bar-enter 640ms var(--ease-spring) 120ms backwards;
+}
+
+@keyframes bar-enter {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
 }
 
 /* 左：曲目 */

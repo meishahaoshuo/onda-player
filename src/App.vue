@@ -60,9 +60,13 @@ onMounted(async () => {
         </header>
         <Transition name="view" mode="out-in">
           <section :key="ui.activeView" class="view-body">
+            <!-- 注意：这条 v-if / v-else-if 链必须从 SongsView 一路连通到 PlaceholderView。
+                 曾经 template v-if 与 SongsView 的 v-if 断开成两条链，
+                 songs 视图下兜底的 PlaceholderView 也会渲染，view-body 被撑出
+                 双倍高度 → 外层滚动条出现 + 内层虚拟列表失效。 -->
             <SongsView v-if="ui.activeView === 'songs'" @add-folder="addFolder" />
 
-            <template v-if="ui.activeView === 'albums'">
+            <template v-else-if="ui.activeView === 'albums'">
               <AlbumDetailView v-if="ui.detailKey" :album-key="ui.detailKey" />
               <AlbumsView v-else />
             </template>

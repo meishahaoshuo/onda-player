@@ -3,11 +3,27 @@ import { ref, watchEffect } from 'vue'
 import type { ThemeMode } from '@/types'
 
 const STORAGE_KEY = 'settings.themeMode'
+const LYRIC_FS_KEY = 'settings.lyricFontSize'
 const media = window.matchMedia('(prefers-color-scheme: dark)')
 
 function loadMode(): ThemeMode {
   const raw = localStorage.getItem(STORAGE_KEY)
   return raw === 'dark' || raw === 'light' ? raw : 'system'
+}
+
+/** 歌词字号档位：小 / 中 / 大 / 特大（主行 + 翻译行的成组字号） */
+export type LyricFontSize = 'sm' | 'md' | 'lg' | 'xl'
+
+export const LYRIC_FS_STEPS: { id: LyricFontSize; label: string; main: number; sub: number }[] = [
+  { id: 'sm', label: '小', main: 18, sub: 13 },
+  { id: 'md', label: '中', main: 22, sub: 15 },
+  { id: 'lg', label: '大', main: 27, sub: 18 },
+  { id: 'xl', label: '特大', main: 33, sub: 22 },
+]
+
+function loadLyricFs(): LyricFontSize {
+  const raw = localStorage.getItem(LYRIC_FS_KEY)
+  return LYRIC_FS_STEPS.some((s) => s.id === raw) ? (raw as LyricFontSize) : 'md'
 }
 
 /**
@@ -17,9 +33,15 @@ function loadMode(): ThemeMode {
  */
 export const useSettingsStore = defineStore('settings', () => {
   const themeMode = ref<ThemeMode>(loadMode())
+  const lyricFontSize = ref<LyricFontSize>(loadLyricFs())
 
   // 实际生效的主题（system 模式下随系统实时变化）
   const resolvedTheme = ref<'dark' | 'light'>(media.matches ? 'dark' : 'light')
+
+  /** 当前档位对应的主行 / 翻译行字号（px） */
+  const lyricFontPx = ref(
+    LYRIC_FS_STEPS.find((s) => s.id === lyricFontSize.value) ?? LYRIC_FS_STEPS[1],
+  )
 
   watchEffect(() => {
     resolvedTheme.value =
@@ -46,6 +68,17 @@ export const useSettingsStore = defineStore('settings', () => {
     themeMode.value = mode
   }
 
+  function setLyricFontSize(size: LyricFontSize) {
+    lyricFontSize.value = size
+    lyricFontPx.value = LYRIC_FS_STEPS.find((s) => s.id === size) ?? LYRIC_FS_STEPS[1]
+    localStorage.setItem(LYRIC_FS_KEY, size)
+  }
+
+  function cycleLyricFontSize() {
+    const idx = LYRIC_FS_STEPS.findIndex((s) => s.id === lyricFontSize.value)
+    setLyricFontSize(LYRIC_FS_STEPS[(idx + 1) % LYRIC_FS_STEPS.length].id)
+  }
+
   function cycleTheme() {
     themeMode.value =
       themeMode.value === 'dark'
@@ -55,5 +88,14 @@ export const useSettingsStore = defineStore('settings', () => {
           : 'dark'
   }
 
-  return { themeMode, resolvedTheme, setThemeMode, cycleTheme }
+  return {
+    themeMode,
+    resolvedTheme,
+    setThemeMode,
+    cycleTheme,
+    lyricFontSize,
+    lyricFontPx,
+    setLyricFontSize,
+    cycleLyricFontSize,
+  }
 })

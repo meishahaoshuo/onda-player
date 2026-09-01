@@ -8,6 +8,8 @@ import { parseLrc, type LyricGroup } from '@/services/lyrics'
 import { makeAmbientGradient } from '@/services/palette'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
+import { useSettingsStore } from '@/stores/settings'
+import { LYRIC_FS_STEPS, type LyricFontSize } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 import { formatDuration } from '@/utils/format'
 import type { PlayMode } from '@/types'
@@ -20,6 +22,7 @@ import type { PlayMode } from '@/types'
 const player = usePlayerStore()
 const ui = useUiStore()
 const library = useLibraryStore()
+const settings = useSettingsStore()
 
 /* ---------- 封面飞入动画状态（须在 immediate watch 之前声明，避免 TDZ） ---------- */
 
@@ -181,17 +184,24 @@ function setLineEl(i: number) {
   }
 }
 
-/* 自定义缓动滚动：out-quart 700ms，比浏览器原生 smooth 更丝滑 */
+/* 自定义缓动滚动：out-quart。
+   420ms 而非 700ms——拖太久会和下一行的切换动画叠在一起，观感黏滞。 */
+const SCROLL_DURATION = 420
 let scrollRaf = 0
 
 function smoothScrollTo(container: HTMLElement, target: number) {
   cancelAnimationFrame(scrollRaf)
   const start = container.scrollTop
   const delta = target - start
+  // 位移很小时不做动画，避免为几像素跑一整段 rAF
+  if (Math.abs(delta) < 2) {
+    container.scrollTop = target
+    return
+  }
   const t0 = performance.now()
   const ease = (t: number) => 1 - Math.pow(1 - t, 4)
   const frame = (now: number) => {
-    const p = Math.min(1, (now - t0) / 700)
+    const p = Math.min(1, (now - t0) / SCROLL_DURATION)
     container.scrollTop = start + delta * ease(p)
     if (p < 1) scrollRaf = requestAnimationFrame(frame)
   }
@@ -210,11 +220,25 @@ function scrollToActive(animate: boolean) {
 
 watch(activeIdx, async () => {
   await nextTick()
-  // 飞行动画期间不滚动：歌词列表带 mask + 逐行 blur，滚动会重绘，和飞入抢主线程。
-  // 落地后由 flyIn 的收尾逻辑一次性直接定位。
+  // 飞行动画期间不滚动：落地后由 flyIn 的收尾逻辑一次性直接定位。
   if (flyActive.value) return
+  // 用户刚手动滚动过 → 让出控制权，别把人拽回去
+  if (userScrolling.value) return
   scrollToActive(true)
 })
+
+/** 用户手动滚动后暂停自动跟随 3 秒，避免"滚轮刚滚完又被拽回去"的对抗感 */
+const userScrolling = ref(false)
+let userScrollTimer = 0
+
+function onLyricScroll() {
+  if (scrollRaf) return // 自动滚动本身触发的 scroll 事件不算用户操作
+  userScrolling.value = true
+  window.clearTimeout(userScrollTimer)
+  userScrollTimer = window.setTimeout(() => {
+    userScrolling.value = false
+  }, 3000)
+}
 
 function lineClass(i: number) {
   if (activeIdx.value < 0) return {} // 静态歌词（无时间轴）不高亮不递减
@@ -242,6 +266,23 @@ function cycleMode() {
 }
 
 const progressDuration = computed(() => player.duration || player.current?.durationSec || 0)
+
+/* ---------- 歌词字号：歌词页内 Aa 快捷档位 ---------- */
+
+const fsOpen = ref(false)
+
+function pickFontSize(size: LyricFontSize) {
+  settings.setLyricFontSize(size)
+  fsOpen.value = false
+  // 字号变了行高也变，需重新把当前行摆到视口上 1/3
+  requestAnimationFrame(() => scrollToActive(false))
+}
+
+/** 歌词页根元素内联字号变量（档位切换即时生效） */
+const lyricVars = computed(() => ({
+  '--lyric-fs': `${settings.lyricFontPx.main}px`,
+  '--lyric-fs-sub': `${settings.lyricFontPx.sub}px`,
+}))
 
 function close() {
   ui.lyricsOpen = false
@@ -364,7 +405,55 @@ function flyIn() {
 }
 
 async function closeWithFade() {
+  if (closing.value) return
   closing.value = true
+
+  // 「从哪里来，回哪里去」：大封面 FLIP 反向飞回播放条小封面。
+  // 飞行层挂在 body 上，不随 lyrics-full 销毁 —— 页面淡出后封面继续飞完最后一段。
+  const srcEl = document.querySelector<HTMLElement>('.cover-main')
+  const dstEl = document.querySelector<HTMLElement>('.player-bar .track .cover')
+  let flying: HTMLElement | null = null
+
+  if (srcEl && dstEl) {
+    const inner = srcEl.matches('img') ? srcEl : srcEl.querySelector('img, .cover-fallback')
+    const s = srcEl.getBoundingClientRect()
+    const d = dstEl.getBoundingClientRect()
+    if (inner && s.width > 1 && d.width > 1) {
+      flying = inner.cloneNode(true) as HTMLElement
+      const scale = d.width / s.width
+      const dx = d.left + d.width / 2 - (s.left + s.width / 2)
+      const dy = d.top + d.height / 2 - (s.top + s.height / 2)
+      Object.assign(flying.style, {
+        position: 'fixed',
+        margin: '0',
+        left: `${s.left}px`,
+        top: `${s.top}px`,
+        width: `${s.width}px`,
+        height: `${s.height}px`,
+        borderRadius: '12px',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
+        zIndex: '80',
+        pointerEvents: 'none',
+        willChange: 'transform',
+        transformOrigin: 'center center',
+      } as CSSStyleDeclaration)
+      // 源封面隐藏，避免飞行期间重叠
+      srcEl.style.opacity = '0'
+      document.body.appendChild(flying)
+      const anim = flying.animate(
+        [
+          { transform: 'translate(0px, 0px) scale(1)' },
+          { transform: `translate(${dx}px, ${dy}px) scale(${scale})` },
+        ],
+        { duration: 420, easing: FLY_EASING, fill: 'both' },
+      )
+      const cleanup = () => flying?.remove()
+      anim.onfinish = cleanup
+      window.setTimeout(cleanup, 660) // 兜底清理
+    }
+  }
+
+  // 页面本体淡出（.lyrics-full.closing 240ms），飞行比页面多飞 180ms 落进播放条
   setTimeout(() => {
     ui.lyricsOpen = false
     closing.value = false
@@ -378,7 +467,7 @@ onMounted(() => {
 
 <template>
   <div class="lyrics-full" :class="{ closing }">
-    // 背景：纯深色底 + 多焦点 radial-gradient 层（环境光晕）
+    <!-- 背景：纯深色底 + 多焦点 radial-gradient 层（环境光晕） -->
     <div class="bg" />
     <div
       v-if="bgImage"
@@ -387,10 +476,36 @@ onMounted(() => {
       :style="{ backgroundImage: bgImage }"
     />
 
-    <!-- 关闭按钮 -->
-    <button class="icon-btn close-btn" title="退出全屏歌词" @click="closeWithFade">
-      <AppIcon name="close" :size="20" />
-    </button>
+    <!-- 右上角工具组：字号调节 + 退出 -->
+    <div class="top-tools">
+      <div class="fs-picker" :class="{ open: fsOpen }">
+        <button
+          class="icon-btn tool-btn"
+          :class="{ 'is-active': fsOpen }"
+          title="调节歌词字号"
+          @click="fsOpen = !fsOpen"
+        >
+          <span class="aa">Aa</span>
+        </button>
+        <Transition name="fs-pop">
+          <div v-if="fsOpen" class="fs-menu">
+            <button
+              v-for="step in LYRIC_FS_STEPS"
+              :key="step.id"
+              class="fs-item"
+              :class="{ current: settings.lyricFontSize === step.id }"
+              @click="pickFontSize(step.id)"
+            >
+              <span class="fs-dot" :style="{ width: `${step.main / 3.2}px`, height: `${step.main / 3.2}px` }" />
+              <span class="fs-label">{{ step.label }}</span>
+            </button>
+          </div>
+        </Transition>
+      </div>
+      <button class="icon-btn tool-btn" title="退出全屏歌词" @click="closeWithFade">
+        <AppIcon name="close" :size="20" />
+      </button>
+    </div>
 
     <!-- 主体：封面在左，歌词在右 -->
     <div class="main" :class="{ switching, 'fly-active': flyActive }">
@@ -400,7 +515,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div v-if="hasLyrics" ref="scroller" class="lyric-scroll">
+      <div v-if="hasLyrics" ref="scroller" class="lyric-scroll" @scroll.passive="onLyricScroll">
         <div class="lyric-inner">
           <div
             v-for="(g, i) in groups"
@@ -462,6 +577,7 @@ onMounted(() => {
           min="0"
           max="100"
           :value="player.volume"
+          :style="{ '--vol': `${player.volume}%` }"
           title="音量"
           @input="(e) => player.setVolume(Number((e.target as HTMLInputElement).value))"
         />
@@ -519,18 +635,123 @@ onMounted(() => {
   background: var(--lyric-shade);
 }
 
-/* ---------- 关闭 ---------- */
-.close-btn {
+/* ---------- 右上角工具组：字号调节 + 退出 ---------- */
+.top-tools {
   position: absolute;
   top: 18px;
   right: 22px;
-  z-index: 2;
-  color: var(--lyric-control);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.close-btn:hover {
+.tool-btn {
+  color: var(--lyric-control);
+  background: var(--lyric-bar-bg);
+  backdrop-filter: blur(24px) saturate(1.3);
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: color 0.15s var(--ease-out), background 0.15s var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+
+.tool-btn:hover {
   color: var(--lyric-control-hover);
   background: var(--lyric-control-bg);
+}
+
+.tool-btn:active {
+  transform: scale(0.92);
+}
+
+/* 退出按钮 hover 旋转（灵动感：小元素给一点方向性反馈） */
+.tool-btn .aa {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+.top-tools > .tool-btn:last-child:hover :deep(svg) {
+  transform: rotate(90deg);
+}
+
+.top-tools > .tool-btn:last-child :deep(svg) {
+  transition: transform var(--dur-med) var(--ease-spring);
+}
+
+/* 字号调节器 */
+.fs-picker {
+  position: relative;
+}
+
+.fs-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 128px;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(28, 28, 30, 0.82);
+  backdrop-filter: blur(32px) saturate(1.4);
+  -webkit-backdrop-filter: blur(32px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transform-origin: top right;
+}
+
+.fs-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  color: var(--lyric-text);
+  font-size: 13px;
+  transition: background 0.12s var(--ease-out), color 0.12s var(--ease-out);
+}
+
+.fs-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--lyric-text-active);
+}
+
+.fs-item.current {
+  color: var(--lyric-text-active);
+}
+
+.fs-dot {
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--lyric-control);
+  transition: background 0.12s;
+}
+
+.fs-item.current .fs-dot {
+  background: var(--lyric-text-active);
+}
+
+.fs-label {
+  flex: 1;
+  text-align: left;
+}
+
+.fs-pop-enter-active {
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+}
+
+.fs-pop-leave-active {
+  transition: opacity 100ms var(--ease-out), transform 100ms var(--ease-out);
+}
+
+.fs-pop-enter-from,
+.fs-pop-leave-to {
+  opacity: 0;
+  transform: scale(0.92) translateY(-4px);
 }
 
 /* ---------- 主体：整组以整个页面为基准居中 ---------- */
@@ -607,50 +828,58 @@ onMounted(() => {
   gap: 30px;
 }
 
+/* 景深：只用 opacity + transform 表达远近，不用 filter: blur()。
+   blur 会让每一行都成为独立的重绘层，几十行同时过渡时直接掉帧——
+   这是旧版"卡顿抽搐"的主因。 */
 .lyric-line {
   cursor: pointer;
-  transition: opacity 0.4s var(--ease-out), filter 0.4s var(--ease-out), transform 0.4s var(--ease-out);
+  opacity: 0.4;
+  transform-origin: left center;
+  transform: scale(0.95);
+  transition: opacity 0.35s var(--ease-out), transform 0.35s var(--ease-out);
 }
 
-/* 景深：距离越远越模糊越淡 */
-.lyric-line.dim-1 { opacity: 0.5; filter: blur(0.6px); }
-.lyric-line.dim-2 { opacity: 0.34; filter: blur(1.2px); }
-.lyric-line.dim-3 { opacity: 0.24; filter: blur(2px); }
-.lyric-line.dim-4 { opacity: 0.16; filter: blur(3px); }
+.lyric-line.dim-1 { opacity: 0.55; }
+.lyric-line.dim-2 { opacity: 0.42; }
+.lyric-line.dim-3 { opacity: 0.3; }
+.lyric-line.dim-4 { opacity: 0.22; }
 
 .lyric-line:hover {
-  opacity: 1;
-  filter: blur(0);
+  opacity: 0.85;
 }
 
+/* 当前行：字号固定不变（改 font-size 会触发整行重排），
+   只放大 + 提亮 + 上浮，全部走合成器 */
 .lyric-line.active {
-  transform: scale(1.02);
-  transform-origin: left center;
+  opacity: 1;
+  transform: scale(1);
 }
 
 .lyric-line.active .lyric-text {
-  font-size: 30px;
-  font-weight: 700;
   color: var(--lyric-text-active);
   text-shadow: var(--lyric-shadow);
-  transition: font-size 0.35s var(--ease-spring);
 }
 
+/* 字号由 --lyric-fs / --lyric-fs-sub 统一控制（歌词页内可调节档位）。
+   当前行不再改字号：改 font-size 会触发整行重排，是卡顿源之一。 */
 .lyric-text {
-  font-size: 19px;
+  font-size: var(--lyric-fs);
+  font-weight: 500;
   color: var(--lyric-text);
-  line-height: 1.55;
-  transition: font-size 0.25s, color 0.25s;
+  line-height: 1.6;
+  letter-spacing: 0.2px;
+  transition: color 0.3s var(--ease-out);
 }
 
 .lyric-text.sub {
-  font-size: 14px;
-  opacity: 0.75;
+  font-size: var(--lyric-fs-sub);
+  font-weight: 400;
+  opacity: 0.72;
 }
 
 .lyric-line.active .lyric-text.sub {
-  font-size: 16px;
   color: var(--lyric-text-sub);
+  opacity: 0.9;
 }
 
 .no-lyrics-hint {
@@ -662,7 +891,7 @@ onMounted(() => {
   font-size: 15px;
 }
 
-/* ---------- 底部雾面迷你播放条（沉浸页专用：无边框、极低存在感，溶进背景） ---------- */
+/* ---------- 底部轻量悬浮胶囊（方案 A：更透明、更扁、无边界感，溶进背景） ---------- */
 .mini-bar {
   position: absolute;
   left: 50%;
@@ -671,17 +900,23 @@ onMounted(() => {
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 18px;
   min-width: 440px;
   max-width: 72vw;
-  padding: 12px 24px 14px;
-  border-radius: 28px;
+  padding: 9px 18px 11px;
+  border-radius: 24px;
   background: var(--lyric-bar-bg);
-  backdrop-filter: blur(46px) saturate(1.35);
-  -webkit-backdrop-filter: blur(46px) saturate(1.35);
+  backdrop-filter: blur(36px) saturate(1.3);
+  -webkit-backdrop-filter: blur(36px) saturate(1.3);
   border: none;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  box-shadow: none;
   animation: bar-in 480ms var(--ease-spring) 120ms backwards;
+  transition: background 0.3s var(--ease-out);
+}
+
+/* 悬停胶囊时轻微提亮，给出可交互暗示 */
+.mini-bar:hover {
+  background: rgba(28, 28, 30, 0.3);
 }
 
 @keyframes bar-in {
@@ -775,9 +1010,38 @@ onMounted(() => {
   background: var(--lyric-play-bg-hover);
 }
 
+/* 音量条默认收起，悬停控件区时从右侧展开——胶囊更紧凑，功能不缺席 */
 .mini-volume {
+  width: 0;
+  height: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--lyric-control) var(--vol, 80%), rgba(255, 255, 255, 0.15) var(--vol, 80%));
+  cursor: pointer;
+  opacity: 0;
+  transition: width var(--dur-med) var(--ease-out), opacity var(--dur-med) var(--ease-out), margin var(--dur-med) var(--ease-out);
+}
+
+.mini-controls:hover .mini-volume,
+.mini-volume:focus-visible {
   width: 76px;
-  accent-color: var(--lyric-accent);
   opacity: 0.9;
+  margin-left: 4px;
+}
+
+.mini-volume::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--lyric-text-active);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.mini-volume:hover::-webkit-slider-thumb {
+  transform: scale(1.2);
 }
 </style>

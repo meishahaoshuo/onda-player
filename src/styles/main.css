@@ -126,7 +126,7 @@
   --lyric-control: rgba(255, 255, 255, 0.75);
   --lyric-control-hover: #fff;
   --lyric-control-bg: rgba(255, 255, 255, 0.12);
-  --lyric-bar-bg: rgba(28, 28, 30, 0.18);
+  --lyric-bar-bg: rgba(28, 28, 30, 0.12);
   --lyric-play-bg: rgba(255, 255, 255, 0.92);
   --lyric-play-bg-hover: #fff;
   --lyric-play-icon: #1a1c20;
@@ -136,6 +136,10 @@
   --lyric-ps-fill-hover: rgba(255, 255, 255, 0.3);
   --lyric-ps-track-hover: rgba(255, 255, 255, 0.1);
   --lyric-accent: #fff;
+
+  /* 歌词字号（歌词页内可切换档位，此处为默认「中」档） */
+  --lyric-fs: 22px;
+  --lyric-fs-sub: 15px;
 }
 
 /* ---------- 基础 ---------- */
