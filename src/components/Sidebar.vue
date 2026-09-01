@@ -66,7 +66,7 @@ watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.le
 <template>
   <aside class="sidebar">
     <div class="brand">
-      <img src="/logo.svg" alt="Aria" class="brand-logo" />
+      <img src="/logo/aria-logo-app.svg" alt="Aria" class="brand-logo" />
       <div class="brand-text">
         <span class="brand-name">Aria</span>
         <span class="brand-sub">咏叹</span>

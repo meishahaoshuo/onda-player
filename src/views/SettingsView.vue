@@ -76,8 +76,15 @@ const permLabel = { granted: '已授权', prompt: '待确认权限', denied: '�
     <!-- 关于 -->
     <section class="setting-card">
       <h2 class="section-title">关于</h2>
+      <div class="about-brand">
+        <img src="/logo/aria-logo-app.svg" alt="Aria · 咏叹" class="about-brand-logo" />
+        <div class="about-brand-text">
+          <span class="about-brand-name">Aria · 咏叹</span>
+          <span class="about-brand-ver">v0.1.0 · 网页版本地音乐播放器</span>
+        </div>
+      </div>
       <ul class="about-list">
-        <li>Aria · 咏叹 —— 网页版本地音乐播放器 · 所有数据仅保存在本机浏览器中，零网络请求</li>
+        <li>所有数据仅保存在本机浏览器中，零网络请求</li>
         <li>支持格式：MP3 / FLAC / OGG / OPUS / WAV / M4A（APE 等浏览器不支持的格式会被跳过）</li>
         <li>需要 Chrome / Edge 浏览器；刷新或重开后需点击一次「恢复权限」重新授权文件夹</li>
         <li>歌词：读取与音频同目录的同名 .lrc 文件，支持双语逐行显示</li>
@@ -220,6 +227,37 @@ const permLabel = { granted: '已授权', prompt: '待确认权限', denied: '�
 /* 关于 */
 .hint {
   font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.about-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.about-brand-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  box-shadow: var(--shadow-1);
+}
+
+.about-brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.about-brand-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.about-brand-ver {
+  font-size: 12px;
   color: var(--text-tertiary);
 }
 
