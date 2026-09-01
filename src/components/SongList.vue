@@ -52,7 +52,6 @@ function onRowClick(song: SongRecord) {
             <span class="col-artist" :title="item.artist">{{ item.artist }}</span>
             <span class="col-album" :title="item.album">{{ item.album }}</span>
             <span class="col-duration">
-              <span v-if="item.path === props.currentPath" class="eq" aria-hidden="true"><i /><i /><i /></span>
               {{ formatDuration(item.durationSec) }}
             </span>
           </div>

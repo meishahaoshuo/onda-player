@@ -34,8 +34,6 @@ const FLY_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
 const bgUrl = ref<string | null>(null)
 const bgShown = ref(false)
 const bgCache = new Map<string, string>()
-/** 飞行途中才算好的渐变：等落地后淡入，避免全屏 blur 层重栅格化打断动画 */
-let pendingBg: string | null = null
 
 function revealBg() {
   requestAnimationFrame(() => {
@@ -51,13 +49,9 @@ watch(
       bgShown.value = false
       return
     }
+    // 渐变立即挂 DOM + 立即 reveal：淡入和飞行是并行的（280ms vs 560ms），
+    // 飞行落地时背景已基本可见，没有"飞行后还要等半秒"的延迟感。
     const apply = (gradient: string) => {
-      // 飞行期间不挂 DOM：等落地后再渲染，避免全屏 blur 图层在转场过程中栅格化卡帧
-      if (flyActive.value) {
-        pendingBg = gradient
-        bgUrl.value = null
-        return
-      }
       bgUrl.value = gradient
       revealBg()
     }
@@ -248,7 +242,7 @@ async function waitUntil(pred: () => boolean, timeout: number) {
   }
 }
 
-/** 落地后的收尾：恢复真实封面、清掉飞行层、补上被推迟的背景渐变与歌词定位 */
+/** 落地后的收尾：恢复真实封面、清掉飞行层、补上歌词定位 */
 function settleFly(flying: HTMLElement | null, dstEl: HTMLElement | null) {
   if (dstEl) dstEl.style.opacity = '1'
   if (flying) {
@@ -256,11 +250,6 @@ function settleFly(flying: HTMLElement | null, dstEl: HTMLElement | null) {
     flying.remove()
   }
   flyActive.value = false
-  if (pendingBg !== null) {
-    bgUrl.value = pendingBg
-    pendingBg = null
-  }
-  revealBg()
   requestAnimationFrame(() => scrollToActive(false))
 }
 
@@ -268,6 +257,9 @@ function flyIn() {
   void (async () => {
     flyActive.value = true
     await nextTick()
+    // 如果已有缓存渐变（切歌时的预取或上次浏览），立即 reveal：
+    // 280ms 透明度淡入与飞行 (560ms) 并行，落地时背景已基本可见。
+    if (bgUrl.value) revealBg()
 
     // 1) 等歌词加载完成（布局稳定），否则取到的目标坐标是歌词为空时的旧位置，
     //    飞过去后会再被布局推到真实位置 → 卡顿。有歌词/无歌词都靠 lyricsSettled。
@@ -495,7 +487,9 @@ onMounted(() => {
   filter: blur(40px) saturate(1.25);
   transform: scale(1.15);
   opacity: 0;
-  transition: opacity 520ms var(--ease-out);
+  /* 飞行 560ms 完成；淡入缩短到 280ms 与飞行并行，落地时背景已基本可见，
+     避免"飞行结束还要等半秒才出现模糊"的延迟感 */
+  transition: opacity 280ms var(--ease-out);
   will-change: opacity;
 }
 
