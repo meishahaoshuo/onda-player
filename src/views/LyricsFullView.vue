@@ -21,21 +21,49 @@ const player = usePlayerStore()
 const ui = useUiStore()
 const library = useLibraryStore()
 
+/* ---------- 封面飞入动画状态（须在 immediate watch 之前声明，避免 TDZ） ---------- */
+
+/** 飞行动画进行中：期间跳过歌词滚动、延后背景渐变，避免和动画抢主线程 */
+const flyActive = ref(false)
+/** 飞行时长与减速曲线：收尾干脆，不拖出一段几乎静止的尾巴 */
+const FLY_DURATION = 560
+const FLY_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
+
 /* ---------- 封面渐变背景 ---------- */
 
 const bgUrl = ref<string | null>(null)
+const bgShown = ref(false)
 const bgCache = new Map<string, string>()
+/** 飞行途中才算好的渐变：等落地后淡入，避免全屏 blur 层重栅格化打断动画 */
+let pendingBg: string | null = null
+
+function revealBg() {
+  requestAnimationFrame(() => {
+    bgShown.value = true
+  })
+}
 
 watch(
   () => player.current?.coverId ?? null,
   async (coverId) => {
     if (!coverId) {
       bgUrl.value = null
+      bgShown.value = false
       return
+    }
+    const apply = (gradient: string) => {
+      // 飞行期间不挂 DOM：等落地后再渲染，避免全屏 blur 图层在转场过程中栅格化卡帧
+      if (flyActive.value) {
+        pendingBg = gradient
+        bgUrl.value = null
+        return
+      }
+      bgUrl.value = gradient
+      revealBg()
     }
     const cached = bgCache.get(coverId)
     if (cached) {
-      bgUrl.value = cached
+      apply(cached)
       return
     }
     try {
@@ -44,7 +72,7 @@ watch(
       const blob = await (await fetch(url)).blob()
       const gradient = await makeAmbientGradient(blob)
       bgCache.set(coverId, gradient)
-      bgUrl.value = gradient
+      apply(gradient)
     } catch {
       // 取色失败保持深色底
     }
@@ -159,13 +187,22 @@ function smoothScrollTo(container: HTMLElement, target: number) {
   scrollRaf = requestAnimationFrame(frame)
 }
 
-watch(activeIdx, async () => {
-  await nextTick()
+/** 把当前行摆到视口上 1/3 处；animate=false 时直接定位（无过渡，省一次长时滚动动画） */
+function scrollToActive(animate: boolean) {
   const container = scroller.value
   const el = lineEls.value[activeIdx.value]
   if (!container || !el) return
-  const offset = el.offsetTop - container.clientHeight / 3
-  smoothScrollTo(container, Math.max(0, offset))
+  const offset = Math.max(0, el.offsetTop - container.clientHeight / 3)
+  if (animate) smoothScrollTo(container, offset)
+  else container.scrollTop = offset
+}
+
+watch(activeIdx, async () => {
+  await nextTick()
+  // 飞行动画期间不滚动：歌词列表带 mask + 逐行 blur，滚动会重绘，和飞入抢主线程。
+  // 落地后由 flyIn 的收尾逻辑一次性直接定位。
+  if (flyActive.value) return
+  scrollToActive(true)
 })
 
 function lineClass(i: number) {
@@ -203,71 +240,117 @@ function close() {
 
 const closing = ref(false)
 
+/** 轮询等待条件成立，最多等 timeout 毫秒 */
+async function waitUntil(pred: () => boolean, timeout: number) {
+  const t0 = performance.now()
+  while (!pred() && performance.now() - t0 < timeout) {
+    await new Promise((r) => setTimeout(r, 30))
+  }
+}
+
+/** 落地后的收尾：恢复真实封面、清掉飞行层、补上被推迟的背景渐变与歌词定位 */
+function settleFly(flying: HTMLElement | null, dstEl: HTMLElement | null) {
+  if (dstEl) dstEl.style.opacity = '1'
+  if (flying) {
+    flying.style.willChange = ''
+    flying.remove()
+  }
+  flyActive.value = false
+  if (pendingBg !== null) {
+    bgUrl.value = pendingBg
+    pendingBg = null
+  }
+  revealBg()
+  requestAnimationFrame(() => scrollToActive(false))
+}
+
 function flyIn() {
-  // 等歌词加载完成（布局稳定），否则取到的目标坐标是歌词为空时的旧位置，
-  // 飞过去后会再被布局推到真实位置 → 卡顿。有歌词/无歌词都靠 lyricsSettled。
   void (async () => {
+    flyActive.value = true
     await nextTick()
-    const t0 = performance.now()
-    while (!lyricsSettled.value && performance.now() - t0 < 450) {
-      await new Promise((r) => setTimeout(r, 30))
-    }
+
+    // 1) 等歌词加载完成（布局稳定），否则取到的目标坐标是歌词为空时的旧位置，
+    //    飞过去后会再被布局推到真实位置 → 卡顿。有歌词/无歌词都靠 lyricsSettled。
+    // 2) 同时给高清封面留一点时间：飞行途中显示的就是最终那张图，落地不跳清晰度。
+    const coverId = player.current?.coverId ?? null
+    await Promise.all([
+      waitUntil(() => lyricsSettled.value, 450),
+      coverId
+        ? Promise.race([
+            library.coverUrlHi(coverId).catch(() => null),
+            new Promise((r) => setTimeout(r, 220)),
+          ])
+        : Promise.resolve(),
+    ])
     // 双 rAF：确保最终布局已提交，取到真实目标坐标
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
 
     const srcEl = document.querySelector<HTMLElement>('.player-bar .track .cover')
     const dstEl = document.querySelector<HTMLElement>('.cover-main')
-    if (!srcEl || !dstEl) return
-
-    // CoverImage 最外层本身就是 <img> 或占位 div，需同时匹配自身与子树
-    const srcInner = srcEl.matches('img') ? srcEl : srcEl.querySelector('img, .cover-fallback')
-    let flying: HTMLElement
-    if (srcInner) {
-      flying = srcInner.cloneNode(true) as HTMLElement
-    } else {
+    if (!srcEl || !dstEl) {
+      settleFly(null, dstEl)
       return
     }
+
+    // 克隆「目标封面」而不是播放条小图：与落地后显示的是同一张（含高清图），
+    // 交接瞬间不会有任何内容或清晰度的跳变。
+    const dstInner = dstEl.matches('img') ? dstEl : dstEl.querySelector('img, .cover-fallback')
+    if (!dstInner) {
+      settleFly(null, dstEl)
+      return
+    }
+    const flying = dstInner.cloneNode(true) as HTMLElement
+
     const s = srcEl.getBoundingClientRect()
     const d = dstEl.getBoundingClientRect()
+    if (s.width < 1 || d.width < 1) {
+      settleFly(null, dstEl)
+      return
+    }
+
+    // FLIP：元素按「终点」尺寸和位置铺好，用 transform 反向缩回起点，再动回单位矩阵。
+    // 全程只动 transform —— 走合成器，不触发布局，也不会让全屏 blur 背景重新栅格化。
+    const scale = s.width / d.width
+    const dx = s.left + s.width / 2 - (d.left + d.width / 2)
+    const dy = s.top + s.height / 2 - (d.top + d.height / 2)
 
     flying.style.position = 'fixed'
     flying.style.margin = '0'
-    flying.style.left = `${s.left}px`
-    flying.style.top = `${s.top}px`
-    flying.style.width = `${s.width}px`
-    flying.style.height = `${s.height}px`
-    flying.style.borderRadius = '8px'
+    flying.style.left = `${d.left}px`
+    flying.style.top = `${d.top}px`
+    flying.style.width = `${d.width}px`
+    flying.style.height = `${d.height}px`
+    flying.style.borderRadius = '12px'
     flying.style.boxShadow = '0 24px 64px rgba(0,0,0,0.45)'
     flying.style.zIndex = '60'
     flying.style.pointerEvents = 'none'
-    flying.style.transition = 'none'
-    flying.style.opacity = '0'
+    flying.style.willChange = 'transform'
+    flying.style.transformOrigin = 'center center'
+    flying.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`
 
     // 飞行期间隐藏目标封面，避免重叠
-    const dst = dstEl as HTMLElement
-    dst.style.opacity = '0'
+    dstEl.style.opacity = '0'
+    document.body.appendChild(flying)
 
-    // 先以源位置渲染一帧（opacity 0），再真正动画，避免"落位后卡顿"
+    let finished = false
+    const finish = () => {
+      if (finished) return
+      finished = true
+      settleFly(flying, dstEl)
+    }
+
     requestAnimationFrame(() => {
-      flying.style.opacity = '1'
       const anim = flying.animate(
         [
-          { left: `${s.left}px`, top: `${s.top}px`, width: `${s.width}px`, height: `${s.height}px`, borderRadius: '8px' },
-          { left: `${d.left}px`, top: `${d.top}px`, width: `${d.width}px`, height: `${d.height}px`, borderRadius: '12px' },
+          { transform: `translate(${dx}px, ${dy}px) scale(${scale})` },
+          { transform: 'translate(0px, 0px) scale(1)' },
         ],
-        { duration: 520, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'forwards' },
+        { duration: FLY_DURATION, easing: FLY_EASING, fill: 'both' },
       )
-
-      const finish = () => {
-        dst.style.opacity = '1'
-        flying.remove()
-      }
       anim.onfinish = finish
-      // 兜底：即使 onfinish 未触发（如页面切换），也清理残留在动画结束附近
-      window.setTimeout(finish, 760)
+      // 兜底：即使 onfinish 未触发（如页面切换），也在动画结束附近清理，避免残留
+      window.setTimeout(finish, FLY_DURATION + 240)
     })
-
-    document.body.appendChild(flying)
   })()
 }
 
@@ -286,8 +369,14 @@ onMounted(() => {
 
 <template>
   <div class="lyrics-full" :class="{ closing }">
-    <!-- 背景：封面颜色构图拉伸的柔和渐变 -->
-    <div class="bg" :class="{ active: bgUrl }" :style="bgUrl ? { backgroundImage: `url(${bgUrl})` } : undefined" />
+    <!-- 背景：封面颜色构图拉伸的柔和渐变（独立图层淡入，避免中途重绘打断转场） -->
+    <div class="bg" />
+    <div
+      v-if="bgUrl"
+      class="bg-grad"
+      :class="{ show: bgShown }"
+      :style="{ backgroundImage: `url(${bgUrl})` }"
+    />
 
     <!-- 关闭按钮 -->
     <button class="icon-btn close-btn" title="退出全屏歌词" @click="closeWithFade">
@@ -295,10 +384,10 @@ onMounted(() => {
     </button>
 
     <!-- 主体：封面在左，歌词在右 -->
-    <div class="main" :class="{ switching }">
+    <div class="main" :class="{ switching, 'fly-active': flyActive }">
       <div class="cover-col">
         <div class="cover-main" v-if="player.current">
-          <CoverImage :cover-id="player.current.coverId" :size="360" />
+          <CoverImage :cover-id="player.current.coverId" :size="360" hires />
         </div>
       </div>
 
@@ -389,22 +478,33 @@ onMounted(() => {
   opacity: 0;
 }
 
-/* ---------- 背景 ---------- */
+/* ---------- 背景：底色 + 渐变图层（渐变单独一层，用 opacity 淡入） ---------- */
 .bg {
   position: absolute;
   inset: 0;
   background: #17191d;
-  background-size: cover;
-  background-position: center;
 }
 
-.bg.active {
-  filter: blur(70px) saturate(1.25);
-  transform: scale(1.35);
+.bg-grad {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  /* blur 从 70 降到 40：32px 色块拉伸后 40px 已足够柔，成本大约是 1/3；
+     配合切歌时预取（见 PlayerBar），着陆时画面几乎不卡 */
+  filter: blur(40px) saturate(1.25);
+  transform: scale(1.15);
+  opacity: 0;
+  transition: opacity 520ms var(--ease-out);
+  will-change: opacity;
+}
+
+.bg-grad.show {
+  opacity: 1;
 }
 
 /* 底部稍压暗，保证迷你条与歌词可读 */
-.bg::after {
+.bg-grad::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -450,6 +550,14 @@ onMounted(() => {
 .main.switching .no-lyrics-hint {
   opacity: 0;
   transform: translateY(10px);
+}
+
+/* 封面飞入期间：封面不参与切歌淡入淡出。
+   否则淡入（300ms）会和飞行（560ms）叠加，落地瞬间封面还在半透明 → 观感就是"顿一下"。 */
+.main.fly-active .cover-col {
+  opacity: 1;
+  transform: none;
+  transition: none;
 }
 
 .cover-col {
