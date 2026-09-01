@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as db from '@/services/db'
 import { pickFolder, queryPermission, removeFolder, requestPermission, type PermissionState } from '@/services/fs'
+import { extractHiResCover } from '@/services/cover'
 import { scanRoot, type ScanTask } from '@/services/scanner'
 import type { AlbumSummary, FolderRoot, ScanProgress, SongRecord } from '@/types'
 
@@ -198,6 +199,56 @@ export const useLibraryStore = defineStore('library', () => {
     return url
   }
 
+  /* ---------- 高清封面（大图场景按需提取，内存 LRU） ---------- */
+
+  /** coverId → objectURL，插入顺序即 LRU 顺序（越靠后越新） */
+  const hiResUrls = new Map<string, string>()
+  const hiResPending = new Map<string, Promise<string | null>>()
+  const HI_RES_LRU_LIMIT = 32
+
+  function hiResEvict() {
+    while (hiResUrls.size > HI_RES_LRU_LIMIT) {
+      const oldest = hiResUrls.keys().next().value as string | undefined
+      if (oldest === undefined) break
+      const url = hiResUrls.get(oldest)
+      if (url) URL.revokeObjectURL(url)
+      hiResUrls.delete(oldest)
+    }
+  }
+
+  /**
+   * 高清封面 URL：找不到内嵌图时返回 null（调用方继续用缩略图）。
+   * 同一 coverId 并发请求只提取一次。
+   */
+  function coverUrlHi(coverId: string | null): Promise<string | null> {
+    if (!coverId) return Promise.resolve(null)
+    const hit = hiResUrls.get(coverId)
+    if (hit) {
+      // 命中后移到队尾
+      hiResUrls.delete(coverId)
+      hiResUrls.set(coverId, hit)
+      return Promise.resolve(hit)
+    }
+    const inflight = hiResPending.get(coverId)
+    if (inflight) return inflight
+
+    const task = (async () => {
+      const song = songs.value.find((s) => s.coverId === coverId)
+      if (!song) return null
+      const blob = await extractHiResCover(song)
+      if (!blob) return null
+      const url = URL.createObjectURL(blob)
+      hiResUrls.set(coverId, url)
+      hiResEvict()
+      return url
+    })().finally(() => {
+      hiResPending.delete(coverId)
+    })
+
+    hiResPending.set(coverId, task)
+    return task
+  }
+
   return {
     roots,
     songs,
@@ -217,5 +268,6 @@ export const useLibraryStore = defineStore('library', () => {
     rescan,
     cancelScan,
     coverUrl,
+    coverUrlHi,
   }
 })

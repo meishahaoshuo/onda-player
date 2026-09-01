@@ -36,6 +36,76 @@ function makeWav(seconds: number, freq: number, sampleRate = 8000): Blob {
   return new Blob([buffer], { type: 'audio/wav' })
 }
 
+/**
+ * 生成带内嵌封面的测试 MP3（ID3v2.3 APIC + 静音 MPEG 帧）。
+ * 封面画成 1200×1200 的细密条纹+文字，用于验证：
+ *  - 入库缩略图（256px）与按需高清图（1024px）的差异是否肉眼可辨
+ *  - 飞入动画落地时是否用了正确的图源
+ */
+async function makeMp3WithCover(): Promise<Blob> {
+  // 1) 封面：1200×1200 细条纹 + 圆环 + 小字，缩略后糊得一眼能看出来
+  const S = 1200
+  const canvas = document.createElement('canvas')
+  canvas.width = S
+  canvas.height = S
+  const ctx = canvas.getContext('2d')!
+  const g = ctx.createLinearGradient(0, 0, S, S)
+  g.addColorStop(0, '#f5c98a')
+  g.addColorStop(1, '#7a4bd0')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, S, S)
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+  ctx.lineWidth = 3
+  for (let x = 0; x < S; x += 12) {
+    ctx.beginPath()
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, S)
+    ctx.stroke()
+  }
+  for (let r = 60; r < S / 2; r += 60) {
+    ctx.beginPath()
+    ctx.arc(S / 2, S / 2, r, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  ctx.fillStyle = '#fff'
+  ctx.font = 'bold 96px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.fillText('ARIA 1200', S / 2, S / 2 - 20)
+  ctx.font = 'bold 42px sans-serif'
+  ctx.fillText('高清封面测试', S / 2, S / 2 + 60)
+  const png = await new Promise<Blob>((resolve) =>
+    canvas.toBlob((b) => resolve(b!), 'image/png'),
+  )
+  const pic = new Uint8Array(await png.arrayBuffer())
+
+  // 2) ID3v2.3 APIC 帧
+  const mime = 'image/png'
+  const body: number[] = [
+    0x00, // 文本编码 ISO-8859-1
+    ...[...mime].map((c) => c.charCodeAt(0)),
+    0x00, // MIME 结束
+    0x03, // 图片类型：封面（front cover）
+    0x00, // 描述（空）
+    ...pic,
+  ]
+  const frameSize = body.length
+  const frameHeader = [0x41, 0x50, 0x49, 0x43, (frameSize >> 24) & 0xff, (frameSize >> 16) & 0xff, (frameSize >> 8) & 0xff, frameSize & 0xff, 0x00, 0x00]
+  const tagBody = [...frameHeader, ...body]
+  const tagSize = tagBody.length
+  // synchsafe 整数：每字节只用低 7 位
+  const synch = (n: number) => [(n >> 21) & 0x7f, (n >> 14) & 0x7f, (n >> 7) & 0x7f, n & 0x7f]
+  const tag = [0x49, 0x44, 0x33, 0x03, 0x00, 0x00, ...synch(tagSize), ...tagBody]
+
+  // 3) 静音 MPEG-1 Layer III 帧（128kbps / 44.1kHz → 每帧 417 字节），
+  // 80 帧约 3.5 秒，足够覆盖打开歌词页的整个测试窗口
+  const mpeg: number[] = []
+  for (let i = 0; i < 80; i++) {
+    mpeg.push(0xff, 0xfb, 0x90, 0x00)
+    mpeg.push(...new Array(413).fill(0))
+  }
+  return new Blob([new Uint8Array([...tag, ...mpeg])], { type: 'audio/mpeg' })
+}
+
 async function ensureOpfsMusicDir(): Promise<FileSystemDirectoryHandle> {
   const opfs = await navigator.storage.getDirectory()
   const dir = await opfs.getDirectoryHandle('music-test', { create: true })
@@ -79,6 +149,36 @@ export function installTestBridge() {
         await library.removeFolderById(r.id)
       }
       return this.addTestFolder()
+    },
+    /** 额外写入一首带内嵌封面的 MP3 并重扫（返回歌曲数与带封面的歌曲数） */
+    async addCoverSong() {
+      const dir = await ensureOpfsMusicDir()
+      const fh = await dir.getFileHandle('Cover Song.mp3', { create: true })
+      const writable = await fh.createWritable()
+      await writable.write(await makeMp3WithCover())
+      await writable.close()
+      const lrc = await dir.getFileHandle('Cover Song.lrc', { create: true })
+      const w = await lrc.createWritable()
+      await w.write(
+        new Blob(
+          [
+            '[00:00.20]封面测试 第一行\n[00:00.22]Cover line one\n' +
+            '[00:01.00]封面测试 第二行\n[00:01.02]Cover line two\n' +
+            '[00:01.80]封面测试 第三行\n[00:01.82]Cover line three\n',
+          ],
+          { type: 'text/plain' },
+        ),
+      )
+      await w.close()
+      const library = useLibraryStore()
+      await library.rescan()
+      return {
+        songs: library.songs.length,
+        withCover: library.songs.filter((s) => s.coverId).length,
+        coverSizes: library.songs
+          .filter((s) => s.coverId)
+          .map((s) => ({ title: s.title, coverId: s.coverId })),
+      }
     },
     /** 当前库状态（根目录数/歌曲数/最近一次扫描进度） */
     status() {

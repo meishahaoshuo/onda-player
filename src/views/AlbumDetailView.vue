@@ -85,7 +85,7 @@ function playSong(song: SongRecord) {
         class="header-ambient"
         :style="{ backgroundImage: `url(${ambientUrl})` }"
       />
-      <CoverImage :cover-id="album.coverId" :size="192" class="header-cover" />
+      <CoverImage :cover-id="album.coverId" :size="192" class="header-cover" hires />
       <div class="header-info">
         <h1 class="album-title">{{ album.name }}</h1>
         <div class="album-artist">{{ album.artist }}</div>

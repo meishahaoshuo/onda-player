@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import CoverImage from './CoverImage.vue'
 import ProgressSlider from './ProgressSlider.vue'
+import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
@@ -13,6 +14,23 @@ import type { PlayMode } from '@/types'
 const player = usePlayerStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
+const library = useLibraryStore()
+
+/**
+ * 切歌时预热当前曲目的高清封面缓存。
+ * 实际打开歌词页时是秒出，flyIn 不会再等它，跟转场动画也不抢主线程。
+ */
+watch(
+  () => player.current?.coverId ?? null,
+  (coverId) => {
+    if (!coverId) return
+    const fire = () => { void library.coverUrlHi(coverId).catch(() => null) }
+    const ric: ((cb: () => void) => void) | undefined = (window as any).requestIdleCallback
+    if (typeof ric === 'function') ric(fire)
+    else window.setTimeout(fire, 800)
+  },
+)
+
 
 const MODE_META: { mode: PlayMode; icon: 'repeat' | 'repeatOne' | 'shuffle'; label: string }[] = [
   { mode: 'order', icon: 'repeat', label: '顺序播放' },

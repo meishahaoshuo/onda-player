@@ -3,22 +3,47 @@ import { onMounted, ref, watch } from 'vue'
 import { useLibraryStore } from '@/stores/library'
 import AppIcon from './AppIcon.vue'
 
-/** 封面图：异步从 IndexedDB 取 blob；无封面显示占位 */
-const props = defineProps<{ coverId: string | null; size?: number }>()
+/**
+ * 封面图：默认用 IndexedDB 的 256px 缩略图（列表场景足够）；
+ * `hires` 用于歌词页/专辑详情等大图场景，先出缩略图、再静默换成
+ * 从音频内嵌图提取的高清图（解码完成后才替换，避免二次解码闪烁）。
+ */
+const props = defineProps<{ coverId: string | null; size?: number; hires?: boolean }>()
 
 const library = useLibraryStore()
 const url = ref<string | null>(null)
 
+/** 等图片位图真正就绪再替换 src，替换瞬间即可见 */
+function preload(src: string): Promise<void> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    const done = () => resolve()
+    img.onload = done
+    img.onerror = done
+    img.src = src
+    if (typeof img.decode === 'function') {
+      img.decode().then(done, done)
+    }
+  })
+}
+
 async function load() {
-  url.value = await library.coverUrl(props.coverId)
+  const id = props.coverId
+  url.value = await library.coverUrl(id)
+  if (!props.hires || !id) return
+  const hi = await library.coverUrlHi(id)
+  if (!hi || props.coverId !== id) return
+  await preload(hi)
+  if (props.coverId !== id) return
+  url.value = hi
 }
 
 onMounted(load)
-watch(() => props.coverId, load)
+watch(() => [props.coverId, props.hires] as const, load)
 </script>
 
 <template>
-  <img v-if="url" class="cover-img" :src="url" :width="size ?? 40" :height="size ?? 40" alt="" />
+  <img v-if="url" class="cover-img" :src="url" :width="size ?? 40" :height="size ?? 40" alt="" decoding="async" />
   <div v-else class="cover-fallback" :style="{ width: `${size ?? 40}px`, height: `${size ?? 40}px` }">
     <AppIcon name="music" :size="Math.round((size ?? 40) * 0.45)" />
   </div>
