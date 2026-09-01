@@ -5,10 +5,20 @@
  * 不再依赖「缩小封面 → CSS blur」的老路（那种方式只是单层模糊，颜色构图不准，
  * 也无法形成参考图中那种"左上偏暖、右下偏冷"的多焦点融合感）。
  *
- * 输出：可作为 `background-image` 的纯 CSS 字符串（多 background-image 逗号拼接）。
+ * 输出：`{ layers: string[], base: string }`。
+ * - `layers` 每个元素是一个独立 radial-gradient（"焦点"），
+ *   模板中每个焦点一个 div，可独立做相位错开的呼吸动画。
+ * - `base` 是整图平均色的纯色 linear，作为最底层。
  */
 
-export async function makeAmbientGradient(blob: Blob): Promise<string> {
+export interface AmbientGradient {
+  layers: string[]
+  base: string
+}
+
+export async function makeAmbientGradient(blob: Blob): Promise<string>
+export async function makeAmbientGradient(blob: Blob, opts: { split: true }): Promise<AmbientGradient>
+export async function makeAmbientGradient(blob: Blob, opts?: { split?: boolean }): Promise<string | AmbientGradient> {
   const bitmap = await createImageBitmap(blob)
   try {
     // 缩图到 64×N 像素：保留颜色构图但方便分块采样；不需太大
@@ -101,11 +111,17 @@ const gridX = 4
   const baseR = Math.round(avgR * dim)
   const baseG = Math.round(avgG * dim)
   const baseB = Math.round(avgB * dim)
+  const base = `linear-gradient(rgb(${baseR},${baseG},${baseB}), rgb(${baseR},${baseG},${baseB}))`
 
-    // 多个 background-image 用逗号拼接；CSS 规则是"首个列在最上层、最后列在最下层"。
-    // 我们要 radial 在上、base 在下 → radials 放最前，base linear 放最后。
-    return `${radials.join(', ')}, linear-gradient(rgb(${baseR},${baseG},${baseB}), rgb(${baseR},${baseG},${baseB}))`
-  } finally {
-    bitmap.close()
+  // 调用方需要拆分结构（每个焦点独立 div 做相位错开呼吸动画）→ 返回 AmbientGradient
+  if (opts?.split) {
+    return { layers: radials, base }
   }
+
+  // 多个 background-image 用逗号拼接；CSS 规则是"首个列在最上层、最后列在最下层"。
+  // 我们要 radial 在上、base 在下 → radials 放最前，base linear 放最后。
+  return `${radials.join(', ')}, ${base}`
+} finally {
+  bitmap.close()
+}
 }

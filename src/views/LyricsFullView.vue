@@ -34,8 +34,11 @@ const FLY_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
 /* ---------- 封面环境渐变（CSS 字符串：多 radial-gradient 焦点 + base 色） ---------- */
 
 const bgImage = ref<string | null>(null)
+const bgLayers = ref<string[]>([])
+const bgBase = ref<string>('')
 const bgShown = ref(false)
 const bgCache = new Map<string, string>()
+const bgLayersCache = new Map<string, { layers: string[]; base: string }>()
 
 function revealBg() {
   requestAnimationFrame(() => {
@@ -48,6 +51,8 @@ watch(
   async (coverId) => {
     if (!coverId) {
       bgImage.value = null
+      bgLayers.value = []
+      bgBase.value = ''
       bgShown.value = false
       return
     }
@@ -57,9 +62,16 @@ watch(
       bgImage.value = css
       revealBg()
     }
+    const applySplit = (split: { layers: string[]; base: string }) => {
+      bgLayers.value = split.layers
+      bgBase.value = split.base
+      revealBg()
+    }
     const cached = bgCache.get(coverId)
-    if (cached) {
+    const cachedSplit = bgLayersCache.get(coverId)
+    if (cached && cachedSplit) {
       apply(cached)
+      applySplit(cachedSplit)
       return
     }
     try {
@@ -68,9 +80,14 @@ watch(
       // 走 <img> 解码 → canvas：比直接 fetch(blob URL) 在 HMR / 跨源 / 跨标签
       // 场景下更稳定（fetch blob URL 偶发 Failed to fetch）。
       const blob = await urlToBlob(url)
-      const css = await makeAmbientGradient(blob)
+      const [css, split] = await Promise.all([
+        makeAmbientGradient(blob),
+        makeAmbientGradient(blob, { split: true }),
+      ])
       bgCache.set(coverId, css)
+      bgLayersCache.set(coverId, split as { layers: string[]; base: string })
       apply(css)
+      applySplit(split as { layers: string[]; base: string })
     } catch {
       // 取色失败保持深色底
     }
@@ -118,7 +135,9 @@ watch(
       return
     }
     loading.value = true
-    scroller.value?.scrollTo({ top: 0 })
+    // 关键：不要 scrollTo(0)。歌词此时仍透明（flyIn/switching 控制），
+    // 但 scrollTop=0 会导致歌词可见时显示在第一行，与 flyIn 落地后的 scrollToActive
+    // 形成「从 0 跳到活动行」的明显跳变。先留默认位置，最后统一处理。
 
     // 优先同目录 .lrc 文件，其次音频内嵌歌词
     const lrc = await readLrcFile(song.rootId, path.slice(song.rootId.length + 1))
@@ -129,12 +148,16 @@ watch(
     }
     loading.value = false
     lyricsSettled.value = true
+    // 歌词已就位但仍透明——先把视口定位到当前行（不渲染过程、无视觉跳变），
+    // 等切换动画完成再让用户看到歌词时，已经在正确位置。
     await nextTick()
-    // 保证淡出阶段真正可见（至少 260ms）再淡入，切歌才有丝滑过场
+    scrollToActive(false)
+    // 保证淡出阶段真正可见（至少 480ms 与封面/歌词过渡对齐）再淡入，
+    // 切歌才有完整过场；少于 480ms 就延后到刚好 480ms
     const elapsed = performance.now() - switchStart
     window.setTimeout(() => {
       switching.value = false
-    }, Math.max(0, 260 - elapsed))
+    }, Math.max(0, 480 - elapsed))
   },
   { immediate: true },
 )
@@ -272,22 +295,48 @@ const progressPct = computed(() => {
   if (d <= 0) return 0
   return Math.min(100, Math.max(0, (player.currentTime / d) * 100))
 })
-/** 拖拽/点击进度条时短暂高亮，作为可交互反馈 */
+
+/** 进度条拖拽：pointerdown 启动 → pointermove 跟手 → pointerup 落定 */
+let progressDraggingPointerId = -1
 const progressDragging = ref(false)
 let progressDragTimer = 0
+
+function ratioFromPointer(e: PointerEvent, track: HTMLElement): number {
+  const rect = track.getBoundingClientRect()
+  if (rect.width <= 0) return 0
+  return Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+}
 
 function onProgressPointerDown(e: PointerEvent) {
   const d = progressDuration.value
   if (d <= 0) return
   const track = e.currentTarget as HTMLElement
-  const rect = track.getBoundingClientRect()
-  const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
-  player.seek(ratio * d)
+  // 阻止文本选择 + native dragstart
+  e.preventDefault()
+  ;(track as HTMLElement).setPointerCapture?.(e.pointerId)
+  progressDraggingPointerId = e.pointerId
   progressDragging.value = true
   window.clearTimeout(progressDragTimer)
-  progressDragTimer = window.setTimeout(() => {
-    progressDragging.value = false
-  }, 600)
+  // 即时跳到点击位置（按下就 seek，不要等到松手）
+  player.seek(ratioFromPointer(e, track) * d)
+}
+
+function onProgressPointerMove(e: PointerEvent) {
+  if (progressDraggingPointerId !== e.pointerId) return
+  const d = progressDuration.value
+  if (d <= 0) return
+  // 跟手：仅在拖拽中才实时 seek（避免和 currentTime 抖动）
+  const track = e.currentTarget as HTMLElement
+  player.seek(ratioFromPointer(e, track) * d)
+}
+
+function onProgressPointerUp(e: PointerEvent) {
+  if (progressDraggingPointerId !== e.pointerId) return
+  ;(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId)
+  progressDraggingPointerId = -1
+  progressDragging.value = false
+  window.clearTimeout(progressDragTimer)
+  // 600ms 后允许 is-dragging 的高亮淡出，但 currentTime 已经追上，所以立即解除
 }
 
 /* ---------- 歌词字号：歌词页内 Aa 快捷档位 ---------- */
@@ -489,14 +538,16 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="lyrics-full" :class="{ closing }">
-    <!-- 背景：纯深色底 + 多焦点 radial-gradient 层（环境光晕） -->
+  <div class="lyrics-full" :class="{ closing }" :style="lyricVars">
+    <!-- 背景：纯深色底 + base 色底层 + 多焦点径向层（每个焦点独立动画，相位错开呼吸） -->
     <div class="bg" />
+    <div v-if="bgBase" class="bg-base" :class="{ show: bgShown }" :style="{ backgroundImage: bgBase }" />
     <div
-      v-if="bgImage"
-      class="bg-grad"
+      v-for="(layer, i) in bgLayers"
+      :key="i"
+      class="bg-layer"
       :class="{ show: bgShown }"
-      :style="{ backgroundImage: bgImage }"
+      :style="{ backgroundImage: layer, animationDelay: `-${(i * 0.7) % 7}s` }"
     />
 
     <!-- 右上角工具组：字号调节 + 退出 -->
@@ -613,8 +664,25 @@ onMounted(() => {
           class="mini-progress-fill"
           :style="{ width: progressPct + '%' }"
           @pointerdown="onProgressPointerDown"
+          @pointermove="onProgressPointerMove"
+          @pointerup="onProgressPointerUp"
+          @pointercancel="onProgressPointerUp"
         />
-        <div class="mini-progress-track" @pointerdown="onProgressPointerDown" />
+        <div
+          class="mini-progress-thumb"
+          :style="{ left: progressPct + '%', opacity: progressDragging ? 1 : 0 }"
+          @pointerdown="onProgressPointerDown"
+          @pointermove="onProgressPointerMove"
+          @pointerup="onProgressPointerUp"
+          @pointercancel="onProgressPointerUp"
+        />
+        <div
+          class="mini-progress-track"
+          @pointerdown="onProgressPointerDown"
+          @pointermove="onProgressPointerMove"
+          @pointerup="onProgressPointerUp"
+          @pointercancel="onProgressPointerUp"
+        />
       </div>
     </footer>
   </div>
@@ -637,37 +705,59 @@ onMounted(() => {
   opacity: 0;
 }
 
-/* ---------- 背景：底色 + 渐变图层（渐变单独一层，用 opacity 淡入） ---------- */
+/* ---------- 背景：底色 + base 色层 + 多焦点径向层（每个焦点独立呼吸动画） ---------- */
 .bg {
   position: absolute;
   inset: 0;
   background: var(--lyric-bg);
 }
 
-.bg-grad {
+/* base 色：纯色兜底层，让 radial 透明处不露出深色 bg */
+.bg-base {
   position: absolute;
   inset: 0;
-  /* 多 background-image 已由内联 style 注入（radial 焦点 + linear base 色）。
-     radial 焦点天然按容器百分比定位，不需要 cover/scale，再叠一层大模糊让焦点边缘更柔。 */
-  filter: blur(60px) saturate(1.4);
+  filter: blur(40px) saturate(1.3);
   opacity: 0;
-  /* 飞行 560ms 完成；淡入缩短到 280ms 与飞行并行，落地时背景已基本可见，
-     避免"飞行结束还要等半秒才出现模糊"的延迟感 */
   transition: opacity 280ms var(--ease-out);
-  will-change: opacity;
 }
 
-.bg-grad.show {
+/* 焦点层：每个 layer 一个独立 div，独立做相位错开的呼吸动画。
+   scale 0.92→1.08 + opacity 0.75→1.0，10s 缓动，每个 layer
+   起点延迟 i*0.7s，整体呈现"环境光在缓慢呼吸"但不晕不跳。 */
+.bg-layer {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(80px) saturate(1.5);
+  opacity: 0;
+  transform-origin: center center;
+  animation: ambient-breathe 10s ease-in-out infinite;
+  transition: opacity 280ms var(--ease-out);
+}
+
+.bg-base.show,
+.bg-layer.show {
   opacity: 1;
 }
 
-/* 底部稍压暗，保证迷你条与歌词可读 */
-.bg-grad::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--lyric-shade);
+.bg-layer.show {
+  /* 呼吸动画期间透明度上下浮动；CSS animation 与 transition 同时驱动 opacity，
+     由 animation 主导、transition 只在 show 切换的瞬间起作用 */
+  opacity: 0.92;
 }
+
+@keyframes ambient-breathe {
+  0%,
+  100% {
+    transform: scale(0.96);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+/* 底部稍压暗，保证迷你条与歌词可读 —— 已合并到 .bg-base 的 blur+saturate，无需单独压暗层 */
 
 /* ---------- 右上角工具组：字号调节 + 退出 ---------- */
 .top-tools {
@@ -796,28 +886,45 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 96px;
+  /* 封面与歌词之间留更宽的呼吸空间（96 → 160），整体左右居中 */
+  gap: 160px;
   /* 上下等距内边距 → 内容垂直居中于整个视口（迷你条为浮层，不参与占位） */
   padding: 24px 48px;
 }
 
 /* 切歌切换动画：封面与歌词淡出淡入 */
+/* 切歌切换：封面 crossfade 重点（旧封面缩小淡出 → 新封面 spring 入场），
+   歌词同步 480ms 淡出淡入。缓动与 spring 让"断片感"变成丝滑过场。 */
 .main .cover-col,
 .main .lyric-scroll,
 .main .no-lyrics-hint {
-  transition: opacity 300ms var(--ease-out), transform 300ms var(--ease-out);
+  transition: opacity 480ms var(--ease-out), transform 480ms var(--ease-spring);
+}
+
+.main .cover-main {
+  transition: transform 480ms var(--ease-spring), opacity 480ms var(--ease-out);
 }
 
 .main.switching .cover-col,
 .main.switching .lyric-scroll,
 .main.switching .no-lyrics-hint {
   opacity: 0;
-  transform: translateY(10px);
+  transform: translateY(14px);
+}
+
+.main.switching .cover-main {
+  transform: scale(0.94);
+}
+
+/* 歌词淡出时反向偏移一点（位移方向不同 → 视觉读为「切换」而非「消失」） */
+.main.switching .lyric-scroll {
+  transform: translateY(-8px);
 }
 
 /* 封面飞入期间：封面不参与切歌淡入淡出。
-   否则淡入（300ms）会和飞行（560ms）叠加，落地瞬间封面还在半透明 → 观感就是"顿一下"。 */
-.main.fly-active .cover-col {
+   否则淡入（480ms）会和飞行（560ms）叠加，落地瞬间封面还在半透明 → 观感就是"顿一下"。 */
+.main.fly-active .cover-col,
+.main.fly-active .cover-main {
   opacity: 1;
   transform: none;
   transition: none;
@@ -943,25 +1050,22 @@ onMounted(() => {
   max-width: 76vw;
   padding: 12px 22px 18px; /* 底部留 6px 给进度条 */
   border-radius: 22px;
-  /* 玻璃底：3-stop 渐变 + 微弱暗色透出，呈现「高光从左上扫过」感 */
+  /* 玻璃底：低透明度 + 暗色透出 + 极弱高光，胶囊像「轻浮」在背景之上 */
   background:
     linear-gradient(
       135deg,
-      rgba(255, 255, 255, 0.18) 0%,
-      rgba(255, 255, 255, 0.06) 45%,
-      rgba(255, 255, 255, 0.12) 100%
+      rgba(255, 255, 255, 0.1) 0%,
+      rgba(255, 255, 255, 0.04) 45%,
+      rgba(255, 255, 255, 0.07) 100%
     ),
-    rgba(20, 22, 28, 0.42);
-  backdrop-filter: blur(36px) saturate(1.5);
-  -webkit-backdrop-filter: blur(36px) saturate(1.5);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+    rgba(20, 22, 28, 0.28);
+  backdrop-filter: blur(44px) saturate(1.4);
+  -webkit-backdrop-filter: blur(44px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  /* 内阴影只留顶 1px 高光（去掉左右微弱高光与底黑——过度刻画会让胶囊"硬"） */
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
-    inset 1px 0 0 rgba(255, 255, 255, 0.06),
-    inset -1px 0 0 rgba(255, 255, 255, 0.04),
-    0 16px 48px rgba(0, 0, 0, 0.45),
-    0 2px 8px rgba(0, 0, 0, 0.25);
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 10px 32px rgba(0, 0, 0, 0.35);
   animation: bar-in 520ms var(--ease-spring) 120ms backwards;
   transition: background 0.3s var(--ease-out), box-shadow 0.3s var(--ease-out);
 }
@@ -970,11 +1074,11 @@ onMounted(() => {
   background:
     linear-gradient(
       135deg,
-      rgba(255, 255, 255, 0.22) 0%,
-      rgba(255, 255, 255, 0.08) 45%,
-      rgba(255, 255, 255, 0.16) 100%
+      rgba(255, 255, 255, 0.14) 0%,
+      rgba(255, 255, 255, 0.06) 45%,
+      rgba(255, 255, 255, 0.1) 100%
     ),
-    rgba(20, 22, 28, 0.5);
+    rgba(20, 22, 28, 0.36);
 }
 
 @keyframes bar-in {
@@ -1159,6 +1263,26 @@ onMounted(() => {
   transition: width 80ms linear;
   pointer-events: auto;
   cursor: pointer;
+}
+
+/* 拖拽时显示 thumb 圆点，跟随落点 */
+.mini-progress-thumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--lyric-text-active);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.55), 0 1px 3px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%) scale(0.6);
+  pointer-events: auto;
+  cursor: pointer;
+  transition: opacity 0.12s var(--ease-out), transform 0.18s var(--ease-spring);
+  z-index: 1;
+}
+
+.mini-bar.is-dragging .mini-progress-thumb {
+  transform: translate(-50%, -50%) scale(1);
 }
 
 /* hover / 拖拽时进度条微微变粗变亮，给出"可拖动"反馈 */
