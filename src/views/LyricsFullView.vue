@@ -29,9 +29,9 @@ const flyActive = ref(false)
 const FLY_DURATION = 560
 const FLY_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
-/* ---------- 封面渐变背景 ---------- */
+/* ---------- 封面环境渐变（CSS 字符串：多 radial-gradient 焦点 + base 色） ---------- */
 
-const bgUrl = ref<string | null>(null)
+const bgImage = ref<string | null>(null)
 const bgShown = ref(false)
 const bgCache = new Map<string, string>()
 
@@ -45,14 +45,14 @@ watch(
   () => player.current?.coverId ?? null,
   async (coverId) => {
     if (!coverId) {
-      bgUrl.value = null
+      bgImage.value = null
       bgShown.value = false
       return
     }
     // 渐变立即挂 DOM + 立即 reveal：淡入和飞行是并行的（280ms vs 560ms），
     // 飞行落地时背景已基本可见，没有"飞行后还要等半秒"的延迟感。
-    const apply = (gradient: string) => {
-      bgUrl.value = gradient
+    const apply = (css: string) => {
+      bgImage.value = css
       revealBg()
     }
     const cached = bgCache.get(coverId)
@@ -63,16 +63,33 @@ watch(
     try {
       const url = await library.coverUrl(coverId)
       if (!url) return
-      const blob = await (await fetch(url)).blob()
-      const gradient = await makeAmbientGradient(blob)
-      bgCache.set(coverId, gradient)
-      apply(gradient)
+      // 走 <img> 解码 → canvas：比直接 fetch(blob URL) 在 HMR / 跨源 / 跨标签
+      // 场景下更稳定（fetch blob URL 偶发 Failed to fetch）。
+      const blob = await urlToBlob(url)
+      const css = await makeAmbientGradient(blob)
+      bgCache.set(coverId, css)
+      apply(css)
     } catch {
       // 取色失败保持深色底
     }
   },
   { immediate: true },
 )
+
+/** 通过 <img> 解码 + canvas 取色，避免 fetch(blob:) 偶发的 Failed to fetch（HMR / 跨标签场景更稳）。 */
+async function urlToBlob(url: string): Promise<Blob> {
+  const img = new Image()
+  img.src = url
+  await img.decode()
+  const c = document.createElement('canvas')
+  c.width = img.naturalWidth
+  c.height = img.naturalHeight
+  const ctx = c.getContext('2d')!
+  ctx.drawImage(img, 0, 0)
+  return await new Promise<Blob>((resolve, reject) =>
+    c.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob null'))), 'image/png'),
+  )
+}
 
 const groups = ref<LyricGroup[]>([])
 const loading = ref(false)
@@ -259,7 +276,7 @@ function flyIn() {
     await nextTick()
     // 如果已有缓存渐变（切歌时的预取或上次浏览），立即 reveal：
     // 280ms 透明度淡入与飞行 (560ms) 并行，落地时背景已基本可见。
-    if (bgUrl.value) revealBg()
+    if (bgImage.value) revealBg()
 
     // 1) 等歌词加载完成（布局稳定），否则取到的目标坐标是歌词为空时的旧位置，
     //    飞过去后会再被布局推到真实位置 → 卡顿。有歌词/无歌词都靠 lyricsSettled。
@@ -361,13 +378,13 @@ onMounted(() => {
 
 <template>
   <div class="lyrics-full" :class="{ closing }">
-    <!-- 背景：封面颜色构图拉伸的柔和渐变（独立图层淡入，避免中途重绘打断转场） -->
+    // 背景：纯深色底 + 多焦点 radial-gradient 层（环境光晕）
     <div class="bg" />
     <div
-      v-if="bgUrl"
+      v-if="bgImage"
       class="bg-grad"
       :class="{ show: bgShown }"
-      :style="{ backgroundImage: `url(${bgUrl})` }"
+      :style="{ backgroundImage: bgImage }"
     />
 
     <!-- 关闭按钮 -->
@@ -480,12 +497,9 @@ onMounted(() => {
 .bg-grad {
   position: absolute;
   inset: 0;
-  background-size: cover;
-  background-position: center;
-  /* blur 从 70 降到 40：32px 色块拉伸后 40px 已足够柔，成本大约是 1/3；
-     配合切歌时预取（见 PlayerBar），着陆时画面几乎不卡 */
-  filter: blur(40px) saturate(1.25);
-  transform: scale(1.15);
+  /* 多 background-image 已由内联 style 注入（radial 焦点 + linear base 色）。
+     radial 焦点天然按容器百分比定位，不需要 cover/scale，再叠一层大模糊让焦点边缘更柔。 */
+  filter: blur(60px) saturate(1.4);
   opacity: 0;
   /* 飞行 560ms 完成；淡入缩短到 280ms 与飞行并行，落地时背景已基本可见，
      避免"飞行结束还要等半秒才出现模糊"的延迟感 */
