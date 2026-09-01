@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useLibraryStore } from '@/stores/library'
 import { useSettingsStore } from '@/stores/settings'
 import type { ThemeMode } from '@/types'
@@ -16,6 +17,9 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: 'monitor' | 'moon' 
 ]
 
 const permLabel = { granted: '已授权', prompt: '待确认权限', denied: '无法访问' }
+const brandLogo = computed(() =>
+  settings.resolvedTheme === 'dark' ? '/logo/aria-logo-main.svg' : '/logo/aria-logo-app.svg',
+)
 </script>
 
 <template>
@@ -77,7 +81,7 @@ const permLabel = { granted: '已授权', prompt: '待确认权限', denied: '�
     <section class="setting-card">
       <h2 class="section-title">关于</h2>
       <div class="about-brand">
-        <img src="/logo/aria-logo-app.svg" alt="Aria · 咏叹" class="about-brand-logo" />
+        <img :src="brandLogo" alt="Aria · 咏叹" class="about-brand-logo" :class="{ 'no-shadow': settings.resolvedTheme === 'dark' }" />
         <div class="about-brand-text">
           <span class="about-brand-name">Aria · 咏叹</span>
           <span class="about-brand-ver">v0.1.0 · 网页版本地音乐播放器</span>
@@ -182,8 +186,8 @@ const permLabel = { granted: '已授权', prompt: '待确认权限', denied: '�
 }
 
 .mini-btn.danger:hover {
-  color: #e05555;
-  border-color: rgba(224, 85, 85, 0.4);
+  color: var(--danger);
+  border-color: var(--danger-border);
 }
 
 .scan-status {
@@ -242,6 +246,10 @@ const permLabel = { granted: '已授权', prompt: '待确认权限', denied: '�
   height: 44px;
   border-radius: 12px;
   box-shadow: var(--shadow-1);
+}
+
+.about-brand-logo.no-shadow {
+  box-shadow: none;
 }
 
 .about-brand-text {

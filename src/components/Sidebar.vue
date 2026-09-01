@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { nextTick, watch } from 'vue'
-import { ref } from 'vue'
+import { nextTick, watch, ref, computed } from 'vue'
 import { useUiStore } from '@/stores/ui'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlaylistStore } from '@/stores/playlist'
@@ -19,6 +18,10 @@ const navItems: { id: ViewId; label: string; icon: IconName }[] = [
   { id: 'artists', label: '艺术家', icon: 'artist' },
   { id: 'folders', label: '文件夹', icon: 'folder' },
 ]
+
+const brandLogo = computed(() =>
+  settings.resolvedTheme === 'dark' ? '/logo/aria-logo-main.svg' : '/logo/aria-logo-app.svg',
+)
 
 const themeIcon = { system: 'monitor', dark: 'moon', light: 'sun' } as const
 
@@ -66,7 +69,7 @@ watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.le
 <template>
   <aside class="sidebar">
     <div class="brand">
-      <img src="/logo/aria-logo-app.svg" alt="Aria" class="brand-logo" />
+      <img :src="brandLogo" alt="Aria" class="brand-logo" :class="{ 'no-shadow': settings.resolvedTheme === 'dark' }" />
       <div class="brand-text">
         <span class="brand-name">Aria</span>
         <span class="brand-sub">咏叹</span>
@@ -174,6 +177,10 @@ watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.le
   border-radius: 10px;
   box-shadow: var(--shadow-1);
   transition: transform var(--dur-med) var(--ease-spring);
+}
+
+.brand-logo.no-shadow {
+  box-shadow: none;
 }
 
 .brand:hover .brand-logo {
