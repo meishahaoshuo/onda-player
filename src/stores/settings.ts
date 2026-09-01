@@ -29,6 +29,10 @@ export const useSettingsStore = defineStore('settings', () => {
           : 'light'
         : themeMode.value
     document.documentElement.dataset.theme = resolvedTheme.value
+    // 同步浏览器地址栏/任务栏主题色：深色 #0A0A0A，浅色品牌红 #FA233B
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', resolvedTheme.value === 'dark' ? '#0A0A0A' : '#FA233B')
     localStorage.setItem(STORAGE_KEY, themeMode.value)
   })
 

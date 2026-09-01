@@ -302,15 +302,11 @@ function jumpTo(path: string) {
   overflow: hidden;
   z-index: 30;
   /* 比 .glass 更实一些的底，保证列表文字可读 */
-  background: linear-gradient(120deg, rgba(40, 32, 26, 0.92), rgba(34, 27, 22, 0.88));
+  background: var(--queue-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border);
   box-shadow: var(--shadow-2), var(--glass-highlight);
-}
-
-:root[data-theme='light'] .queue-panel {
-  background: linear-gradient(120deg, rgba(255, 250, 242, 0.94), rgba(255, 246, 238, 0.9));
 }
 
 .queue-head {

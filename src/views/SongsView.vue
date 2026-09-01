@@ -202,10 +202,10 @@ const scanPct = computed(() =>
   gap: 12px;
   padding: 10px 14px;
   border-radius: 8px;
-  background: rgba(224, 85, 85, 0.12);
-  border: 1px solid rgba(224, 85, 85, 0.4);
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
   font-size: 13px;
-  color: #e05555;
+  color: var(--danger);
 }
 
 .restore-btn {

@@ -1,95 +1,101 @@
 /* =====================================================================
    Aria · 咏叹 设计系统
    主题切换 = <html data-theme="dark" | "light">，组件只允许引用变量
-   关键词：暖色 / 液态玻璃 / 苹果式简约 / 克制的动效
+   关键词：红白 / 液态玻璃 / 苹果式简约 / 克制的动效
    ===================================================================== */
 
 :root,
 :root[data-theme='dark'] {
-  /* 基底：暖炭色系 */
-  --bg-base: #16120f;
-  --bg-sidebar: rgba(30, 24, 19, 0.6);
-  --bg-panel: rgba(38, 31, 25, 0.66);
-  --bg-playerbar: rgba(26, 21, 17, 0.72);
-  --bg-hover: rgba(255, 236, 214, 0.06);
-  --bg-active: rgba(232, 149, 107, 0.15);
+  /* 基底：Apple 近黑 */
+  --bg-base: #0a0a0a;
+  --bg-sidebar: rgba(28, 28, 30, 0.6);
+  --bg-panel: rgba(28, 28, 30, 0.66);
+  --bg-playerbar: rgba(28, 28, 30, 0.72);
+  --bg-hover: rgba(255, 255, 255, 0.08);
+  --bg-active: rgba(250, 35, 59, 0.2);
 
-  /* 强调：暖琥珀 → 珊瑚 */
-  --accent: #e8956b;
-  --accent-strong: #dd7350;
-  --accent-text: #2b1a10;
-  --accent-soft: rgba(232, 149, 107, 0.15);
+  /* 强调：Apple Music 红 */
+  --accent: #ff3b50;
+  --accent-strong: #e62e46;
+  --accent-text: #ffffff;
+  --accent-soft: rgba(250, 35, 59, 0.2);
 
-  /* 文字：暖白梯度 */
-  --text-primary: #f3ece3;
-  --text-secondary: #a89c8e;
-  --text-tertiary: #6f6459;
-  --border-subtle: rgba(255, 236, 214, 0.08);
+  /* 文字：中性白梯度 */
+  --text-primary: #ffffff;
+  --text-secondary: #a1a1a6;
+  --text-tertiary: #7c7c80;
+  --border-subtle: rgba(255, 255, 255, 0.12);
 
-  /* 液态玻璃令牌 */
-  --glass-bg: linear-gradient(120deg, rgba(46, 37, 30, 0.55), rgba(38, 30, 24, 0.38) 55%, rgba(46, 36, 28, 0.5));
-  --glass-border: rgba(255, 234, 210, 0.14);
-  --glass-highlight: inset 0 1px 0 rgba(255, 240, 220, 0.22), inset 0 -1px 0 rgba(255, 240, 220, 0.05);
-  --glass-blur: blur(32px) saturate(1.7);
+  /* 液态玻璃令牌（中性深灰玻璃） */
+  --glass-bg: linear-gradient(120deg, rgba(28, 28, 30, 0.72), rgba(36, 36, 38, 0.6) 55%, rgba(28, 28, 30, 0.66));
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  --glass-blur: blur(32px) saturate(1.4);
 
   /* 徽标 */
-  --badge-hires: #d4a94e;
-  --badge-lossless: #6f9a6b;
-  --badge-lossy: #7a6f63;
+  --badge-hires: #b8860b;
+  --badge-lossless: #268e46;
+  --badge-lossy: #6e6e73;
 
-  /* 阴影：暖环境影 */
-  --shadow-1: 0 2px 10px rgba(18, 10, 5, 0.28);
-  --shadow-2: 0 16px 48px rgba(18, 10, 5, 0.4);
+  /* 阴影：中性黑 */
+  --shadow-1: 0 2px 10px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 16px 48px rgba(0, 0, 0, 0.55);
   --shadow-panel: var(--shadow-2);
 
-  /* 危险色（暖红） */
-  --danger: #e06a58;
+  /* 危险色（Apple 系统红） */
+  --danger: #ff453a;
+  --danger-soft: rgba(255, 59, 48, 0.12);
+  --danger-border: rgba(255, 59, 48, 0.4);
 
   /* 滚动条 */
-  --scrollbar: rgba(255, 236, 214, 0.14);
-  --scrollbar-hover: rgba(255, 236, 214, 0.26);
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.28);
 
-  /* 歌词页 */
-  --lyric-dim: rgba(243, 236, 227, 0.45);
+  /* 队列面板 / 卡片扫光 */
+  --queue-bg: linear-gradient(120deg, rgba(28, 28, 30, 0.9), rgba(22, 22, 24, 0.88));
+  --sheen: rgba(255, 255, 255, 0.1);
 }
 
 :root[data-theme='light'] {
-  --bg-base: #f4ede3;
-  --bg-sidebar: rgba(255, 250, 242, 0.58);
-  --bg-panel: rgba(255, 252, 246, 0.62);
-  --bg-playerbar: rgba(255, 250, 242, 0.7);
-  --bg-hover: rgba(110, 70, 40, 0.06);
-  --bg-active: rgba(224, 123, 84, 0.13);
+  --bg-base: #ffffff;
+  --bg-sidebar: rgba(255, 255, 255, 0.6);
+  --bg-panel: rgba(255, 255, 255, 0.66);
+  --bg-playerbar: rgba(255, 255, 255, 0.7);
+  --bg-hover: rgba(0, 0, 0, 0.05);
+  --bg-active: rgba(250, 35, 59, 0.12);
 
-  --accent: #d9744a;
-  --accent-strong: #c95f38;
-  --accent-text: #fff8f0;
-  --accent-soft: rgba(217, 116, 74, 0.13);
+  --accent: #fa233b;
+  --accent-strong: #d41b30;
+  --accent-text: #ffffff;
+  --accent-soft: rgba(250, 35, 59, 0.12);
 
-  --text-primary: #2b211a;
-  --text-secondary: #7d7061;
-  --text-tertiary: #ab9f90;
-  --border-subtle: rgba(90, 60, 30, 0.1);
+  --text-primary: #000000;
+  --text-secondary: #86868b;
+  --text-tertiary: #aeaeb2;
+  --border-subtle: rgba(0, 0, 0, 0.08);
 
-  --glass-bg: linear-gradient(120deg, rgba(255, 250, 242, 0.6), rgba(255, 246, 236, 0.4) 55%, rgba(255, 248, 240, 0.55));
-  --glass-border: rgba(120, 80, 45, 0.14);
-  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(120, 80, 45, 0.05);
-  --glass-blur: blur(32px) saturate(1.6);
+  --glass-bg: linear-gradient(120deg, rgba(255, 255, 255, 0.72), rgba(250, 250, 252, 0.6) 55%, rgba(255, 255, 255, 0.66));
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 0, 0, 0.03);
+  --glass-blur: blur(32px) saturate(1.4);
 
-  --badge-hires: #b98a2e;
-  --badge-lossless: #58855a;
-  --badge-lossy: #8a7e70;
+  --badge-hires: #b8860b;
+  --badge-lossless: #268e46;
+  --badge-lossy: #6e6e73;
 
-  --shadow-1: 0 2px 10px rgba(90, 55, 25, 0.1);
-  --shadow-2: 0 16px 48px rgba(90, 55, 25, 0.14);
+  --shadow-1: 0 2px 10px rgba(0, 0, 0, 0.08);
+  --shadow-2: 0 16px 48px rgba(0, 0, 0, 0.12);
   --shadow-panel: var(--shadow-2);
 
-  --danger: #cc5040;
+  --danger: #ff3b30;
+  --danger-soft: rgba(255, 59, 48, 0.12);
+  --danger-border: rgba(255, 59, 48, 0.4);
 
-  --scrollbar: rgba(90, 60, 30, 0.16);
-  --scrollbar-hover: rgba(90, 60, 30, 0.3);
+  --scrollbar: rgba(0, 0, 0, 0.16);
+  --scrollbar-hover: rgba(0, 0, 0, 0.28);
 
-  --lyric-dim: rgba(43, 33, 26, 0.45);
+  --queue-bg: linear-gradient(120deg, rgba(255, 255, 255, 0.94), rgba(248, 248, 250, 0.92));
+  --sheen: rgba(255, 255, 255, 0.35);
 }
 
 /* ---------- 动效令牌 ---------- */
@@ -103,6 +109,33 @@
 
   --radius-panel: 16px;
   --radius-item: 10px;
+}
+
+/* ---------- 歌词页令牌（沉浸页：两主题同值深色，故定义在 :root 全局不随主题切换） ---------- */
+
+:root {
+  --lyric-bg: #17191d;
+  --lyric-mask: #000;
+  --lyric-shade: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.3));
+  --lyric-text: rgba(255, 255, 255, 0.88);
+  --lyric-text-active: #fff;
+  --lyric-text-sub: rgba(255, 255, 255, 0.92);
+  --lyric-hint: rgba(255, 255, 255, 0.6);
+  --lyric-time: rgba(255, 255, 255, 0.55);
+  --lyric-shadow: 0 2px 16px rgba(0, 0, 0, 0.25);
+  --lyric-control: rgba(255, 255, 255, 0.75);
+  --lyric-control-hover: #fff;
+  --lyric-control-bg: rgba(255, 255, 255, 0.12);
+  --lyric-bar-bg: rgba(28, 28, 30, 0.18);
+  --lyric-play-bg: rgba(255, 255, 255, 0.92);
+  --lyric-play-bg-hover: #fff;
+  --lyric-play-icon: #1a1c20;
+  --lyric-ps-track: rgba(255, 255, 255, 0.07);
+  --lyric-ps-fill: rgba(255, 255, 255, 0.2);
+  --lyric-ps-thumb: rgba(255, 255, 255, 0.8);
+  --lyric-ps-fill-hover: rgba(255, 255, 255, 0.3);
+  --lyric-ps-track-hover: rgba(255, 255, 255, 0.1);
+  --lyric-accent: #fff;
 }
 
 /* ---------- 基础 ---------- */

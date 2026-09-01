@@ -65,7 +65,7 @@ function openAlbum(key: string) {
   left: -80%;
   width: 60%;
   height: 100%;
-  background: linear-gradient(105deg, transparent, rgba(255, 240, 220, 0.16), transparent);
+  background: linear-gradient(105deg, transparent, var(--sheen), transparent);
   transform: skewX(-18deg);
   transition: left 0.55s var(--ease-out);
   pointer-events: none;

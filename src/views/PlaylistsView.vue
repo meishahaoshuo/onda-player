@@ -348,8 +348,8 @@ function confirmRemove() {
 }
 
 .action-btn.danger:hover {
-  color: #e05555;
-  border-color: rgba(224, 85, 85, 0.4);
+  color: var(--danger);
+  border-color: var(--danger-border);
 }
 
 .action-btn:disabled {
@@ -421,7 +421,7 @@ function confirmRemove() {
 
 .drag-remove:hover {
   background: var(--bg-hover);
-  color: #e05555;
+  color: var(--danger);
 }
 
 /* 歌单列表 */

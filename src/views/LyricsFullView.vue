@@ -470,7 +470,7 @@ onMounted(() => {
   flex-direction: column;
   overflow: hidden;
   /* 沉浸式深色底：封面模糊层之下，文字固定白色系 */
-  background: #17191d;
+  background: var(--lyric-bg);
   transition: opacity 240ms var(--ease-out);
 }
 
@@ -482,7 +482,7 @@ onMounted(() => {
 .bg {
   position: absolute;
   inset: 0;
-  background: #17191d;
+  background: var(--lyric-bg);
 }
 
 .bg-grad {
@@ -508,7 +508,7 @@ onMounted(() => {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.3));
+  background: var(--lyric-shade);
 }
 
 /* ---------- 关闭 ---------- */
@@ -517,12 +517,12 @@ onMounted(() => {
   top: 18px;
   right: 22px;
   z-index: 2;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--lyric-control);
 }
 
 .close-btn:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
+  color: var(--lyric-control-hover);
+  background: var(--lyric-control-bg);
 }
 
 /* ---------- 主体：整组以整个页面为基准居中 ---------- */
@@ -583,8 +583,8 @@ onMounted(() => {
   min-width: 0;
   height: 100%;
   overflow-y: auto;
-  mask-image: linear-gradient(transparent, #000 15%, #000 85%, transparent);
-  -webkit-mask-image: linear-gradient(transparent, #000 15%, #000 85%, transparent);
+  mask-image: linear-gradient(transparent, var(--lyric-mask) 15%, var(--lyric-mask) 85%, transparent);
+  -webkit-mask-image: linear-gradient(transparent, var(--lyric-mask) 15%, var(--lyric-mask) 85%, transparent);
   scrollbar-width: none;
 }
 
@@ -623,14 +623,14 @@ onMounted(() => {
 .lyric-line.active .lyric-text {
   font-size: 30px;
   font-weight: 700;
-  color: #fff;
-  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.25);
+  color: var(--lyric-text-active);
+  text-shadow: var(--lyric-shadow);
   transition: font-size 0.35s var(--ease-spring);
 }
 
 .lyric-text {
   font-size: 19px;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--lyric-text);
   line-height: 1.55;
   transition: font-size 0.25s, color 0.25s;
 }
@@ -642,7 +642,7 @@ onMounted(() => {
 
 .lyric-line.active .lyric-text.sub {
   font-size: 16px;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--lyric-text-sub);
 }
 
 .no-lyrics-hint {
@@ -650,7 +650,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--lyric-hint);
   font-size: 15px;
 }
 
@@ -668,7 +668,7 @@ onMounted(() => {
   max-width: 72vw;
   padding: 12px 24px 14px;
   border-radius: 28px;
-  background: rgba(20, 16, 13, 0.2);
+  background: var(--lyric-bar-bg);
   backdrop-filter: blur(46px) saturate(1.35);
   -webkit-backdrop-filter: blur(46px) saturate(1.35);
   border: none;
@@ -685,25 +685,25 @@ onMounted(() => {
 
 /* 迷你条内进度条透明化：极淡的白玻璃，拖拽不突兀 */
 .mini-bar :deep(.ps-track) {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--lyric-ps-track);
 }
 
 .mini-bar :deep(.ps-fill) {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--lyric-ps-fill);
 }
 
 .mini-bar :deep(.ps-thumb) {
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--lyric-ps-thumb);
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
 }
 
 .mini-bar :deep(.pslider.dragging .ps-fill),
 .mini-bar :deep(.pslider:hover .ps-fill) {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--lyric-ps-fill-hover);
 }
 
 .mini-bar :deep(.pslider.dragging .ps-track) {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--lyric-ps-track-hover);
 }
 
 .mini-progress {
@@ -720,7 +720,7 @@ onMounted(() => {
 .mini-title {
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
+  color: var(--lyric-text-active);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -729,7 +729,7 @@ onMounted(() => {
 
 .mini-time {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--lyric-time);
   font-variant-numeric: tabular-nums;
   margin-top: 2px;
 }
@@ -747,29 +747,29 @@ onMounted(() => {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--lyric-control);
   transition: background 0.15s, color 0.15s;
 }
 
 .mini-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
+  background: var(--lyric-control-bg);
+  color: var(--lyric-control-hover);
 }
 
 .mini-btn.play {
   width: 40px;
   height: 40px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #1a1c20;
+  background: var(--lyric-play-bg);
+  color: var(--lyric-play-icon);
 }
 
 .mini-btn.play:hover {
-  background: #fff;
+  background: var(--lyric-play-bg-hover);
 }
 
 .mini-volume {
   width: 76px;
-  accent-color: #fff;
+  accent-color: var(--lyric-accent);
   opacity: 0.9;
 }
 </style>

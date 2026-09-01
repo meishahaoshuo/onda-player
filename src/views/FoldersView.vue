@@ -175,7 +175,7 @@ function onPlay(song: SongRecord) {
 }
 
 .root-action.danger:hover {
-  color: #e05555;
+  color: var(--danger);
 }
 
 .list {
