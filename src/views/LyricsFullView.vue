@@ -2,7 +2,6 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import CoverImage from '@/components/CoverImage.vue'
-import ProgressSlider from '@/components/ProgressSlider.vue'
 import { readLrcFile } from '@/services/fs'
 import { parseLrc, type LyricGroup } from '@/services/lyrics'
 import { makeAmbientGradient } from '@/services/palette'
@@ -265,7 +264,31 @@ function cycleMode() {
   player.setPlayMode(MODE_META[(idx + 1) % MODE_META.length].mode)
 }
 
+/* ---------- 底部进度条（作为 mini-bar 整体底边线） ---------- */
+
 const progressDuration = computed(() => player.duration || player.current?.durationSec || 0)
+const progressPct = computed(() => {
+  const d = progressDuration.value
+  if (d <= 0) return 0
+  return Math.min(100, Math.max(0, (player.currentTime / d) * 100))
+})
+/** 拖拽/点击进度条时短暂高亮，作为可交互反馈 */
+const progressDragging = ref(false)
+let progressDragTimer = 0
+
+function onProgressPointerDown(e: PointerEvent) {
+  const d = progressDuration.value
+  if (d <= 0) return
+  const track = e.currentTarget as HTMLElement
+  const rect = track.getBoundingClientRect()
+  const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+  player.seek(ratio * d)
+  progressDragging.value = true
+  window.clearTimeout(progressDragTimer)
+  progressDragTimer = window.setTimeout(() => {
+    progressDragging.value = false
+  }, 600)
+}
 
 /* ---------- 歌词字号：歌词页内 Aa 快捷档位 ---------- */
 
@@ -536,21 +559,12 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 底部居中：液态玻璃迷你播放条 -->
-    <footer class="mini-bar">
-      <div class="mini-progress">
-        <ProgressSlider
-          :current="player.currentTime"
-          :duration="progressDuration"
-          @seek="player.seek"
-        />
-      </div>
+    <!-- 底部居中：液态玻璃迷你播放条（重设计：进度条作为底边线而非顶条，整体多焦点玻璃） -->
+    <footer class="mini-bar" :class="{ 'is-dragging': progressDragging }">
       <div class="mini-left">
         <div class="mini-title">{{ player.current?.title ?? '未在播放' }}</div>
-        <div class="mini-time">
-          {{ formatDuration(player.currentTime) }} / {{ formatDuration(player.duration || player.current?.durationSec || 0) }}
-        </div>
       </div>
+
       <div class="mini-controls">
         <button class="mini-btn" :title="modeMeta.label" @click="cycleMode">
           <AppIcon :name="modeMeta.icon" :size="17" />
@@ -568,19 +582,39 @@ onMounted(() => {
         <button class="mini-btn" title="下一曲" @click="player.next()">
           <AppIcon name="next" :size="18" />
         </button>
-        <button class="mini-btn" :title="`音量 ${player.volume}%`" @click="player.setVolume(player.volume === 0 ? 80 : 0)">
-          <AppIcon :name="player.volume === 0 ? 'volumeMute' : 'volume'" :size="17" />
-        </button>
-        <input
-          class="mini-volume"
-          type="range"
-          min="0"
-          max="100"
-          :value="player.volume"
-          :style="{ '--vol': `${player.volume}%` }"
-          title="音量"
-          @input="(e) => player.setVolume(Number((e.target as HTMLInputElement).value))"
+        <div class="mini-volume-wrap">
+          <button class="mini-btn" :title="`音量 ${player.volume}%`" @click="player.setVolume(player.volume === 0 ? 80 : 0)">
+            <AppIcon :name="player.volume === 0 ? 'volumeMute' : 'volume'" :size="17" />
+          </button>
+          <input
+            class="mini-volume"
+            type="range"
+            min="0"
+            max="100"
+            :value="player.volume"
+            :style="{ '--vol': `${player.volume}%` }"
+            title="音量"
+            @input="(e) => player.setVolume(Number((e.target as HTMLInputElement).value))"
+          />
+        </div>
+      </div>
+
+      <div class="mini-right">
+        <div class="mini-time">
+          <span class="cur">{{ formatDuration(player.currentTime) }}</span>
+          <span class="sep">/</span>
+          <span class="dur">{{ formatDuration(player.duration || player.current?.durationSec || 0) }}</span>
+        </div>
+      </div>
+
+      <!-- 进度条：作为 mini-bar 整体底边线（高度 3px，半圆角），不再悬空浮在顶部 -->
+      <div class="mini-progress-edge">
+        <div
+          class="mini-progress-fill"
+          :style="{ width: progressPct + '%' }"
+          @pointerdown="onProgressPointerDown"
         />
+        <div class="mini-progress-track" @pointerdown="onProgressPointerDown" />
       </div>
     </footer>
   </div>
@@ -891,73 +925,68 @@ onMounted(() => {
   font-size: 15px;
 }
 
-/* ---------- 底部轻量悬浮胶囊（方案 A：更透明、更扁、无边界感，溶进背景） ---------- */
+/* ---------- 底部液态玻璃迷你播放条（重设计：进度条作为底边线，多层玻璃） ----------
+   视觉构造（自下而上）：
+     1) .mini-bar：胶囊主体，液态玻璃（多层渐变底 + backdrop 模糊 + 1px 描边 + 顶内高光 + 底内阴影 + 外长投影）
+     2) .mini-progress-edge：胶囊底边内嵌的细进度条，3px 高，左圆角；未播放段半透明白，已播放段白
+     3) .mini-bar:hover 整体轻微提亮 + 进度条 hover 高亮 */
 .mini-bar {
   position: absolute;
   left: 50%;
-  bottom: 22px;
+  bottom: 24px;
   transform: translateX(-50%);
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 18px;
-  min-width: 440px;
-  max-width: 72vw;
-  padding: 9px 18px 11px;
-  border-radius: 24px;
-  background: var(--lyric-bar-bg);
-  backdrop-filter: blur(36px) saturate(1.3);
-  -webkit-backdrop-filter: blur(36px) saturate(1.3);
-  border: none;
-  box-shadow: none;
-  animation: bar-in 480ms var(--ease-spring) 120ms backwards;
-  transition: background 0.3s var(--ease-out);
+  gap: 22px;
+  min-width: 500px;
+  max-width: 76vw;
+  padding: 12px 22px 18px; /* 底部留 6px 给进度条 */
+  border-radius: 22px;
+  /* 玻璃底：3-stop 渐变 + 微弱暗色透出，呈现「高光从左上扫过」感 */
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.18) 0%,
+      rgba(255, 255, 255, 0.06) 45%,
+      rgba(255, 255, 255, 0.12) 100%
+    ),
+    rgba(20, 22, 28, 0.42);
+  backdrop-filter: blur(36px) saturate(1.5);
+  -webkit-backdrop-filter: blur(36px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    inset 1px 0 0 rgba(255, 255, 255, 0.06),
+    inset -1px 0 0 rgba(255, 255, 255, 0.04),
+    0 16px 48px rgba(0, 0, 0, 0.45),
+    0 2px 8px rgba(0, 0, 0, 0.25);
+  animation: bar-in 520ms var(--ease-spring) 120ms backwards;
+  transition: background 0.3s var(--ease-out), box-shadow 0.3s var(--ease-out);
 }
 
-/* 悬停胶囊时轻微提亮，给出可交互暗示 */
 .mini-bar:hover {
-  background: rgba(28, 28, 30, 0.3);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.22) 0%,
+      rgba(255, 255, 255, 0.08) 45%,
+      rgba(255, 255, 255, 0.16) 100%
+    ),
+    rgba(20, 22, 28, 0.5);
 }
 
 @keyframes bar-in {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(16px) scale(0.96);
+    transform: translateX(-50%) translateY(20px) scale(0.96);
   }
-}
-
-/* 迷你条内进度条透明化：极淡的白玻璃，拖拽不突兀 */
-.mini-bar :deep(.ps-track) {
-  background: var(--lyric-ps-track);
-}
-
-.mini-bar :deep(.ps-fill) {
-  background: var(--lyric-ps-fill);
-}
-
-.mini-bar :deep(.ps-thumb) {
-  background: var(--lyric-ps-thumb);
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
-}
-
-.mini-bar :deep(.pslider.dragging .ps-fill),
-.mini-bar :deep(.pslider:hover .ps-fill) {
-  background: var(--lyric-ps-fill-hover);
-}
-
-.mini-bar :deep(.pslider.dragging .ps-track) {
-  background: var(--lyric-ps-track-hover);
-}
-
-.mini-progress {
-  position: absolute;
-  top: 5px;
-  left: 22px;
-  right: 22px;
 }
 
 .mini-left {
   min-width: 0;
+  flex: 1;
 }
 
 .mini-title {
@@ -968,66 +997,112 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 220px;
+  letter-spacing: 0.2px;
+}
+
+.mini-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mini-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .mini-time {
   font-size: 11px;
   color: var(--lyric-time);
   font-variant-numeric: tabular-nums;
-  margin-top: 2px;
-}
-
-.mini-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
+}
+
+.mini-time .cur {
+  color: var(--lyric-text-active);
+  font-weight: 600;
+}
+
+.mini-time .sep {
+  opacity: 0.4;
 }
 
 .mini-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   color: var(--lyric-control);
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
 }
 
 .mini-btn:hover {
-  background: var(--lyric-control-bg);
+  background: rgba(255, 255, 255, 0.16);
   color: var(--lyric-control-hover);
+}
+
+.mini-btn:active {
+  transform: scale(0.9);
 }
 
 .mini-btn.play {
   width: 40px;
   height: 40px;
-  background: var(--lyric-play-bg);
+  background: rgba(255, 255, 255, 0.95);
   color: var(--lyric-play-icon);
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: background 0.15s var(--ease-out), transform var(--dur-fast) var(--ease-spring);
 }
 
 .mini-btn.play:hover {
   background: var(--lyric-play-bg-hover);
+  transform: scale(1.06);
 }
 
-/* 音量条默认收起，悬停控件区时从右侧展开——胶囊更紧凑，功能不缺席 */
+.mini-btn.play:active {
+  transform: scale(0.94);
+}
+
+/* 音量按钮 + 音量条组合：hover 控件区时音量条从左侧展开 */
+.mini-volume-wrap {
+  display: flex;
+  align-items: center;
+  margin-left: 2px;
+}
+
 .mini-volume {
   width: 0;
   height: 4px;
   appearance: none;
   -webkit-appearance: none;
   border-radius: 2px;
-  background: linear-gradient(to right, var(--lyric-control) var(--vol, 80%), rgba(255, 255, 255, 0.15) var(--vol, 80%));
+  background: linear-gradient(
+    to right,
+    var(--lyric-text-active) var(--vol, 80%),
+    rgba(255, 255, 255, 0.18) var(--vol, 80%)
+  );
   cursor: pointer;
   opacity: 0;
-  transition: width var(--dur-med) var(--ease-out), opacity var(--dur-med) var(--ease-out), margin var(--dur-med) var(--ease-out);
+  margin-left: 0;
+  transition: width var(--dur-med) var(--ease-out), opacity var(--dur-med) var(--ease-out),
+    margin var(--dur-med) var(--ease-out);
 }
 
 .mini-controls:hover .mini-volume,
+.mini-volume-wrap:hover .mini-volume,
 .mini-volume:focus-visible {
-  width: 76px;
-  opacity: 0.9;
-  margin-left: 4px;
+  width: 72px;
+  opacity: 1;
+  margin-left: 6px;
 }
 
 .mini-volume::-webkit-slider-thumb {
@@ -1037,11 +1112,63 @@ onMounted(() => {
   height: 11px;
   border-radius: 50%;
   background: var(--lyric-text-active);
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
   transition: transform var(--dur-fast) var(--ease-spring);
 }
 
 .mini-volume:hover::-webkit-slider-thumb {
   transform: scale(1.2);
+}
+
+/* 进度条边线：作为 mini-bar 整体底边，3px 高，圆角胶囊两端收边 */
+.mini-progress-edge {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 6px;
+  height: 3px;
+  border-radius: 999px;
+  pointer-events: none;
+  overflow: visible;
+  background: rgba(255, 255, 255, 0.12);
+  transition: height var(--dur-fast) var(--ease-out), background 0.2s var(--ease-out);
+}
+
+/* 实际可拖的轨道：覆盖在底边上，撑满 mini-bar 底边宽度，热区上下扩 8px */
+.mini-progress-track {
+  position: absolute;
+  inset: -8px 0;
+  cursor: pointer;
+  pointer-events: auto;
+  border-radius: 999px;
+}
+
+.mini-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.7) 0%,
+    var(--lyric-text-active) 100%
+  );
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.35);
+  transition: width 80ms linear;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* hover / 拖拽时进度条微微变粗变亮，给出"可拖动"反馈 */
+.mini-bar:hover .mini-progress-edge,
+.mini-bar.is-dragging .mini-progress-edge {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.mini-bar.is-dragging .mini-progress-fill {
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
 }
 </style>
