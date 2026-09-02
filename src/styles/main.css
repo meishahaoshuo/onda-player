@@ -136,6 +136,8 @@
   --lyric-ps-fill-hover: rgba(255, 255, 255, 0.3);
   --lyric-ps-track-hover: rgba(255, 255, 255, 0.1);
   --lyric-accent: #fff;
+  --lyric-progress-bubble-bg: rgba(24, 26, 30, 0.86);
+  --lyric-progress-bubble-text: rgba(255, 255, 255, 0.95);
 
   /* 歌词字号（歌词页内可切换档位，此处为默认「中」档） */
   --lyric-fs: 22px;

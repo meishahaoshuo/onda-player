@@ -300,6 +300,7 @@ const progressPct = computed(() => {
 const trackRef = ref<HTMLElement | null>(null)
 const dragPct = ref<number | null>(null)
 const displayPct = computed(() => dragPct.value ?? progressPct.value)
+const bubbleTime = computed(() => formatDuration((displayPct.value / 100) * progressDuration.value))
 let progressDraggingPointerId = -1
 const progressDragging = ref(false)
 let progressDragTimer = 0
@@ -668,7 +669,7 @@ onMounted(() => {
       </div>
 
       <div class="mini-controls">
-        <button class="mini-btn" :title="modeMeta.label" @click="cycleMode">
+        <button class="mini-btn mode" :title="modeMeta.label" @click="cycleMode">
           <AppIcon :name="modeMeta.icon" :size="17" />
         </button>
         <button class="mini-btn" title="上一曲" @click="player.prev()">
@@ -676,6 +677,7 @@ onMounted(() => {
         </button>
         <button
           class="mini-btn play"
+          :class="{ playing: player.playing }"
           :title="player.playing ? '暂停' : '播放'"
           @click="player.current ? player.togglePlay() : player.resumePlay()"
         >
@@ -719,6 +721,13 @@ onMounted(() => {
           class="mini-progress-thumb"
           :style="{ left: displayPct + '%', opacity: progressDragging ? 1 : 0 }"
         />
+        <div
+          class="mini-progress-bubble"
+          :class="{ show: progressDragging }"
+          :style="{ left: displayPct + '%' }"
+        >
+          {{ bubbleTime }}
+        </div>
         <div
           ref="trackRef"
           class="mini-progress-track"
@@ -922,7 +931,7 @@ onMounted(() => {
   /* 封面与歌词之间留更宽的呼吸空间（96 → 160），整体左右居中 */
   gap: 160px;
   /* 上下等距内边距 → 内容垂直居中于整个视口（迷你条为浮层，不参与占位） */
-  padding: 24px 48px 112px; /* 底部预留迷你条空间，避免歌词衬到条后面 */
+  padding: 24px 48px 120px; /* 底部预留迷你条（含拖拽气泡）空间，避免歌词衬到条后面 */
 }
 
 /* 切歌切换动画：封面与歌词淡出淡入 */
@@ -1074,7 +1083,7 @@ onMounted(() => {
   gap: 22px;
   min-width: 500px;
   max-width: 76vw;
-  padding: 12px 22px 18px; /* 底部留 6px 给进度条 */
+  padding: 12px 22px 34px; /* 底部留白给进度条 + 拖拽时间气泡 */
   border-radius: 22px;
   /* 玻璃底：低透明度 + 暗色透出 + 极弱高光，胶囊像「轻浮」在背景之上 */
   background:
@@ -1085,13 +1094,14 @@ onMounted(() => {
       rgba(255, 255, 255, 0.07) 100%
     ),
     rgba(20, 22, 28, 0.28);
-  backdrop-filter: blur(44px) saturate(1.4);
-  -webkit-backdrop-filter: blur(44px) saturate(1.4);
+  backdrop-filter: blur(48px) saturate(1.5);
+  -webkit-backdrop-filter: blur(48px) saturate(1.5);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  /* 内阴影只留顶 1px 高光（去掉左右微弱高光与底黑——过度刻画会让胶囊"硬"） */
+  /* 拟物玻璃：顶缘 rim 高光 + 底缘微弱反射（回显环境光）+ 柔和外光（避免大黑阴影成黑色光晕） */
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 10px 32px rgba(0, 0, 0, 0.35);
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.07),
+    0 14px 40px rgba(0, 0, 0, 0.26);
   animation: bar-in 520ms var(--ease-spring) 120ms backwards;
   transition: background 0.3s var(--ease-out), box-shadow 0.3s var(--ease-out);
 }
@@ -1176,13 +1186,21 @@ onMounted(() => {
 .mini-btn:hover {
   background: rgba(255, 255, 255, 0.16);
   color: var(--lyric-control-hover);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 0 14px rgba(255, 255, 255, 0.08);
 }
 
 .mini-btn:active {
   transform: scale(0.9);
 }
 
+/* 模式按钮点击时轻旋转回位，增强「触感」 */
+.mini-btn.mode:active {
+  transform: scale(0.9) rotate(-14deg);
+}
+
 .mini-btn.play {
+  position: relative;
+  isolation: isolate;
   width: 40px;
   height: 40px;
   background: rgba(255, 255, 255, 0.95);
@@ -1191,6 +1209,36 @@ onMounted(() => {
     0 4px 14px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.6);
   transition: background 0.15s var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+}
+
+/* 播放时柔光呼吸：白/低饱和 radial 微光，走合成器，避免黑色光晕 */
+.mini-btn.play::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 70%);
+  opacity: 0;
+  z-index: -1;
+  pointer-events: none;
+  transition: opacity 0.3s var(--ease-out);
+}
+
+.mini-btn.play.playing::after {
+  opacity: 0.55;
+  animation: play-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes play-glow {
+  0%,
+  100% {
+    transform: scale(0.82);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.6;
+  }
 }
 
 .mini-btn.play:hover {
@@ -1319,5 +1367,35 @@ onMounted(() => {
 .mini-bar.is-dragging .mini-progress-fill {
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
   transition: none; /* 拖拽时关闭 width 过渡，fill 即时跟手 */
+}
+
+/* 拖拽时间气泡：仅拖拽时显示，跟随拇指、弹出小玻璃胶囊，显示目标时间 */
+.mini-progress-bubble {
+  position: absolute;
+  bottom: 8px; /* 悬于底边上，落在预留的底部留白里 */
+  left: 0;
+  transform: translateX(-50%) scale(0.9);
+  transform-origin: center bottom;
+  padding: 3px 9px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--lyric-progress-bubble-text);
+  background: var(--lyric-progress-bubble-bg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+}
+
+.mini-progress-bubble.show {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
 }
 </style>
