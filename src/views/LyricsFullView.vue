@@ -495,7 +495,7 @@ function flyIn() {
     flying.style.width = `${d.width}px`
     flying.style.height = `${d.height}px`
     flying.style.borderRadius = '12px'
-    flying.style.boxShadow = '0 24px 64px rgba(0,0,0,0.45)'
+    flying.style.boxShadow = '0 16px 36px rgba(0,0,0,0.26)'
     flying.style.zIndex = '60'
     flying.style.pointerEvents = 'none'
     flying.style.willChange = 'transform'
@@ -556,7 +556,7 @@ async function closeWithFade() {
         width: `${s.width}px`,
         height: `${s.height}px`,
         borderRadius: '12px',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
+        boxShadow: '0 16px 36px rgba(0,0,0,0.26)',
         zIndex: '80',
         pointerEvents: 'none',
         willChange: 'transform',
@@ -970,7 +970,7 @@ onMounted(() => {
   width: min(42vh, 30vw);
   height: min(42vh, 30vw);
   border-radius: 12px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.26); /* 柔和悬浮感，避免大黑阴影形成黑色光晕 */
 }
 
 /* ---------- 歌词 ---------- */
