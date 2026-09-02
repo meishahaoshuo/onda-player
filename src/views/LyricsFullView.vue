@@ -409,9 +409,11 @@ function settleFly(flying: HTMLElement | null, dstEl: HTMLElement | null) {
       requestAnimationFrame(() => scrollToActive(false))
     })
   }
-  // 交叉淡化交接：克隆淡出、真实封面淡入，mask 任何镜像/内容差异，避免最后「闪一下」
+  // 交接：真实封面立即不透明并藏于克隆之下，再仅淡出克隆——避免两者同时半透明让背景透出（闪一下）
   if (flying && dstEl) {
-    dstEl.style.transition = 'opacity 120ms linear'
+    // 真实封面立即不透明（被仍在顶层的克隆盖住），再只淡出克隆：
+    // 两者若同时半透明会让背景透出、亮度坍塌成「闪一下」
+    dstEl.style.transition = 'none'
     dstEl.style.opacity = '1'
     flying.style.transition = 'opacity 120ms linear'
     flying.style.opacity = '0'
@@ -498,6 +500,7 @@ function flyIn() {
     flying.style.pointerEvents = 'none'
     flying.style.willChange = 'transform'
     flying.style.transformOrigin = 'center center'
+    flying.style.objectFit = 'cover'
     flying.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`
 
     // 飞行期间隐藏目标封面，避免重叠
