@@ -145,12 +145,12 @@ watch(
     // 等切换动画完成再让用户看到歌词时，已经在正确位置。
     await nextTick()
     scrollToActive(false)
-    // 保证淡出阶段真正可见（至少 380ms 与封面/歌词过渡对齐）再淡入，
-    // 切歌才有完整过场；少于 380ms 就延后到刚好 380ms
+    // 保证入场阶段真正可见（至少 520ms 与封面 spring 弹入对齐）再归位，
+    // 切歌才有完整过场；少于 520ms 就延后到刚好 520ms
     const elapsed = performance.now() - switchStart
     window.setTimeout(() => {
       switching.value = false
-    }, Math.max(0, 380 - elapsed))
+    }, Math.max(0, 520 - elapsed))
   },
   { immediate: true },
 )
@@ -902,26 +902,25 @@ onMounted(() => {
 }
 
 /* 切歌切换动画：封面与歌词淡出淡入 */
-/* 切歌切换：旧封面左移滑出、歌词右移滑入 → 方向性过场，读作「切换」而非「消失」。 */
-.main .cover-col,
+/* 切歌切换：新封面 spring 轻弹入场 + 歌词上浮淡入。避免小幅方向性滑动读成「抽搐」。 */
+.main .cover-main {
+  transition: transform 520ms var(--ease-spring), opacity 380ms var(--ease-out);
+}
+
 .main .lyric-scroll,
 .main .no-lyrics-hint {
-  transition: opacity 380ms var(--ease-out), transform 380ms var(--ease-spring);
+  transition: opacity 420ms var(--ease-out), transform 420ms var(--ease-spring);
 }
 
-.main .cover-main {
-  transition: transform 380ms var(--ease-spring), opacity 380ms var(--ease-out);
-}
-
-.main.switching .cover-col {
-  opacity: 0;
-  transform: translateX(-24px);
+.main.switching .cover-main {
+  transform: scale(0.9);
+  opacity: 0.7;
 }
 
 .main.switching .lyric-scroll,
 .main.switching .no-lyrics-hint {
-  opacity: 0;
-  transform: translateX(24px);
+  opacity: 0.7;
+  transform: translateY(18px);
 }
 
 /* 封面飞入期间：封面不参与切歌淡入淡出。
