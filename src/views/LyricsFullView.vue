@@ -113,13 +113,19 @@ const switching = ref(false)
 const scroller = ref<HTMLElement | null>(null)
 /** 切歌淡出起始时刻（须在 watch 前声明） */
 let switchStart = 0
+/** 是否首次挂载：首次打开歌词页由 flyIn 接管入场，不触发「切歌」过场，避免与飞入状态冲突 */
+let currentPathFirstRun = true
 
 watch(
   () => player.currentPath,
   async (path) => {
     lyricsSettled.value = false
-    switching.value = true // 切歌：内容淡出
-    switchStart = performance.now()
+    const isFirstRun = currentPathFirstRun
+    currentPathFirstRun = false
+    if (!isFirstRun) {
+      switching.value = true // 切歌：内容淡出淡入
+      switchStart = performance.now()
+    }
     groups.value = []
     const song = player.current
     if (!path || !song) {
@@ -145,12 +151,13 @@ watch(
     // 等切换动画完成再让用户看到歌词时，已经在正确位置。
     await nextTick()
     scrollToActive(false)
-    // 保证入场阶段真正可见（至少 520ms 与封面 spring 弹入对齐）再归位，
-    // 切歌才有完整过场；少于 520ms 就延后到刚好 520ms
+    // 保证入场阶段真正可见（至少 640ms 与封面 spring 弹入对齐）再归位，
+    // 切歌才有完整过场；少于 640ms 就延后到刚好 640ms
+    if (isFirstRun) return // 首次挂载：不停留在切换态，直接就位
     const elapsed = performance.now() - switchStart
     window.setTimeout(() => {
       switching.value = false
-    }, Math.max(0, 520 - elapsed))
+    }, Math.max(0, 640 - elapsed))
   },
   { immediate: true },
 )
@@ -391,16 +398,30 @@ function waitForLyrics(timeout: number): Promise<void> {
 
 /** 落地后的收尾：恢复真实封面、清掉飞行层、补上歌词定位 */
 function settleFly(flying: HTMLElement | null, dstEl: HTMLElement | null) {
-  // 同一帧内恢复真实封面并移除克隆，再于下一帧清除 fly-active，避免落地过渡闪动
-  if (dstEl) dstEl.style.opacity = '1'
-  if (flying) {
-    flying.style.willChange = ''
-    flying.remove()
+  const finish = () => {
+    if (flying) {
+      flying.style.willChange = ''
+      flying.remove()
+    }
+    if (dstEl) dstEl.style.transition = ''
+    requestAnimationFrame(() => {
+      flyActive.value = false
+      requestAnimationFrame(() => scrollToActive(false))
+    })
   }
-  requestAnimationFrame(() => {
-    flyActive.value = false
-    requestAnimationFrame(() => scrollToActive(false))
-  })
+  // 交叉淡化交接：克隆淡出、真实封面淡入，mask 任何镜像/内容差异，避免最后「闪一下」
+  if (flying && dstEl) {
+    dstEl.style.transition = 'opacity 120ms linear'
+    dstEl.style.opacity = '1'
+    flying.style.transition = 'opacity 120ms linear'
+    flying.style.opacity = '0'
+    requestAnimationFrame(() => {
+      window.setTimeout(finish, 130)
+    })
+  } else {
+    if (dstEl) dstEl.style.opacity = '1'
+    finish()
+  }
 }
 
 function flyIn() {
@@ -904,23 +925,23 @@ onMounted(() => {
 /* 切歌切换动画：封面与歌词淡出淡入 */
 /* 切歌切换：新封面 spring 轻弹入场 + 歌词上浮淡入。避免小幅方向性滑动读成「抽搐」。 */
 .main .cover-main {
-  transition: transform 520ms var(--ease-spring), opacity 380ms var(--ease-out);
+  transition: transform 640ms var(--ease-spring), opacity 460ms var(--ease-out);
 }
 
 .main .lyric-scroll,
 .main .no-lyrics-hint {
-  transition: opacity 420ms var(--ease-out), transform 420ms var(--ease-spring);
+  transition: opacity 520ms var(--ease-out), transform 560ms var(--ease-out);
 }
 
 .main.switching .cover-main {
-  transform: scale(0.9);
-  opacity: 0.7;
+  transform: scale(0.92);
+  opacity: 0.55;
 }
 
 .main.switching .lyric-scroll,
 .main.switching .no-lyrics-hint {
-  opacity: 0.7;
-  transform: translateY(18px);
+  opacity: 0.55;
+  transform: translateY(22px);
 }
 
 /* 封面飞入期间：封面不参与切歌淡入淡出。
