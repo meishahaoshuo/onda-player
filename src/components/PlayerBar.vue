@@ -32,10 +32,10 @@ watch(
 )
 
 
-const MODE_META: { mode: PlayMode; icon: 'repeat' | 'repeatOne' | 'shuffle'; label: string }[] = [
-  { mode: 'order', icon: 'repeat', label: '顺序播放' },
-  { mode: 'loop', icon: 'repeat', label: '列表循环' },
+const MODE_META: { mode: PlayMode; icon: 'order' | 'repeat' | 'repeatOne' | 'shuffle'; label: string }[] = [
+  { mode: 'order', icon: 'order', label: '顺序播放' },
   { mode: 'one', icon: 'repeatOne', label: '单曲循环' },
+  { mode: 'loop', icon: 'repeat', label: '列表循环' },
   { mode: 'shuffle', icon: 'shuffle', label: '随机播放' },
 ]
 

@@ -91,6 +91,18 @@ async function urlToBlob(url: string): Promise<Blob> {
   )
 }
 
+/** 预加载一张图片（等位图就绪），用于在飞入前把目标封面切换到高清图，避免落地清晰度跳变。 */
+function preloadImage(src: string): Promise<void> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    const done = () => resolve()
+    img.onload = done
+    img.onerror = done
+    img.src = src
+    if (typeof img.decode === 'function') img.decode().then(done, done)
+  })
+}
+
 const groups = ref<LyricGroup[]>([])
 const loading = ref(false)
 /** 歌词加载完成标记（有无歌词都置 true），飞入动画据此等布局稳定 */
@@ -133,12 +145,12 @@ watch(
     // 等切换动画完成再让用户看到歌词时，已经在正确位置。
     await nextTick()
     scrollToActive(false)
-    // 保证淡出阶段真正可见（至少 480ms 与封面/歌词过渡对齐）再淡入，
-    // 切歌才有完整过场；少于 480ms 就延后到刚好 480ms
+    // 保证淡出阶段真正可见（至少 380ms 与封面/歌词过渡对齐）再淡入，
+    // 切歌才有完整过场；少于 380ms 就延后到刚好 380ms
     const elapsed = performance.now() - switchStart
     window.setTimeout(() => {
       switching.value = false
-    }, Math.max(0, 480 - elapsed))
+    }, Math.max(0, 380 - elapsed))
   },
   { immediate: true },
 )
@@ -255,10 +267,10 @@ function lineClass(i: number) {
 const hasLyrics = computed(() => groups.value.length > 0)
 
 /* 迷你播放条 */
-const MODE_META: { mode: PlayMode; icon: 'repeat' | 'repeatOne' | 'shuffle'; label: string }[] = [
-  { mode: 'order', icon: 'repeat', label: '顺序播放' },
-  { mode: 'loop', icon: 'repeat', label: '列表循环' },
+const MODE_META: { mode: PlayMode; icon: 'order' | 'repeat' | 'repeatOne' | 'shuffle'; label: string }[] = [
+  { mode: 'order', icon: 'order', label: '顺序播放' },
   { mode: 'one', icon: 'repeatOne', label: '单曲循环' },
+  { mode: 'loop', icon: 'repeat', label: '列表循环' },
   { mode: 'shuffle', icon: 'shuffle', label: '随机播放' },
 ]
 const modeMeta = computed(() => MODE_META.find((m) => m.mode === player.playMode)!)
@@ -277,12 +289,17 @@ const progressPct = computed(() => {
   return Math.min(100, Math.max(0, (player.currentTime / d) * 100))
 })
 
-/** 进度条拖拽：pointerdown 启动 → pointermove 跟手 → pointerup 落定 */
+/** 进度条拖拽：只以全宽 .mini-progress-track 为稳定参考（点中 thumb/fill 也用 track 矩形求比例），拖拽期间用 dragPct 即时跟手。 */
+const trackRef = ref<HTMLElement | null>(null)
+const dragPct = ref<number | null>(null)
+const displayPct = computed(() => dragPct.value ?? progressPct.value)
 let progressDraggingPointerId = -1
 const progressDragging = ref(false)
 let progressDragTimer = 0
 
-function ratioFromPointer(e: PointerEvent, track: HTMLElement): number {
+function ratioFromPointer(e: PointerEvent): number {
+  const track = trackRef.value
+  if (!track) return 0
   const rect = track.getBoundingClientRect()
   if (rect.width <= 0) return 0
   return Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
@@ -291,33 +308,39 @@ function ratioFromPointer(e: PointerEvent, track: HTMLElement): number {
 function onProgressPointerDown(e: PointerEvent) {
   const d = progressDuration.value
   if (d <= 0) return
-  const track = e.currentTarget as HTMLElement
+  const track = trackRef.value
+  if (!track) return
   // 阻止文本选择 + native dragstart
   e.preventDefault()
-  ;(track as HTMLElement).setPointerCapture?.(e.pointerId)
+  track.setPointerCapture?.(e.pointerId)
   progressDraggingPointerId = e.pointerId
   progressDragging.value = true
   window.clearTimeout(progressDragTimer)
   // 即时跳到点击位置（按下就 seek，不要等到松手）
-  player.seek(ratioFromPointer(e, track) * d)
+  const r = ratioFromPointer(e)
+  dragPct.value = r * 100
+  player.seek(r * d)
 }
 
 function onProgressPointerMove(e: PointerEvent) {
   if (progressDraggingPointerId !== e.pointerId) return
   const d = progressDuration.value
   if (d <= 0) return
-  // 跟手：仅在拖拽中才实时 seek（避免和 currentTime 抖动）
-  const track = e.currentTarget as HTMLElement
-  player.seek(ratioFromPointer(e, track) * d)
+  const r = ratioFromPointer(e)
+  dragPct.value = r * 100
+  player.seek(r * d)
 }
 
 function onProgressPointerUp(e: PointerEvent) {
   if (progressDraggingPointerId !== e.pointerId) return
-  ;(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId)
+  trackRef.value?.releasePointerCapture?.(e.pointerId)
   progressDraggingPointerId = -1
   progressDragging.value = false
   window.clearTimeout(progressDragTimer)
-  // 600ms 后允许 is-dragging 的高亮淡出，但 currentTime 已经追上，所以立即解除
+  // 松手后把 dragPct 交还给 progressPct（下一帧 currentTime 已跟上，避免视觉回弹）
+  requestAnimationFrame(() => {
+    dragPct.value = null
+  })
 }
 
 /* ---------- 歌词字号：歌词页内 Aa 快捷档位 ---------- */
@@ -368,13 +391,16 @@ function waitForLyrics(timeout: number): Promise<void> {
 
 /** 落地后的收尾：恢复真实封面、清掉飞行层、补上歌词定位 */
 function settleFly(flying: HTMLElement | null, dstEl: HTMLElement | null) {
+  // 同一帧内恢复真实封面并移除克隆，再于下一帧清除 fly-active，避免落地过渡闪动
   if (dstEl) dstEl.style.opacity = '1'
   if (flying) {
     flying.style.willChange = ''
     flying.remove()
   }
-  flyActive.value = false
-  requestAnimationFrame(() => scrollToActive(false))
+  requestAnimationFrame(() => {
+    flyActive.value = false
+    requestAnimationFrame(() => scrollToActive(false))
+  })
 }
 
 function flyIn() {
@@ -389,14 +415,14 @@ function flyIn() {
     //    飞过去后会再被布局推到真实位置 → 卡顿。有歌词/无歌词都靠 lyricsSettled。
     // 2) 同时给高清封面留一点时间：飞行途中显示的就是最终那张图，落地不跳清晰度。
     const coverId = player.current?.coverId ?? null
-    await Promise.all([
-      waitForLyrics(450),
+    const [hiRes] = await Promise.all([
       coverId
         ? Promise.race([
             library.coverUrlHi(coverId).catch(() => null),
             new Promise((r) => setTimeout(r, 220)),
           ])
-        : Promise.resolve(),
+        : Promise.resolve(null),
+      waitForLyrics(450),
     ])
     // 双 rAF：确保最终布局已提交，取到真实目标坐标
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
@@ -414,6 +440,15 @@ function flyIn() {
     if (!dstInner) {
       settleFly(null, dstEl)
       return
+    }
+    // 落地前先把目标封面切到高清图并预载，克隆与落地后是同一张 → 无清晰度跳变
+    if (
+      typeof hiRes === 'string' &&
+      dstInner.tagName === 'IMG' &&
+      dstInner.getAttribute('src') !== hiRes
+    ) {
+      await preloadImage(hiRes)
+      dstInner.setAttribute('src', hiRes)
     }
     const flying = dstInner.cloneNode(true) as HTMLElement
 
@@ -626,7 +661,7 @@ onMounted(() => {
           <AppIcon name="next" :size="18" />
         </button>
         <div class="mini-volume-wrap">
-          <button class="mini-btn" :title="`音量 ${player.volume}%`" @click="player.setVolume(player.volume === 0 ? 80 : 0)">
+          <button class="mini-btn" :title="`音量 ${player.volume}%`" @click="player.toggleMute()">
             <AppIcon :name="player.volume === 0 ? 'volumeMute' : 'volume'" :size="17" />
           </button>
           <input
@@ -654,21 +689,14 @@ onMounted(() => {
       <div class="mini-progress-edge">
         <div
           class="mini-progress-fill"
-          :style="{ width: progressPct + '%' }"
-          @pointerdown="onProgressPointerDown"
-          @pointermove="onProgressPointerMove"
-          @pointerup="onProgressPointerUp"
-          @pointercancel="onProgressPointerUp"
+          :style="{ width: displayPct + '%' }"
         />
         <div
           class="mini-progress-thumb"
-          :style="{ left: progressPct + '%', opacity: progressDragging ? 1 : 0 }"
-          @pointerdown="onProgressPointerDown"
-          @pointermove="onProgressPointerMove"
-          @pointerup="onProgressPointerUp"
-          @pointercancel="onProgressPointerUp"
+          :style="{ left: displayPct + '%', opacity: progressDragging ? 1 : 0 }"
         />
         <div
+          ref="trackRef"
           class="mini-progress-track"
           @pointerdown="onProgressPointerDown"
           @pointermove="onProgressPointerMove"
@@ -725,10 +753,10 @@ onMounted(() => {
 @keyframes ambient-breathe {
   0%,
   100% {
-    transform: scale(0.98);
+    transform: scale(1);
   }
   50% {
-    transform: scale(1.02);
+    transform: scale(1.06);
   }
 }
 
@@ -870,36 +898,30 @@ onMounted(() => {
   /* 封面与歌词之间留更宽的呼吸空间（96 → 160），整体左右居中 */
   gap: 160px;
   /* 上下等距内边距 → 内容垂直居中于整个视口（迷你条为浮层，不参与占位） */
-  padding: 24px 48px;
+  padding: 24px 48px 112px; /* 底部预留迷你条空间，避免歌词衬到条后面 */
 }
 
 /* 切歌切换动画：封面与歌词淡出淡入 */
-/* 切歌切换：封面 crossfade 重点（旧封面缩小淡出 → 新封面 spring 入场），
-   歌词同步 480ms 淡出淡入。缓动与 spring 让"断片感"变成丝滑过场。 */
+/* 切歌切换：旧封面左移滑出、歌词右移滑入 → 方向性过场，读作「切换」而非「消失」。 */
 .main .cover-col,
 .main .lyric-scroll,
 .main .no-lyrics-hint {
-  transition: opacity 480ms var(--ease-out), transform 480ms var(--ease-spring);
+  transition: opacity 380ms var(--ease-out), transform 380ms var(--ease-spring);
 }
 
 .main .cover-main {
-  transition: transform 480ms var(--ease-spring), opacity 480ms var(--ease-out);
+  transition: transform 380ms var(--ease-spring), opacity 380ms var(--ease-out);
 }
 
-.main.switching .cover-col,
+.main.switching .cover-col {
+  opacity: 0;
+  transform: translateX(-24px);
+}
+
 .main.switching .lyric-scroll,
 .main.switching .no-lyrics-hint {
   opacity: 0;
-  transform: translateY(14px);
-}
-
-.main.switching .cover-main {
-  transform: scale(0.94);
-}
-
-/* 歌词淡出时反向偏移一点（位移方向不同 → 视觉读为「切换」而非「消失」） */
-.main.switching .lyric-scroll {
-  transform: translateY(-8px);
+  transform: translateX(24px);
 }
 
 /* 封面飞入期间：封面不参与切歌淡入淡出。
@@ -1242,8 +1264,7 @@ onMounted(() => {
   );
   box-shadow: 0 0 6px rgba(255, 255, 255, 0.35);
   transition: width 80ms linear;
-  pointer-events: auto;
-  cursor: pointer;
+  pointer-events: none;
 }
 
 /* 拖拽时显示 thumb 圆点，跟随落点 */
@@ -1256,8 +1277,7 @@ onMounted(() => {
   background: var(--lyric-text-active);
   box-shadow: 0 0 8px rgba(255, 255, 255, 0.55), 0 1px 3px rgba(0, 0, 0, 0.3);
   transform: translate(-50%, -50%) scale(0.6);
-  pointer-events: auto;
-  cursor: pointer;
+  pointer-events: none;
   transition: opacity 0.12s var(--ease-out), transform 0.18s var(--ease-spring);
   z-index: 1;
 }
@@ -1275,5 +1295,6 @@ onMounted(() => {
 
 .mini-bar.is-dragging .mini-progress-fill {
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
+  transition: none; /* 拖拽时关闭 width 过渡，fill 即时跟手 */
 }
 </style>

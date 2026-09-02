@@ -29,6 +29,8 @@ export const iconPaths = {
     '<path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
   repeatOne:
     '<path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/><path d="M11 10l2-1v6" stroke-width="1.6"/>',
+  order:
+    '<path d="M4 5h13M4 12h13M4 19h9"/><path d="M16 8l6 4-6 4z" fill="currentColor" stroke="none"/>',
   queue: '<path d="M3 6h13M3 12h13M3 18h9"/><path d="M16 12h6M19 9v6"/>',
   volume:
     '<path d="M11 5L6 9H2v6h4l5 4z" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>',

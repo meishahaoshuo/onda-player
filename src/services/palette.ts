@@ -77,8 +77,10 @@ function computeAmbient(data: Uint8ClampedArray, W: number, H: number) {
   const avgB = globalB / totalBlocks
   const avgLum = (avgR + avgG + avgB) / 3
 
-  // 全局压暗系数：亮封面强压避免炸成白雾，暗封面不压保持沉郁。
-  const dim = avgLum > 180 ? 0.55 : avgLum > 120 ? 0.75 : 1.0
+  // 全局压暗系数：暗封面（≤120）不压，亮封面（≥230）逐渐压到 0.55，
+  // 中间平滑过渡，替代原来的硬性阶梯，浅色封面不再被一刀切压暗。
+  const t = Math.min(1, Math.max(0, (avgLum - 120) / 110))
+  const dim = 1 - 0.45 * t
 
   const foci: Focus[] = []
   for (let gy = 0; gy < gridY; gy++) {
@@ -86,8 +88,8 @@ function computeAmbient(data: Uint8ClampedArray, W: number, H: number) {
       const c = blockColors[gy * gridX + gx]
       // 接近黑色的色块跳过：避免给本就暗的画面引入无意义黑色焦点
       if (c.max < 32) continue
-      // 高亮块（如白色文字）降权：避免单点过亮抢戏
-      if (c.lum > 220 && c.max - c.min < 30) continue
+      // 高亮块降权：仅跳过近乎纯白/单品色的像素，避免把封面主体色误滤掉
+      if (c.lum > 236 && c.max - c.min < 18) continue
       foci.push({
         r: Math.round(c.r * dim),
         g: Math.round(c.g * dim),
@@ -158,7 +160,7 @@ export async function renderAmbientUrl(blob: Blob): Promise<string> {
     const tctx = temp.getContext('2d')!
     tctx.fillStyle = `rgb(${base.r},${base.g},${base.b})`
     tctx.fillRect(0, 0, OUT_W, OUT_H)
-    const radius = Math.max(OUT_W, OUT_H) * 0.6
+    const radius = Math.max(OUT_W, OUT_H) * 0.75
     for (const f of foci) {
       const cx = (f.x / 100) * OUT_W
       const cy = (f.y / 100) * OUT_H
@@ -175,7 +177,7 @@ export async function renderAmbientUrl(blob: Blob): Promise<string> {
     const octx = out.getContext('2d')!
     octx.fillStyle = `rgb(${base.r},${base.g},${base.b})`
     octx.fillRect(0, 0, OUT_W, OUT_H)
-    octx.filter = 'blur(12px)'
+    octx.filter = 'blur(6px) saturate(1.06)'
     octx.drawImage(temp, 0, 0)
     octx.filter = 'none'
     return out.toDataURL('image/png')

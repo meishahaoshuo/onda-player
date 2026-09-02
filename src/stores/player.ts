@@ -38,6 +38,7 @@ export const usePlayerStore = defineStore('player', () => {
   const currentTime = ref(0)
   const duration = ref(0)
   const volume = ref(80)
+  const lastVolume = ref(80)
   const playMode = ref<PlayMode>('loop')
 
   const current = computed<SongRecord | null>(() => queue.value[index.value] ?? null)
@@ -176,6 +177,16 @@ export const usePlayerStore = defineStore('player', () => {
     scheduleSave()
   }
 
+  /** 静音/取消静音：记录上次非 0 音量，取消时恢复而非跳回固定值。 */
+  function toggleMute() {
+    if (volume.value > 0) {
+      lastVolume.value = volume.value
+      setVolume(0)
+    } else {
+      setVolume(lastVolume.value || 80)
+    }
+  }
+
   function setPlayMode(mode: PlayMode) {
     playMode.value = mode
   }
@@ -298,6 +309,7 @@ export const usePlayerStore = defineStore('player', () => {
     currentTime,
     duration,
     volume,
+    lastVolume,
     playMode,
     current,
     currentPath,
@@ -309,6 +321,7 @@ export const usePlayerStore = defineStore('player', () => {
     stop,
     seek,
     setVolume,
+    toggleMute,
     setPlayMode,
     restore,
   }
