@@ -1,46 +1,40 @@
 /**
- * 歌词页环境背景：把封面分块采样得到 N 个色焦点，
- * 每个焦点输出一个 radial-gradient，最后叠在一起形成"环境光晕"——多色焦点互相渗透。
+ * 歌词页/详情页封面氛围取色：
+ * 把封面分块采样得到 N 个色焦点，多焦点 radial 互相渗透形成"环境光晕"，
+ * 而不是"缩封面 → 单层 CSS blur"（那种颜色构图不准，也做不出多焦点融合）。
  *
- * 不再依赖「缩小封面 → CSS blur」的老路（那种方式只是单层模糊，颜色构图不准，
- * 也无法形成参考图中那种"左上偏暖、右下偏冷"的多焦点融合感）。
- *
- * 输出：`{ layers: string[], base: string }`。
- * - `layers` 每个元素是一个独立 radial-gradient（"焦点"），
- *   模板中每个焦点一个 div，可独立做相位错开的呼吸动画。
- * - `base` 是整图平均色的纯色 linear，作为最底层。
+ * 两个出口：
+ * - makeAmbientGradient(blob)：返回多 background-image 的 CSS 字符串（专辑详情等单层场景）。
+ * - renderAmbientUrl(blob)：把全部焦点画到一张小画布再烘焙一次 canvas blur，
+ *   导出 PNG dataURL（歌词页用）。模糊已在图内，上层无需 CSS filter，从而避免
+ *   多个全屏 blur(80px) 图层在飞入/切歌时并行栅格化——这是卡顿的根因。
  */
 
-export interface AmbientGradient {
-  layers: string[]
-  base: string
+interface Focus {
+  r: number
+  g: number
+  b: number
+  /** 焦点中心位置（百分比 0-100） */
+  x: number
+  y: number
 }
 
-export async function makeAmbientGradient(blob: Blob): Promise<string>
-export async function makeAmbientGradient(blob: Blob, opts: { split: true }): Promise<AmbientGradient>
-export async function makeAmbientGradient(blob: Blob, opts?: { split?: boolean }): Promise<string | AmbientGradient> {
-  const bitmap = await createImageBitmap(blob)
-  try {
-    // 缩图到 64×N 像素：保留颜色构图但方便分块采样；不需太大
-    const W = 64
-    const H = Math.max(64, Math.round((W * bitmap.height) / bitmap.width))
-    const canvas = document.createElement('canvas')
-    canvas.width = W
-    canvas.height = H
-    const ctx = canvas.getContext('2d')!
-    ctx.drawImage(bitmap, 0, 0, W, H)
-    const { data } = ctx.getImageData(0, 0, W, H)
-
-    // 分块：横向 4 块、纵向 3 块 = 12 个采样点（再多就会互相覆盖失真）
-const gridX = 4
+/** 从 64×N 采样像素里算出：焦点列表（已压暗）+ 全局 base 色（已压暗）。 */
+function computeAmbient(data: Uint8ClampedArray, W: number, H: number) {
+  const gridX = 4
   const gridY = 3
-  const radials: string[] = []
-
-  // 一次扫描算两件事：每块平均色 + 整图总平均亮度（决定全局压暗比例）
   let globalR = 0
   let globalG = 0
   let globalB = 0
-  const blockColors: { r: number; g: number; b: number; n: number; min: number; max: number; lum: number }[] = []
+  const blockColors: {
+    r: number
+    g: number
+    b: number
+    n: number
+    min: number
+    max: number
+    lum: number
+  }[] = []
   for (let gy = 0; gy < gridY; gy++) {
     for (let gx = 0; gx < gridX; gx++) {
       let r = 0,
@@ -63,7 +57,15 @@ const gridX = 4
       const rm = Math.round(r / n)
       const gm = Math.round(g / n)
       const bm = Math.round(b / n)
-      blockColors.push({ r: rm, g: gm, b: bm, n, min: Math.min(rm, gm, bm), max: Math.max(rm, gm, bm), lum: (rm + gm + bm) / 3 })
+      blockColors.push({
+        r: rm,
+        g: gm,
+        b: bm,
+        n,
+        min: Math.min(rm, gm, bm),
+        max: Math.max(rm, gm, bm),
+        lum: (rm + gm + bm) / 3,
+      })
       globalR += rm
       globalG += gm
       globalB += bm
@@ -75,53 +77,109 @@ const gridX = 4
   const avgB = globalB / totalBlocks
   const avgLum = (avgR + avgG + avgB) / 3
 
-  // 全局压暗系数：
-  //   亮封面（>180）强压（×0.55）→ 浅色封面不会炸成白色雾团
-  //   中亮（120-180）中压（×0.75）→ 标准
-  //   暗封面（<120）不压（×1.0）→ 保持原本的沉郁粉紫
-  // 同时作为 base 色与所有焦点色的统一缩放因子。
-  const dim =
-    avgLum > 180 ? 0.55 : avgLum > 120 ? 0.75 : 1.0
+  // 全局压暗系数：亮封面强压避免炸成白雾，暗封面不压保持沉郁。
+  const dim = avgLum > 180 ? 0.55 : avgLum > 120 ? 0.75 : 1.0
 
+  const foci: Focus[] = []
   for (let gy = 0; gy < gridY; gy++) {
     for (let gx = 0; gx < gridX; gx++) {
       const c = blockColors[gy * gridX + gx]
-      // 接近黑色的色块跳过：避免给本就暗的画面引入过多无意义黑色焦点
+      // 接近黑色的色块跳过：避免给本就暗的画面引入无意义黑色焦点
       if (c.max < 32) continue
-
-      // 高亮块（如白色文字）降权——避免单点过亮抢戏
-      const isNearWhite = c.lum > 220 && c.max - c.min < 30
-      if (isNearWhite) continue
-
-      // 全局压暗保持"沉郁环境光"基调
-      const r = Math.round(c.r * dim)
-      const g = Math.round(c.g * dim)
-      const b = Math.round(c.b * dim)
-
-      const cx = ((gx + 0.5) / gridX) * 100
-      const cy = ((gy + 0.5) / gridY) * 100
-      // 圆形 radial：中心实色 → 60% 半径透明。半径 60% 保证相邻焦点有显著重叠区
-      radials.push(
-        `radial-gradient(circle at ${cx.toFixed(1)}% ${cy.toFixed(1)}%, rgb(${r},${g},${b}) 0%, rgba(${r},${g},${b},0) 60%)`,
-      )
+      // 高亮块（如白色文字）降权：避免单点过亮抢戏
+      if (c.lum > 220 && c.max - c.min < 30) continue
+      foci.push({
+        r: Math.round(c.r * dim),
+        g: Math.round(c.g * dim),
+        b: Math.round(c.b * dim),
+        x: ((gx + 0.5) / gridX) * 100,
+        y: ((gy + 0.5) / gridY) * 100,
+      })
     }
   }
 
-  // base 色：整图平均 × 同样的 dim 因子，遮住 radial 透明处
-  const baseR = Math.round(avgR * dim)
-  const baseG = Math.round(avgG * dim)
-  const baseB = Math.round(avgB * dim)
-  const base = `linear-gradient(rgb(${baseR},${baseG},${baseB}), rgb(${baseR},${baseG},${baseB}))`
-
-  // 调用方需要拆分结构（每个焦点独立 div 做相位错开呼吸动画）→ 返回 AmbientGradient
-  if (opts?.split) {
-    return { layers: radials, base }
+  const base = {
+    r: Math.round(avgR * dim),
+    g: Math.round(avgG * dim),
+    b: Math.round(avgB * dim),
   }
-
-  // 多个 background-image 用逗号拼接；CSS 规则是"首个列在最上层、最后列在最下层"。
-  // 我们要 radial 在上、base 在下 → radials 放最前，base linear 放最后。
-  return `${radials.join(', ')}, ${base}`
-} finally {
-  bitmap.close()
+  return { foci, base }
 }
+
+/** 取一张 64×N 采样画布（读回像素供 computeAmbient 使用）。 */
+async function sampleBitmap(blob: Blob): Promise<{
+  W: number
+  H: number
+  data: Uint8ClampedArray
+  bitmap: ImageBitmap
+}> {
+  const bitmap = await createImageBitmap(blob)
+  const W = 64
+  const H = Math.max(64, Math.round((W * bitmap.height) / bitmap.width))
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')!
+  ctx.drawImage(bitmap, 0, 0, W, H)
+  const { data } = ctx.getImageData(0, 0, W, H)
+  return { W, H, data, bitmap }
+}
+
+/** 多背景 image 的 CSS 字符串（单层场景：专辑详情头图等）。 */
+export async function makeAmbientGradient(blob: Blob): Promise<string> {
+  const { W, H, data, bitmap } = await sampleBitmap(blob)
+  try {
+    const { foci, base } = computeAmbient(data, W, H)
+    const radials = foci.map(
+      (f) =>
+        `radial-gradient(circle at ${f.x.toFixed(1)}% ${f.y.toFixed(1)}%, rgb(${f.r},${f.g},${f.b}) 0%, rgba(${f.r},${f.g},${f.b},0) 60%)`,
+    )
+    const baseCss = `linear-gradient(rgb(${base.r},${base.g},${base.b}), rgb(${base.r},${base.g},${base.b}))`
+    return radials.length ? `${radials.join(', ')}, ${baseCss}` : baseCss
+  } finally {
+    bitmap.close()
+  }
+}
+
+/**
+ * 预烘焙成单张柔和模糊图（PNG dataURL）。
+ * 把全部焦点 radial + base 画到 ~160×90 小画布，再叠一层 canvas blur 柔化边缘，
+ * 导出后供 .bg-ambient 用 background-size:cover 拉伸——无需 CSS filter，单层一次栅格化。
+ */
+export async function renderAmbientUrl(blob: Blob): Promise<string> {
+  const { W, H, data, bitmap } = await sampleBitmap(blob)
+  try {
+    const { foci, base } = computeAmbient(data, W, H)
+    const OUT_W = 160
+    const OUT_H = 90
+    const temp = document.createElement('canvas')
+    temp.width = OUT_W
+    temp.height = OUT_H
+    const tctx = temp.getContext('2d')!
+    tctx.fillStyle = `rgb(${base.r},${base.g},${base.b})`
+    tctx.fillRect(0, 0, OUT_W, OUT_H)
+    const radius = Math.max(OUT_W, OUT_H) * 0.6
+    for (const f of foci) {
+      const cx = (f.x / 100) * OUT_W
+      const cy = (f.y / 100) * OUT_H
+      const grad = tctx.createRadialGradient(cx, cy, 0, cx, cy, radius)
+      grad.addColorStop(0, `rgba(${f.r},${f.g},${f.b},1)`)
+      grad.addColorStop(0.6, `rgba(${f.r},${f.g},${f.b},0)`)
+      tctx.fillStyle = grad
+      tctx.fillRect(0, 0, OUT_W, OUT_H)
+    }
+    // 烘焙 blur：先垫同色 base 底，避免模糊边缘透出透明而露黑
+    const out = document.createElement('canvas')
+    out.width = OUT_W
+    out.height = OUT_H
+    const octx = out.getContext('2d')!
+    octx.fillStyle = `rgb(${base.r},${base.g},${base.b})`
+    octx.fillRect(0, 0, OUT_W, OUT_H)
+    octx.filter = 'blur(12px)'
+    octx.drawImage(temp, 0, 0)
+    octx.filter = 'none'
+    return out.toDataURL('image/png')
+  } finally {
+    bitmap.close()
+  }
 }

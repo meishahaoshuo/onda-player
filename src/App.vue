@@ -122,7 +122,8 @@ onMounted(async () => {
 .view-body {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 0 24px 24px;
 }
 </style>

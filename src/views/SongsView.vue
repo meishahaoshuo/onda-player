@@ -99,6 +99,7 @@ const scanPct = computed(() =>
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-x: hidden;
 }
 
 .empty {
@@ -252,5 +253,6 @@ const scanPct = computed(() =>
 .list {
   flex: 1;
   min-height: 0;
+  overflow-x: hidden;
 }
 </style>

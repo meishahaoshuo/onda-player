@@ -4,7 +4,7 @@ import AppIcon from '@/components/AppIcon.vue'
 import CoverImage from '@/components/CoverImage.vue'
 import { readLrcFile } from '@/services/fs'
 import { parseLrc, type LyricGroup } from '@/services/lyrics'
-import { makeAmbientGradient } from '@/services/palette'
+import { renderAmbientUrl } from '@/services/palette'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
@@ -31,18 +31,15 @@ const flyActive = ref(false)
 const FLY_DURATION = 560
 const FLY_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
-/* ---------- 封面环境渐变（CSS 字符串：多 radial-gradient 焦点 + base 色） ---------- */
+/* ---------- 封面环境背景（单层预烘焙模糊图，避免多个全屏 blur 图层在飞入/切歌时并行栅格化） ---------- */
 
-const bgImage = ref<string | null>(null)
-const bgLayers = ref<string[]>([])
-const bgBase = ref<string>('')
-const bgShown = ref(false)
-const bgCache = new Map<string, string>()
-const bgLayersCache = new Map<string, { layers: string[]; base: string }>()
+const ambientUrl = ref<string | null>(null)
+const ambientShown = ref(false)
+const ambientCache = new Map<string, string>()
 
-function revealBg() {
+function revealAmbient() {
   requestAnimationFrame(() => {
-    bgShown.value = true
+    ambientShown.value = true
   })
 }
 
@@ -50,28 +47,17 @@ watch(
   () => player.current?.coverId ?? null,
   async (coverId) => {
     if (!coverId) {
-      bgImage.value = null
-      bgLayers.value = []
-      bgBase.value = ''
-      bgShown.value = false
+      ambientUrl.value = null
+      ambientShown.value = false
       return
     }
-    // 渐变立即挂 DOM + 立即 reveal：淡入和飞行是并行的（280ms vs 560ms），
-    // 飞行落地时背景已基本可见，没有"飞行后还要等半秒"的延迟感。
-    const apply = (css: string) => {
-      bgImage.value = css
-      revealBg()
+    const apply = (url: string) => {
+      ambientUrl.value = url
+      revealAmbient()
     }
-    const applySplit = (split: { layers: string[]; base: string }) => {
-      bgLayers.value = split.layers
-      bgBase.value = split.base
-      revealBg()
-    }
-    const cached = bgCache.get(coverId)
-    const cachedSplit = bgLayersCache.get(coverId)
-    if (cached && cachedSplit) {
+    const cached = ambientCache.get(coverId)
+    if (cached) {
       apply(cached)
-      applySplit(cachedSplit)
       return
     }
     try {
@@ -80,14 +66,9 @@ watch(
       // 走 <img> 解码 → canvas：比直接 fetch(blob URL) 在 HMR / 跨源 / 跨标签
       // 场景下更稳定（fetch blob URL 偶发 Failed to fetch）。
       const blob = await urlToBlob(url)
-      const [css, split] = await Promise.all([
-        makeAmbientGradient(blob),
-        makeAmbientGradient(blob, { split: true }),
-      ])
-      bgCache.set(coverId, css)
-      bgLayersCache.set(coverId, split as { layers: string[]; base: string })
-      apply(css)
-      applySplit(split as { layers: string[]; base: string })
+      const baked = await renderAmbientUrl(blob)
+      ambientCache.set(coverId, baked)
+      apply(baked)
     } catch {
       // 取色失败保持深色底
     }
@@ -364,12 +345,25 @@ function close() {
 
 const closing = ref(false)
 
-/** 轮询等待条件成立，最多等 timeout 毫秒 */
-async function waitUntil(pred: () => boolean, timeout: number) {
-  const t0 = performance.now()
-  while (!pred() && performance.now() - t0 < timeout) {
-    await new Promise((r) => setTimeout(r, 30))
-  }
+/** 等待歌词就位（布局稳定），最多等 timeout 毫秒；改用事件驱动而非 30ms 轮询。 */
+function waitForLyrics(timeout: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (lyricsSettled.value) {
+      resolve()
+      return
+    }
+    const stop = watch(lyricsSettled, (v) => {
+      if (v) {
+        window.clearTimeout(timer)
+        stop()
+        resolve()
+      }
+    })
+    const timer = window.setTimeout(() => {
+      stop()
+      resolve()
+    }, timeout)
+  })
 }
 
 /** 落地后的收尾：恢复真实封面、清掉飞行层、补上歌词定位 */
@@ -387,16 +381,16 @@ function flyIn() {
   void (async () => {
     flyActive.value = true
     await nextTick()
-    // 如果已有缓存渐变（切歌时的预取或上次浏览），立即 reveal：
+    // 如果已有缓存背景（切歌时的预取或上次浏览），立即 reveal：
     // 280ms 透明度淡入与飞行 (560ms) 并行，落地时背景已基本可见。
-    if (bgImage.value) revealBg()
+    if (ambientUrl.value) revealAmbient()
 
     // 1) 等歌词加载完成（布局稳定），否则取到的目标坐标是歌词为空时的旧位置，
     //    飞过去后会再被布局推到真实位置 → 卡顿。有歌词/无歌词都靠 lyricsSettled。
     // 2) 同时给高清封面留一点时间：飞行途中显示的就是最终那张图，落地不跳清晰度。
     const coverId = player.current?.coverId ?? null
     await Promise.all([
-      waitUntil(() => lyricsSettled.value, 450),
+      waitForLyrics(450),
       coverId
         ? Promise.race([
             library.coverUrlHi(coverId).catch(() => null),
@@ -538,16 +532,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="lyrics-full" :class="{ closing }" :style="lyricVars">
-    <!-- 背景：纯深色底 + base 色底层 + 多焦点径向层（每个焦点独立动画，相位错开呼吸） -->
+  <div class="lyrics-full" :class="{ closing, 'fly-active': flyActive, switching }" :style="lyricVars">
+    <!-- 背景：纯深色底 + 单层预烘焙环境光（多焦点已画进一张小模糊图，无需多个全屏 blur 层） -->
     <div class="bg" />
-    <div v-if="bgBase" class="bg-base" :class="{ show: bgShown }" :style="{ backgroundImage: bgBase }" />
     <div
-      v-for="(layer, i) in bgLayers"
-      :key="i"
-      class="bg-layer"
-      :class="{ show: bgShown }"
-      :style="{ backgroundImage: layer, animationDelay: `-${(i * 0.7) % 7}s` }"
+      v-if="ambientUrl"
+      class="bg-ambient"
+      :class="{ show: ambientShown }"
+      :style="{ backgroundImage: `url(${ambientUrl})` }"
     />
 
     <!-- 右上角工具组：字号调节 + 退出 -->
@@ -712,52 +704,41 @@ onMounted(() => {
   background: var(--lyric-bg);
 }
 
-/* base 色：纯色兜底层，让 radial 透明处不露出深色 bg */
-.bg-base {
-  position: absolute;
-  inset: 0;
-  filter: blur(40px) saturate(1.3);
-  opacity: 0;
-  transition: opacity 280ms var(--ease-out);
-}
-
-/* 焦点层：每个 layer 一个独立 div，独立做相位错开的呼吸动画。
-   scale 0.92→1.08 + opacity 0.75→1.0，10s 缓动，每个 layer
-   起点延迟 i*0.7s，整体呈现"环境光在缓慢呼吸"但不晕不跳。 */
-.bg-layer {
+/* 单层环境光：多焦点已烘焙进图内（palette.renderAmbientUrl），这里只需 cover 拉伸；
+   单一 transform 呼吸走合成器，成本远低于多个全屏 blur(80px) 图层。 */
+.bg-ambient {
   position: absolute;
   inset: 0;
   background-size: cover;
   background-position: center;
-  filter: blur(80px) saturate(1.5);
   opacity: 0;
   transform-origin: center center;
-  animation: ambient-breathe 10s ease-in-out infinite;
+  animation: ambient-breathe 12s ease-in-out infinite;
   transition: opacity 280ms var(--ease-out);
+  will-change: transform, opacity;
 }
 
-.bg-base.show,
-.bg-layer.show {
+.bg-ambient.show {
   opacity: 1;
-}
-
-.bg-layer.show {
-  /* 呼吸动画期间透明度上下浮动；CSS animation 与 transition 同时驱动 opacity，
-     由 animation 主导、transition 只在 show 切换的瞬间起作用 */
-  opacity: 0.92;
 }
 
 @keyframes ambient-breathe {
   0%,
   100% {
-    transform: scale(0.96);
+    transform: scale(0.98);
   }
   50% {
-    transform: scale(1.06);
+    transform: scale(1.02);
   }
 }
 
-/* 底部稍压暗，保证迷你条与歌词可读 —— 已合并到 .bg-base 的 blur+saturate，无需单独压暗层 */
+/* 飞入/切歌过场期间暂停背景呼吸，避免呼吸与过场动画叠加抢帧（单层已很轻，此为双保险） */
+.lyrics-full.fly-active .bg-ambient,
+.lyrics-full.switching .bg-ambient {
+  animation-play-state: paused;
+}
+
+/* 底部稍压暗，保证迷你条与歌词可读 —— 已在 palette.renderAmbientUrl 烘焙进图内，无需单独压暗层 */
 
 /* ---------- 右上角工具组：字号调节 + 退出 ---------- */
 .top-tools {

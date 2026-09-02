@@ -66,11 +66,13 @@ function onRowClick(song: SongRecord) {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .list-header {
   display: grid;
-  grid-template-columns: 56px minmax(200px, 2.2fr) minmax(100px, 1fr) minmax(120px, 1.2fr) 72px;
+  grid-template-columns: 56px minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.2fr) 72px;
   gap: 12px;
   align-items: center;
   height: 36px;
@@ -83,11 +85,12 @@ function onRowClick(song: SongRecord) {
 .list-body {
   flex: 1;
   min-height: 0;
+  overflow-x: hidden;
 }
 
 .song-row {
   display: grid;
-  grid-template-columns: 56px minmax(200px, 2.2fr) minmax(100px, 1fr) minmax(120px, 1.2fr) 72px;
+  grid-template-columns: 56px minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.2fr) 72px;
   gap: 12px;
   align-items: center;
   padding: 0 12px;
@@ -156,6 +159,7 @@ function onRowClick(song: SongRecord) {
 
 .col-artist,
 .col-album {
+  min-width: 0;
   font-size: 13px;
   color: var(--text-secondary);
   white-space: nowrap;

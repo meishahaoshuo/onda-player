@@ -51,6 +51,7 @@ const visible = computed(() =>
 .vlist {
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .vlist-spacer {
