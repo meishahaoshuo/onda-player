@@ -151,7 +151,7 @@ watch(
     // 等切换动画完成再让用户看到歌词时，已经在正确位置。
     await nextTick()
     scrollToActive(false)
-    // 保证入场阶段真正可见（至少 640ms 与封面 spring 弹入对齐）再归位，
+    // 保证入场阶段真正可见（至少 640ms 与封面滑入对齐）再归位，
     // 切歌才有完整过场；少于 640ms 就延后到刚好 640ms
     if (isFirstRun) return // 首次挂载：不停留在切换态，直接就位
     const elapsed = performance.now() - switchStart
@@ -926,9 +926,9 @@ onMounted(() => {
 }
 
 /* 切歌切换动画：封面与歌词淡出淡入 */
-/* 切歌切换：新封面 spring 轻弹入场 + 歌词上浮淡入。避免小幅方向性滑动读成「抽搐」。 */
+/* 切歌切换：新封面平滑滑入（ease-out 不越界、无回弹）+ 歌词上浮淡入。 */
 .main .cover-main {
-  transition: transform 640ms var(--ease-spring), opacity 460ms var(--ease-out);
+  transition: transform 640ms var(--ease-out), opacity 460ms var(--ease-out); /* ease-out 不越界，去掉封面回弹 */
 }
 
 .main .lyric-scroll,
