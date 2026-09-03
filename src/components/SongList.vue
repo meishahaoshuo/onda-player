@@ -19,6 +19,7 @@ function onRowClick(song: SongRecord) {
   <div class="song-list">
     <!-- 表头 -->
     <div class="list-header">
+      <span class="col-cover" aria-hidden="true"></span>
       <span class="col-title">标题</span>
       <span class="col-artist">艺术家</span>
       <span class="col-album">专辑</span>
