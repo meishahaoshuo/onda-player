@@ -3,10 +3,12 @@ import { computed } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import { useLibraryStore } from '@/stores/library'
 import { useUiStore } from '@/stores/ui'
+import { usePlayerStore } from '@/stores/player'
 import { formatTotalDuration } from '@/utils/format'
 
 const library = useLibraryStore()
 const ui = useUiStore()
+const player = usePlayerStore()
 
 const sortedAlbums = computed(() =>
   [...library.albums].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN')),
@@ -15,12 +17,27 @@ const sortedAlbums = computed(() =>
 function openAlbum(key: string) {
   ui.openDetail(key)
 }
+
+/** 当前播放的曲目是否属于这张专辑（专辑 key = album + \n + albumArtist） */
+function isPlayingAlbum(album: { key: string }) {
+  const c = player.current
+  return c ? `${c.album}\n${c.albumArtist}` === album.key : false
+}
 </script>
 
 <template>
   <div class="album-grid">
-    <button v-for="album in sortedAlbums" :key="album.key" class="album-card" @click="openAlbum(album.key)">
-      <CoverImage :cover-id="album.coverId" :size="140" class="album-cover" />
+    <button
+      v-for="album in sortedAlbums"
+      :key="album.key"
+      class="album-card"
+      :class="{ playing: isPlayingAlbum(album) }"
+      @click="openAlbum(album.key)"
+    >
+      <span class="cover-wrap">
+        <CoverImage :cover-id="album.coverId" :size="140" class="album-cover" />
+        <span class="cover-ring" aria-hidden="true"></span>
+      </span>
       <div class="album-name" :title="album.name">{{ album.name }}</div>
       <div class="album-sub">
         {{ album.artist }} · {{ album.songs.length }} 首 · {{ formatTotalDuration(album.totalDuration) }}
@@ -51,10 +68,47 @@ function openAlbum(key: string) {
   overflow: hidden;
 }
 
-.album-card:hover {
-  background: var(--bg-hover);
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-2);
+/* 播放态：封面外圈缓慢旋转的光环（强调色 conic 高光，像「正在播放」）+ 标题转强调色 */
+.cover-wrap {
+  position: relative;
+}
+
+.cover-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 8px;
+  padding: 3px;
+  pointer-events: none;
+  opacity: 0;
+  background: conic-gradient(from 0deg, transparent, var(--accent), transparent 45%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  transition: opacity var(--dur-med) var(--ease-out);
+}
+
+.album-card.playing .cover-ring {
+  opacity: 1;
+  animation: cover-spin 3.2s linear infinite;
+}
+
+.album-card.playing .album-name {
+  color: var(--accent);
+}
+
+@keyframes cover-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .album-card:hover {
+    background: var(--bg-hover);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-2);
+  }
 }
 
 /* 光泽扫过 */
@@ -62,17 +116,19 @@ function openAlbum(key: string) {
   content: '';
   position: absolute;
   top: 0;
-  left: -80%;
+  left: 0;
   width: 60%;
   height: 100%;
   background: linear-gradient(105deg, transparent, var(--sheen), transparent);
-  transform: skewX(-18deg);
-  transition: left 0.55s var(--ease-out);
+  transform: translateX(-150%) skewX(-18deg);
+  transition: transform 0.32s var(--ease-out);
   pointer-events: none;
 }
 
-.album-card:hover::after {
-  left: 120%;
+@media (hover: hover) and (pointer: fine) {
+  .album-card:hover::after {
+    transform: translateX(250%) skewX(-18deg);
+  }
 }
 
 .album-cover {
@@ -88,9 +144,11 @@ function openAlbum(key: string) {
   transition: transform var(--dur-med) var(--ease-spring);
 }
 
-.album-card:hover .album-cover :deep(img),
-.album-card:hover .album-cover :deep(.cover-fallback) {
-  transform: scale(1.04);
+@media (hover: hover) and (pointer: fine) {
+  .album-card:hover .album-cover :deep(img),
+  .album-card:hover .album-cover :deep(.cover-fallback) {
+    transform: scale(1.04);
+  }
 }
 
 .album-name {
@@ -115,5 +173,21 @@ function openAlbum(key: string) {
   color: var(--text-tertiary);
   padding: 48px 0;
   text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cover-ring {
+    animation: none;
+  }
+  .album-card:hover {
+    transform: none;
+  }
+  .album-card:hover .album-cover :deep(img),
+  .album-card:hover .album-cover :deep(.cover-fallback) {
+    transform: none;
+  }
+  .album-card::after {
+    transition: none;
+  }
 }
 </style>

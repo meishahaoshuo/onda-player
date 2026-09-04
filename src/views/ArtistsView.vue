@@ -20,6 +20,11 @@ function onPlay(song: SongRecord) {
   if (!currentArtist.value) return
   void player.playSong(song, currentArtist.value.songs)
 }
+
+/** 当前播放的曲目是否属于这位艺术家（艺术家 key = artist） */
+function isPlayingArtist(artist: { name: string }) {
+  return player.current?.artist === artist.name
+}
 </script>
 
 <template>
@@ -42,9 +47,13 @@ function onPlay(song: SongRecord) {
       v-for="artist in library.artists"
       :key="artist.name"
       class="artist-card"
+      :class="{ playing: isPlayingArtist(artist) }"
       @click="ui.openDetail(artist.name)"
     >
-      <CoverImage :cover-id="artist.coverId" :size="120" />
+      <span class="cover-wrap">
+        <CoverImage :cover-id="artist.coverId" :size="120" class="artist-cover" />
+        <span class="cover-ring" aria-hidden="true"></span>
+      </span>
       <div class="artist-name" :title="artist.name">{{ artist.name }}</div>
       <div class="artist-sub">{{ artist.songs.length }} 首</div>
     </button>
@@ -112,16 +121,81 @@ function onPlay(song: SongRecord) {
   padding: 16px;
   border-radius: 10px;
   text-align: center;
+  position: relative;
+  overflow: hidden;
   transition: background 0.15s;
 }
 
-.artist-card:hover {
-  background: var(--bg-hover);
+.cover-wrap {
+  position: relative;
+}
+
+.cover-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  padding: 3px;
+  pointer-events: none;
+  opacity: 0;
+  background: conic-gradient(from 0deg, transparent, var(--accent), transparent 45%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  transition: opacity var(--dur-med) var(--ease-out);
+}
+
+.artist-card.playing .cover-ring {
+  opacity: 1;
+  animation: cover-spin 3.2s linear infinite;
+}
+
+.artist-card.playing .artist-name {
+  color: var(--accent);
+}
+
+@keyframes cover-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .artist-card:hover {
+    background: var(--bg-hover);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-2);
+  }
+  .artist-card:hover .artist-cover :deep(img),
+  .artist-card:hover .artist-cover :deep(.cover-fallback) {
+    transform: scale(1.05);
+  }
+}
+
+/* 光泽扫过（transform 化，避免动 left） */
+.artist-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(105deg, transparent, var(--sheen), transparent);
+  transform: translateX(-150%) skewX(-18deg);
+  transition: transform 0.32s var(--ease-out);
+  pointer-events: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .artist-card:hover::after {
+    transform: translateX(250%) skewX(-18deg);
+  }
 }
 
 .artist-card :deep(img),
 .artist-card :deep(.cover-fallback) {
   border-radius: 50%;
+  transition: transform var(--dur-med) var(--ease-spring);
 }
 
 .artist-name {
@@ -141,5 +215,21 @@ function onPlay(song: SongRecord) {
   color: var(--text-tertiary);
   padding: 48px 0;
   text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cover-ring {
+    animation: none;
+  }
+  .artist-card:hover {
+    transform: none;
+  }
+  .artist-card:hover .artist-cover :deep(img),
+  .artist-card:hover .artist-cover :deep(.cover-fallback) {
+    transform: none;
+  }
+  .artist-card::after {
+    transition: none;
+  }
 }
 </style>
