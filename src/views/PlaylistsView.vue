@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import SongList from '@/components/SongList.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import FrostedPanel from '@/components/FrostedPanel.vue'
+import { capturePageTransition, playPageTransition } from '@/services/pageTransition'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { usePlaylistStore } from '@/stores/playlist'
@@ -48,6 +49,38 @@ const currentSongs = computed<SongRecord[]>(() => {
 })
 
 const coverId = computed(() => currentSongs.value.find((s) => s.coverId)?.coverId ?? null)
+
+/* 共享元素过渡 + 内容错峰浮现 + 返回轻淡出 */
+const plRevealed = ref(false)
+const plClosing = ref(false)
+
+watch(
+  current,
+  async (pl) => {
+    plRevealed.value = false
+    plClosing.value = false
+    if (!pl) return
+    await nextTick()
+    await playPageTransition(document.querySelector<HTMLElement>('.playlist-detail .header-cover'))
+    plRevealed.value = true
+  },
+  { immediate: true, flush: 'post' },
+)
+
+function closePlaylist() {
+  if (plClosing.value || !current.value) return
+  plClosing.value = true
+  window.setTimeout(() => {
+    ui.closeDetail()
+    plClosing.value = false
+  }, 180)
+}
+
+function openPlaylist(p: { id: string }, e: MouseEvent) {
+  const cover = (e.currentTarget as HTMLElement).querySelector<HTMLElement>('img, .cover-fallback')
+  capturePageTransition(cover, { x: e.clientX, y: e.clientY })
+  ui.openDetail(p.id)
+}
 
 /* ---------- 新建 / 重命名 / 添加歌曲 ---------- */
 
@@ -164,13 +197,13 @@ function confirmRemove() {
 
 <template>
   <!-- 歌单详情 -->
-  <div v-if="current" class="playlist-detail">
-    <button class="back-btn" @click="ui.closeDetail()">
+  <div v-if="current" class="playlist-detail" :class="{ revealed: plRevealed, closing: plClosing }">
+    <button class="back-btn" @click="closePlaylist">
       <AppIcon name="close" :size="14" /> 返回歌单列表
     </button>
 
     <header class="pl-header">
-      <CoverImage :cover-id="coverId" :size="120" />
+      <CoverImage :cover-id="coverId" :size="120" class="header-cover" />
       <div class="pl-info">
         <h1 class="pl-name">{{ current.name }}</h1>
         <div class="pl-sub">{{ currentSongs.length }} 首歌曲</div>
@@ -279,7 +312,12 @@ function confirmRemove() {
 
     <div v-if="playlistStore.playlists.length === 0" class="empty-hint">还没有歌单</div>
     <div v-else class="pl-grid">
-      <button v-for="p in playlistStore.playlists" :key="p.id" class="pl-card" @click="ui.openDetail(p.id)">
+      <button
+        v-for="p in playlistStore.playlists"
+        :key="p.id"
+        class="pl-card"
+        @click="openPlaylist(p, $event)"
+      >
         <CoverImage
           :cover-id="
             p.songPaths
@@ -672,5 +710,63 @@ function confirmRemove() {
   background: var(--bg-hover);
   color: var(--text-tertiary);
   cursor: default;
+}
+
+/* 共享元素过渡落定后的错峰浮现 + 返回轻淡出 */
+.playlist-detail {
+  transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
+}
+
+.playlist-detail.closing {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.playlist-detail .back-btn,
+.playlist-detail .pl-header,
+.playlist-detail .drag-list,
+.playlist-detail .empty-hint {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 320ms var(--ease-out), transform 320ms var(--ease-out);
+}
+
+.playlist-detail.revealed .back-btn {
+  transition-delay: 40ms;
+}
+
+.playlist-detail.revealed .pl-header {
+  transition-delay: 80ms;
+}
+
+.playlist-detail.revealed .drag-list,
+.playlist-detail.revealed .empty-hint {
+  transition-delay: 120ms;
+}
+
+.playlist-detail.revealed .back-btn,
+.playlist-detail.revealed .pl-header,
+.playlist-detail.revealed .drag-list,
+.playlist-detail.revealed .empty-hint {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .playlist-detail {
+    transition: none;
+  }
+  .playlist-detail.closing {
+    transform: none;
+  }
+  .playlist-detail .back-btn,
+  .playlist-detail .pl-header,
+  .playlist-detail .drag-list,
+  .playlist-detail .empty-hint {
+    opacity: 1;
+    transform: none;
+    transition: none;
+    transition-delay: 0ms;
+  }
 }
 </style>

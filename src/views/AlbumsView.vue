@@ -4,6 +4,7 @@ import CoverImage from '@/components/CoverImage.vue'
 import { useLibraryStore } from '@/stores/library'
 import { useUiStore } from '@/stores/ui'
 import { usePlayerStore } from '@/stores/player'
+import { capturePageTransition } from '@/services/pageTransition'
 import { formatTotalDuration } from '@/utils/format'
 
 const library = useLibraryStore()
@@ -14,8 +15,10 @@ const sortedAlbums = computed(() =>
   [...library.albums].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN')),
 )
 
-function openAlbum(key: string) {
-  ui.openDetail(key)
+function openAlbum(album: { key: string }, e: MouseEvent) {
+  const cover = (e.currentTarget as HTMLElement).querySelector<HTMLElement>('img, .cover-fallback')
+  capturePageTransition(cover, { x: e.clientX, y: e.clientY })
+  ui.openDetail(album.key)
 }
 
 /** 当前播放的曲目是否属于这张专辑（专辑 key = album + \n + albumArtist） */
@@ -32,7 +35,7 @@ function isPlayingAlbum(album: { key: string }) {
       :key="album.key"
       class="album-card"
       :class="{ playing: isPlayingAlbum(album) }"
-      @click="openAlbum(album.key)"
+      @click="openAlbum(album, $event)"
     >
       <span class="cover-wrap">
         <CoverImage :cover-id="album.coverId" :size="140" class="album-cover" />

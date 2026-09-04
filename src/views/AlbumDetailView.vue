@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import QualityBadge from '@/components/QualityBadge.vue'
 import { makeAmbientGradient } from '@/services/palette'
+import { playPageTransition } from '@/services/pageTransition'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
@@ -18,6 +19,31 @@ const props = defineProps<{ albumKey: string }>()
 const library = useLibraryStore()
 const player = usePlayerStore()
 const ui = useUiStore()
+
+/* 共享元素过渡 + 内容错峰浮现 + 返回轻淡出 */
+const revealed = ref(false)
+const closing = ref(false)
+
+watch(
+  () => props.albumKey,
+  async () => {
+    revealed.value = false
+    closing.value = false
+    await nextTick()
+    await playPageTransition(document.querySelector<HTMLElement>('.album-detail .header-cover'))
+    revealed.value = true
+  },
+  { immediate: true, flush: 'post' },
+)
+
+function close() {
+  if (closing.value) return
+  closing.value = true
+  window.setTimeout(() => {
+    ui.closeDetail()
+    closing.value = false
+  }, 180)
+}
 
 /* 封面取色环境光晕 */
 const ambientUrl = ref<string | null>(null)
@@ -73,8 +99,8 @@ function playSong(song: SongRecord) {
 </script>
 
 <template>
-  <div v-if="album" class="album-detail">
-    <button class="back-btn" @click="ui.closeDetail()">
+  <div v-if="album" class="album-detail" :class="{ revealed, closing }">
+    <button class="back-btn" @click="close">
       <AppIcon name="close" :size="14" /> 返回专辑列表
     </button>
 
@@ -335,5 +361,73 @@ function playSong(song: SongRecord) {
 .empty-hint {
   color: var(--text-tertiary);
   padding: 48px 0;
+}
+
+/* 共享元素过渡落定后的错峰浮现 + 返回轻淡出 */
+.album-detail {
+  transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
+}
+
+.album-detail.closing {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.album-detail .back-btn,
+.album-detail .header-info,
+.album-detail .disc-group {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 320ms var(--ease-out), transform 320ms var(--ease-out);
+}
+
+.album-detail.revealed .back-btn {
+  transition-delay: 40ms;
+}
+
+.album-detail.revealed .header-info {
+  transition-delay: 80ms;
+}
+
+.album-detail.revealed .disc-group {
+  transition-delay: 120ms;
+}
+
+.album-detail.revealed .back-btn,
+.album-detail.revealed .header-info,
+.album-detail.revealed .disc-group {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 头部环境光在飞行后再浮现（把 blur 栅格化延后，避免抢主线程） */
+.album-detail .header-ambient {
+  opacity: 0;
+  transition: opacity 320ms var(--ease-out);
+}
+
+.album-detail.revealed .header-ambient {
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .album-detail {
+    transition: none;
+  }
+  .album-detail.closing {
+    transform: none;
+  }
+  .album-detail .back-btn,
+  .album-detail .header-info,
+  .album-detail .disc-group {
+    opacity: 1;
+    transform: none;
+    transition: none;
+    transition-delay: 0ms;
+  }
+  .album-detail .header-ambient {
+    opacity: 0.55;
+    transition: none;
+  }
 }
 </style>

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import SongList from '@/components/SongList.vue'
 import AppIcon from '@/components/AppIcon.vue'
+import { capturePageTransition, playPageTransition } from '@/services/pageTransition'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
@@ -16,6 +17,38 @@ const currentArtist = computed(() =>
   library.artists.find((a) => a.name === ui.detailKey),
 )
 
+/* 共享元素过渡 + 内容错峰浮现 + 返回轻淡出 */
+const artistRevealed = ref(false)
+const artistClosing = ref(false)
+
+watch(
+  currentArtist,
+  async (artist) => {
+    artistRevealed.value = false
+    artistClosing.value = false
+    if (!artist) return
+    await nextTick()
+    await playPageTransition(document.querySelector<HTMLElement>('.artist-detail .header-cover'))
+    artistRevealed.value = true
+  },
+  { immediate: true, flush: 'post' },
+)
+
+function closeArtist() {
+  if (artistClosing.value || !currentArtist.value) return
+  artistClosing.value = true
+  window.setTimeout(() => {
+    ui.closeDetail()
+    artistClosing.value = false
+  }, 180)
+}
+
+function openArtist(artist: { name: string }, e: MouseEvent) {
+  const cover = (e.currentTarget as HTMLElement).querySelector<HTMLElement>('img, .cover-fallback')
+  capturePageTransition(cover, { x: e.clientX, y: e.clientY })
+  ui.openDetail(artist.name)
+}
+
 function onPlay(song: SongRecord) {
   if (!currentArtist.value) return
   void player.playSong(song, currentArtist.value.songs)
@@ -28,12 +61,12 @@ function isPlayingArtist(artist: { name: string }) {
 </script>
 
 <template>
-  <div v-if="currentArtist" class="artist-detail">
-    <button class="back-btn" @click="ui.closeDetail()">
+  <div v-if="currentArtist" class="artist-detail" :class="{ revealed: artistRevealed, closing: artistClosing }">
+    <button class="back-btn" @click="closeArtist">
       <AppIcon name="close" :size="14" /> 返回艺术家列表
     </button>
     <header class="artist-header">
-      <CoverImage :cover-id="currentArtist.coverId" :size="120" />
+      <CoverImage :cover-id="currentArtist.coverId" :size="120" class="header-cover" />
       <div>
         <h1 class="artist-name">{{ currentArtist.name }}</h1>
         <div class="artist-sub">{{ currentArtist.songs.length }} 首歌曲</div>
@@ -48,7 +81,7 @@ function isPlayingArtist(artist: { name: string }) {
       :key="artist.name"
       class="artist-card"
       :class="{ playing: isPlayingArtist(artist) }"
-      @click="ui.openDetail(artist.name)"
+      @click="openArtist(artist, $event)"
     >
       <span class="cover-wrap">
         <CoverImage :cover-id="artist.coverId" :size="120" class="artist-cover" />
@@ -230,6 +263,60 @@ function isPlayingArtist(artist: { name: string }) {
   }
   .artist-card::after {
     transition: none;
+  }
+}
+
+/* 共享元素过渡落定后的错峰浮现 + 返回轻淡出 */
+.artist-detail {
+  transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
+}
+
+.artist-detail.closing {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.artist-detail .back-btn,
+.artist-detail .artist-header,
+.artist-detail .list {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 320ms var(--ease-out), transform 320ms var(--ease-out);
+}
+
+.artist-detail.revealed .back-btn {
+  transition-delay: 40ms;
+}
+
+.artist-detail.revealed .artist-header {
+  transition-delay: 80ms;
+}
+
+.artist-detail.revealed .list {
+  transition-delay: 120ms;
+}
+
+.artist-detail.revealed .back-btn,
+.artist-detail.revealed .artist-header,
+.artist-detail.revealed .list {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artist-detail {
+    transition: none;
+  }
+  .artist-detail.closing {
+    transform: none;
+  }
+  .artist-detail .back-btn,
+  .artist-detail .artist-header,
+  .artist-detail .list {
+    opacity: 1;
+    transform: none;
+    transition: none;
+    transition-delay: 0ms;
   }
 }
 </style>
