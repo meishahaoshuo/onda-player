@@ -89,6 +89,15 @@ function distance(b: Box, p: { x: number; y: number }): number {
   return Math.hypot(b.left + b.width / 2 - p.x, b.top + b.height / 2 - p.y)
 }
 
+/** 源封面的形状按克隆宽度等比换算成圆角值（% 保持 %，px 等比缩放）。
+    getComputedStyle 对百分比圆角会原样返回 "50%"，对像素值返回 px——两种都要正确处理。 */
+function cloneRadiusFor(shapeEl: HTMLElement, srcW: number, dstW: number): string {
+  const r = getComputedStyle(shapeEl).borderRadius
+  if (r.includes('%')) return r
+  const px = parseFloat(r) || 0
+  return `${((px / srcW) * dstW).toFixed(1)}px`
+}
+
 /** 首帧探针：过渡期间平均帧率不足 50fps 则后续降级到 lite */
 function probeFps() {
   if (lite) return
@@ -265,9 +274,8 @@ function flyCover(o: Origin, target: HTMLElement, t: Box): Promise<void> {
   const oY = ((o.click.y - o.rect.top) / o.rect.height) * t.height
   const tx = o.rect.left - t.left - oX * (1 - s)
   const ty = o.rect.top - t.top - oY * (1 - s)
-  // 形状（圆↔方）用百分比圆角随飞行平滑形变：百分比相对克隆自身盒，与缩放天然无关
-  const srcPct = `${(((parseFloat(getComputedStyle(o.coverEl).borderRadius) || 0) / o.rect.width) * 100).toFixed(1)}%`
-  const dstPct = `${(((parseFloat(getComputedStyle(target).borderRadius) || 0) / t.width) * 100).toFixed(1)}%`
+  // 克隆形状与源封面一致（圆保持圆、方保持方），不做形状形变动画
+  flying.style.borderRadius = cloneRadiusFor(o.coverEl, o.rect.width, t.width)
 
   Object.assign(flying.style, {
     position: 'fixed',
@@ -276,7 +284,6 @@ function flyCover(o: Origin, target: HTMLElement, t: Box): Promise<void> {
     top: `${t.top}px`,
     width: `${t.width}px`,
     height: `${t.height}px`,
-    borderRadius: srcPct,
     objectFit: 'cover',
     zIndex: '70',
     pointerEvents: 'none',
@@ -309,17 +316,11 @@ function flyCover(o: Origin, target: HTMLElement, t: Box): Promise<void> {
         resolve()
       }, 130)
     }
-    const anim = flying.animate(
-      [
-        { transform: start, borderRadius: srcPct },
-        { transform: 'translate(0, 0) scale(1)', borderRadius: dstPct },
-      ],
-      {
-        duration: dur(COVER_ENTER),
-        easing: EASE,
-        fill: 'both',
-      },
-    )
+    const anim = flying.animate([{ transform: start }, { transform: 'translate(0, 0) scale(1)' }], {
+      duration: dur(COVER_ENTER),
+      easing: EASE,
+      fill: 'both',
+    })
     anim.onfinish = finish
     window.setTimeout(finish, dur(COVER_ENTER) + 260)
   })
@@ -445,9 +446,8 @@ function flyCoverBack(o: Origin, target: HTMLElement, from: Box, to: Box): Promi
   // 终态必须让克隆外框精确盖住 to：local(0,0) → from.left + oX(1-s) + tx = to.left
   const tx = to.left - from.left - oX * (1 - s)
   const ty = to.top - from.top - oY * (1 - s)
-  // 形状形变：从头部封面形状平滑过渡回卡片封面形状（百分比圆角，与缩放无关）
-  const srcPct = `${(((parseFloat(getComputedStyle(target).borderRadius) || 0) / from.width) * 100).toFixed(1)}%`
-  const dstPct = `${(((parseFloat(getComputedStyle(o.coverEl).borderRadius) || 0) / to.width) * 100).toFixed(1)}%`
+  // 克隆形状与落点（详情封面）一致，不做形状形变动画
+  flying.style.borderRadius = getComputedStyle(target).borderRadius
 
   Object.assign(flying.style, {
     position: 'fixed',
@@ -456,7 +456,6 @@ function flyCoverBack(o: Origin, target: HTMLElement, from: Box, to: Box): Promi
     top: `${from.top}px`,
     width: `${from.width}px`,
     height: `${from.height}px`,
-    borderRadius: srcPct,
     objectFit: 'cover',
     zIndex: '70',
     pointerEvents: 'none',
@@ -482,17 +481,11 @@ function flyCoverBack(o: Origin, target: HTMLElement, from: Box, to: Box): Promi
         resolve()
       }, 130)
     }
-    const anim = flying.animate(
-      [
-        { transform: 'none', borderRadius: srcPct },
-        { transform: `translate(${tx}px, ${ty}px) scale(${s})`, borderRadius: dstPct },
-      ],
-      {
-        duration: dur(COVER_EXIT),
-        easing: EASE,
-        fill: 'forwards',
-      },
-    )
+    const anim = flying.animate([{ transform: 'none' }, { transform: `translate(${tx}px, ${ty}px) scale(${s})` }], {
+      duration: dur(COVER_EXIT),
+      easing: EASE,
+      fill: 'forwards',
+    })
     anim.onfinish = finish
     window.setTimeout(finish, dur(COVER_EXIT) + 260)
   })
