@@ -307,15 +307,11 @@ function flyCover(o: Origin, target: HTMLElement, t: Box): Promise<void> {
       if (target.matches('img') && !(target as HTMLImageElement).complete && o.src) {
         ;(target as HTMLImageElement).src = o.src
       }
-      target.style.transition = 'opacity 120ms linear'
+      // 单帧交接：目标立即全显、克隆同帧移除——不做交叉淡出，
+      // 任何像素差都只占 1 帧，不会出现 120ms 的重影闪烁
       target.style.opacity = '1'
-      flying.style.transition = 'opacity 120ms linear'
-      flying.style.opacity = '0'
-      window.setTimeout(() => {
-        flying.remove()
-        target.style.transition = ''
-        resolve()
-      }, 130)
+      flying.remove()
+      resolve()
     }
     const anim = flying.animate([{ transform: start }, { transform: 'translate(0, 0) scale(1)' }], {
       duration: dur(COVER_ENTER),
@@ -475,13 +471,10 @@ function flyCoverBack(o: Origin, target: HTMLElement, from: Box, to: Box): Promi
     const finish = () => {
       if (done) return
       done = true
+      // 单帧交接（同 flyCover）：目标立即全显、克隆同帧移除
       target.style.opacity = '1'
-      flying.style.transition = 'opacity 120ms linear'
-      flying.style.opacity = '0'
-      window.setTimeout(() => {
-        flying.remove()
-        resolve()
-      }, 130)
+      flying.remove()
+      resolve()
     }
     const anim = flying.animate([{ transform: 'none' }, { transform: `translate(${tx}px, ${ty}px) scale(${s})` }], {
       duration: dur(COVER_EXIT),
