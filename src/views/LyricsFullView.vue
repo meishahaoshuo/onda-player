@@ -142,8 +142,12 @@ watch(
     const lrc = await readLrcFile(song.rootId, path.slice(song.rootId.length + 1))
     if (lrc && lrc.trim()) {
       groups.value = parseLrc(lrc)
+      lyricSource.value = 'lrc'
     } else if (song.embeddedLyrics) {
       groups.value = parseEmbeddedLyrics(song.embeddedLyrics)
+      lyricSource.value = 'embedded'
+    } else {
+      lyricSource.value = null
     }
     loading.value = false
     lyricsSettled.value = true
@@ -272,6 +276,23 @@ function lineClass(i: number) {
 }
 
 const hasLyrics = computed(() => groups.value.length > 0)
+
+/** 歌词来源徽标（右栏左下角）：LRC 文件 / EMBEDDED 内嵌 */
+const lyricSource = ref<'lrc' | 'embedded' | null>(null)
+const lyricSourceLabel = computed(() =>
+  lyricSource.value === 'lrc' ? 'LRC' : lyricSource.value === 'embedded' ? 'EMBEDDED' : '',
+)
+
+/** 音频格式行（左栏封面下方）：容器 + 采样率 + 位深 */
+const formatMeta = computed(() => {
+  const s = player.current
+  if (!s) return ''
+  const parts: string[] = []
+  if (s.container) parts.push(s.container.toUpperCase())
+  if (s.sampleRateHz) parts.push(`${(s.sampleRateHz / 1000).toFixed(1)} kHz`)
+  if (s.bitsPerSample) parts.push(`${s.bitsPerSample}bit`)
+  return parts.join('  ')
+})
 
 /* 迷你播放条 */
 const MODE_META: { mode: PlayMode; icon: 'order' | 'repeat' | 'repeatOne' | 'shuffle'; label: string }[] = [
@@ -602,142 +623,144 @@ onMounted(() => {
       :style="{ backgroundImage: `url(${ambientUrl})` }"
     />
 
-    <!-- 右上角工具组：字号调节 + 退出 -->
-    <div class="top-tools">
-      <div class="fs-picker" :class="{ open: fsOpen }">
-        <button
-          class="icon-btn tool-btn"
-          :class="{ 'is-active': fsOpen }"
-          title="调节歌词字号"
-          @click="fsOpen = !fsOpen"
-        >
-          <span class="aa">Aa</span>
-        </button>
-        <Transition name="fs-pop">
-          <div v-if="fsOpen" class="fs-menu">
+    <!-- 双栏布局：左栏信息+控制，右栏歌词 -->
+    <div class="layout" :class="{ switching, 'fly-active': flyActive }">
+      <aside class="info-col">
+        <header class="track-head">
+          <h1 class="track-title">{{ player.current?.title ?? '未在播放' }}</h1>
+          <div class="track-artist">{{ player.current?.artist ?? '' }}</div>
+        </header>
+
+        <div class="cover-stack">
+          <div class="cover-main" v-if="player.current">
+            <CoverImage :cover-id="player.current.coverId" :size="420" hires />
+          </div>
+          <div class="format-line">{{ formatMeta }}</div>
+
+          <div class="progress-block" :class="{ 'is-dragging': progressDragging }">
+            <div class="progress-edge">
+              <div class="progress-fill" :style="{ width: displayPct + '%' }" />
+              <div
+                class="progress-thumb"
+                :style="{ left: displayPct + '%', opacity: progressDragging ? 1 : 0 }"
+              />
+              <div
+                class="progress-bubble"
+                :class="{ show: progressDragging }"
+                :style="{ left: displayPct + '%' }"
+              >
+                {{ bubbleTime }}
+              </div>
+              <div
+                ref="trackRef"
+                class="progress-track"
+                @pointerdown="onProgressPointerDown"
+                @pointermove="onProgressPointerMove"
+                @pointerup="onProgressPointerUp"
+                @pointercancel="onProgressPointerUp"
+              />
+            </div>
+            <div class="progress-times">
+              <span class="cur">{{ formatDuration(player.currentTime) }}</span>
+              <span class="dur">{{ formatDuration(progressDuration) }}</span>
+            </div>
+          </div>
+
+          <div class="controls">
+            <button class="ctrl-btn" title="上一曲" @click="player.prev()">
+              <AppIcon name="prev" :size="22" />
+            </button>
             <button
-              v-for="step in LYRIC_FS_STEPS"
-              :key="step.id"
-              class="fs-item"
-              :class="{ current: settings.lyricFontSize === step.id }"
-              @click="pickFontSize(step.id)"
+              class="ctrl-btn play"
+              :title="player.playing ? '暂停' : '播放'"
+              @click="player.current ? player.togglePlay() : player.resumePlay()"
             >
-              <span class="fs-dot" :style="{ width: `${step.main / 3.2}px`, height: `${step.main / 3.2}px` }" />
-              <span class="fs-label">{{ step.label }}</span>
+              <AppIcon :name="player.playing ? 'pause' : 'play'" :size="26" />
+            </button>
+            <button class="ctrl-btn" title="下一曲" @click="player.next()">
+              <AppIcon name="next" :size="22" />
             </button>
           </div>
-        </Transition>
-      </div>
-      <button class="icon-btn tool-btn" title="退出全屏歌词" @click="closeWithFade">
-        <AppIcon name="close" :size="20" />
-      </button>
-    </div>
-
-    <!-- 主体：封面在左，歌词在右 -->
-    <div class="main" :class="{ switching, 'fly-active': flyActive }">
-      <div class="cover-col">
-        <div class="cover-main" v-if="player.current">
-          <CoverImage :cover-id="player.current.coverId" :size="360" hires />
         </div>
-      </div>
 
-      <div v-if="hasLyrics" ref="scroller" class="lyric-scroll" @scroll.passive="onLyricScroll">
-        <div class="lyric-inner">
-          <div
-            v-for="(g, i) in groups"
-            :key="i"
-            :ref="setLineEl(i)"
-            class="lyric-line"
-            :class="lineClass(i)"
-            @click="player.seek(g.time)"
-          >
-            <div v-for="(text, j) in g.texts" :key="j" class="lyric-text" :class="{ sub: j > 0 }">
-              {{ text }}
+        <div class="sub-row">
+          <button class="sub-btn mode" :title="modeMeta.label" @click="cycleMode">
+            <AppIcon :name="modeMeta.icon" :size="18" />
+          </button>
+          <div class="volume-wrap">
+            <button class="sub-btn" :title="`音量 ${player.volume}%`" @click="player.toggleMute()">
+              <AppIcon :name="player.volume === 0 ? 'volumeMute' : 'volume'" :size="18" />
+            </button>
+            <input
+              class="volume-slider"
+              type="range"
+              min="0"
+              max="100"
+              :value="player.volume"
+              :style="{ '--vol': `${player.volume}%` }"
+              title="音量"
+              @input="(e) => player.setVolume(Number((e.target as HTMLInputElement).value))"
+            />
+          </div>
+          <div class="fs-picker" :class="{ open: fsOpen }">
+            <button
+              class="sub-btn"
+              :class="{ 'is-active': fsOpen }"
+              title="调节歌词字号"
+              @click="fsOpen = !fsOpen"
+            >
+              <span class="aa">Aa</span>
+            </button>
+            <Transition name="fs-pop">
+              <div v-if="fsOpen" class="fs-menu">
+                <button
+                  v-for="step in LYRIC_FS_STEPS"
+                  :key="step.id"
+                  class="fs-item"
+                  :class="{ current: settings.lyricFontSize === step.id }"
+                  @click="pickFontSize(step.id)"
+                >
+                  <span class="fs-dot" :style="{ width: `${step.main / 3.2}px`, height: `${step.main / 3.2}px` }" />
+                  <span class="fs-label">{{ step.label }}</span>
+                </button>
+              </div>
+            </Transition>
+          </div>
+          <button class="sub-btn" title="退出全屏歌词" @click="closeWithFade">
+            <AppIcon name="close" :size="18" />
+          </button>
+        </div>
+      </aside>
+
+      <section class="lyric-col">
+        <div v-if="hasLyrics" ref="scroller" class="lyric-scroll" @scroll.passive="onLyricScroll">
+          <div class="lyric-inner">
+            <div class="lyric-line lyric-head">
+              {{ player.current?.title ?? '' }} - {{ player.current?.artist ?? '' }}
+            </div>
+            <div
+              v-for="(g, i) in groups"
+              :key="i"
+              :ref="setLineEl(i)"
+              class="lyric-line"
+              :class="lineClass(i)"
+              @click="player.seek(g.time)"
+            >
+              <div v-for="(text, j) in g.texts" :key="j" class="lyric-text" :class="{ sub: j > 0 }">
+                {{ text }}
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      <div v-else class="no-lyrics-hint">
-        {{ loading ? '正在加载歌词…' : player.current ? '当前歌曲没有歌词（需要与音频同目录的同名 .lrc 文件）' : '未在播放' }}
-      </div>
+        <div v-else class="no-lyrics-hint">
+          {{ loading ? '正在加载歌词…' : player.current ? '当前歌曲没有歌词（需要与音频同目录的同名 .lrc 文件）' : '未在播放' }}
+        </div>
+        <div v-if="lyricSourceLabel" class="lyric-badge">
+          <span class="badge-tag">词</span>
+          <span class="badge-src">{{ lyricSourceLabel }}</span>
+        </div>
+      </section>
     </div>
-
-    <!-- 底部居中：液态玻璃迷你播放条（重设计：进度条作为底边线而非顶条，整体多焦点玻璃） -->
-    <footer class="mini-bar" :class="{ 'is-dragging': progressDragging }">
-      <div class="mini-left">
-        <div class="mini-title">{{ player.current?.title ?? '未在播放' }}</div>
-      </div>
-
-      <div class="mini-controls">
-        <button class="mini-btn mode" :title="modeMeta.label" @click="cycleMode">
-          <AppIcon :name="modeMeta.icon" :size="17" />
-        </button>
-        <button class="mini-btn" title="上一曲" @click="player.prev()">
-          <AppIcon name="prev" :size="18" />
-        </button>
-        <button
-          class="mini-btn play"
-          :class="{ playing: player.playing }"
-          :title="player.playing ? '暂停' : '播放'"
-          @click="player.current ? player.togglePlay() : player.resumePlay()"
-        >
-          <AppIcon :name="player.playing ? 'pause' : 'play'" :size="20" />
-        </button>
-        <button class="mini-btn" title="下一曲" @click="player.next()">
-          <AppIcon name="next" :size="18" />
-        </button>
-        <div class="mini-volume-wrap">
-          <button class="mini-btn" :title="`音量 ${player.volume}%`" @click="player.toggleMute()">
-            <AppIcon :name="player.volume === 0 ? 'volumeMute' : 'volume'" :size="17" />
-          </button>
-          <input
-            class="mini-volume"
-            type="range"
-            min="0"
-            max="100"
-            :value="player.volume"
-            :style="{ '--vol': `${player.volume}%` }"
-            title="音量"
-            @input="(e) => player.setVolume(Number((e.target as HTMLInputElement).value))"
-          />
-        </div>
-      </div>
-
-      <div class="mini-right">
-        <div class="mini-time">
-          <span class="cur">{{ formatDuration(player.currentTime) }}</span>
-          <span class="sep">/</span>
-          <span class="dur">{{ formatDuration(player.duration || player.current?.durationSec || 0) }}</span>
-        </div>
-      </div>
-
-      <!-- 进度条：作为 mini-bar 整体底边线（高度 3px，半圆角），不再悬空浮在顶部 -->
-      <div class="mini-progress-edge">
-        <div
-          class="mini-progress-fill"
-          :style="{ width: displayPct + '%' }"
-        />
-        <div
-          class="mini-progress-thumb"
-          :style="{ left: displayPct + '%', opacity: progressDragging ? 1 : 0 }"
-        />
-        <div
-          class="mini-progress-bubble"
-          :class="{ show: progressDragging }"
-          :style="{ left: displayPct + '%' }"
-        >
-          {{ bubbleTime }}
-        </div>
-        <div
-          ref="trackRef"
-          class="mini-progress-track"
-          @pointerdown="onProgressPointerDown"
-          @pointermove="onProgressPointerMove"
-          @pointerup="onProgressPointerUp"
-          @pointercancel="onProgressPointerUp"
-        />
-      </div>
-    </footer>
   </div>
 </template>
 
@@ -749,7 +772,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* 沉浸式深色底：封面模糊层之下，文字固定白色系 */
+  /* 浅色暖调底（对照参考排版） */
   background: var(--lyric-bg);
   transition: opacity 240ms var(--ease-out);
 }
@@ -758,15 +781,14 @@ onMounted(() => {
   opacity: 0;
 }
 
-/* ---------- 背景：底色 + base 色层 + 多焦点径向层（每个焦点独立呼吸动画） ---------- */
+/* ---------- 背景：暖调浅色渐变 + 单层预烘焙环境光（低透明度，给每首歌一点自己的色调） ---------- */
 .bg {
   position: absolute;
   inset: 0;
-  background: var(--lyric-bg);
+  background: linear-gradient(165deg, #fbf9f4 0%, var(--lyric-bg) 52%, var(--lyric-bg-deep) 100%);
 }
 
-/* 单层环境光：多焦点已烘焙进图内（palette.renderAmbientUrl），这里只需 cover 拉伸；
-   单一 transform 呼吸走合成器，成本远低于多个全屏 blur(80px) 图层。 */
+/* 单层环境光：多焦点已烘焙进图内（palette.renderAmbientUrl），低透明度叠在浅底上 */
 .bg-ambient {
   position: absolute;
   inset: 0;
@@ -780,7 +802,7 @@ onMounted(() => {
 }
 
 .bg-ambient.show {
-  opacity: 1;
+  opacity: 0.16;
 }
 
 @keyframes ambient-breathe {
@@ -801,73 +823,28 @@ onMounted(() => {
 
 /* 底部稍压暗，保证迷你条与歌词可读 —— 已在 palette.renderAmbientUrl 烘焙进图内，无需单独压暗层 */
 
-/* ---------- 右上角工具组：字号调节 + 退出 ---------- */
-.top-tools {
-  position: absolute;
-  top: 18px;
-  right: 22px;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tool-btn {
-  color: var(--lyric-control);
-  background: var(--lyric-bar-bg);
-  backdrop-filter: blur(24px) saturate(1.3);
-  -webkit-backdrop-filter: blur(24px) saturate(1.3);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: color 0.15s var(--ease-out), background 0.15s var(--ease-out),
-    transform var(--dur-fast) var(--ease-spring);
-}
-
-.tool-btn:hover {
-  color: var(--lyric-control-hover);
-  background: var(--lyric-control-bg);
-}
-
-.tool-btn:active {
-  transform: scale(0.92);
-}
-
-/* 退出按钮 hover 旋转（灵动感：小元素给一点方向性反馈） */
-.tool-btn .aa {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  line-height: 1;
-}
-
-.top-tools > .tool-btn:last-child:hover :deep(svg) {
-  transform: rotate(90deg);
-}
-
-.top-tools > .tool-btn:last-child :deep(svg) {
-  transition: transform var(--dur-med) var(--ease-spring);
-}
-
-/* 字号调节器 */
+/* ---------- 字号调节器（挂在左栏底部小按钮行，菜单向上弹） ---------- */
 .fs-picker {
   position: relative;
 }
 
 .fs-menu {
   position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  margin-left: -64px;
   min-width: 128px;
   padding: 6px;
   border-radius: 14px;
-  background: rgba(28, 28, 30, 0.82);
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(32px) saturate(1.4);
   -webkit-backdrop-filter: blur(32px) saturate(1.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 12px 32px rgba(70, 58, 34, 0.16);
   display: flex;
   flex-direction: column;
   gap: 2px;
-  transform-origin: top right;
+  transform-origin: bottom center;
 }
 
 .fs-item {
@@ -876,13 +853,13 @@ onMounted(() => {
   gap: 10px;
   padding: 7px 10px;
   border-radius: 9px;
-  color: var(--lyric-text);
+  color: var(--lyric-control);
   font-size: 13px;
   transition: background 0.12s var(--ease-out), color 0.12s var(--ease-out);
 }
 
 .fs-item:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.05);
   color: var(--lyric-text-active);
 }
 
@@ -917,115 +894,367 @@ onMounted(() => {
 .fs-pop-enter-from,
 .fs-pop-leave-to {
   opacity: 0;
-  transform: scale(0.92) translateY(-4px);
+  transform: scale(0.92) translateY(4px);
 }
 
-/* ---------- 主体：整组以整个页面为基准居中 ---------- */
-.main {
+/* ---------- 双栏主体：左栏信息+控制（约45%），右栏歌词 ---------- */
+.layout {
   position: relative;
+  z-index: 1;
   flex: 1;
   min-height: 0;
   display: flex;
+}
+
+.info-col {
+  --cover-w: min(46vh, 30vw);
+  width: 45%;
+  min-width: 380px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  /* 封面与歌词之间留更宽的呼吸空间（96 → 160），整体左右居中 */
-  gap: 160px;
-  /* 上下等距内边距 → 内容垂直居中于整个视口（迷你条为浮层，不参与占位） */
-  padding: 24px 48px 120px; /* 底部预留迷你条（含拖拽气泡）空间，避免歌词衬到条后面 */
+  padding: 34px 36px 26px;
 }
 
-/* 切歌切换动画：封面与歌词淡出淡入 */
-/* 切歌切换：新封面平滑滑入（ease-out 不越界、无回弹）+ 歌词上浮淡入。 */
-.main .cover-main {
-  transition: transform 640ms var(--ease-out), opacity 460ms var(--ease-out); /* ease-out 不越界，去掉封面回弹 */
+.track-head {
+  align-self: stretch;
 }
 
-.main .lyric-scroll,
-.main .no-lyrics-hint {
-  transition: opacity 520ms var(--ease-out), transform 560ms var(--ease-out);
+.track-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--lyric-text-active);
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.main.switching .cover-main {
-  transform: scale(0.92);
+.track-artist {
+  margin-top: 5px;
+  font-size: 13px;
+  color: var(--lyric-time);
+}
+
+.cover-stack {
+  margin: auto 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+/* 切歌切换动画：封面平滑缩入 + 歌词上浮淡入 */
+.cover-main {
+  position: relative;
+  transition: transform 640ms var(--ease-out), opacity 460ms var(--ease-out);
+}
+
+.layout.switching .cover-main {
+  transform: scale(0.96);
   opacity: 0.55;
 }
 
-.main.switching .lyric-scroll,
-.main.switching .no-lyrics-hint {
-  opacity: 0.55;
-  transform: translateY(22px);
-}
-
-/* 封面飞入期间：封面不参与切歌淡入淡出。
-   否则淡入（480ms）会和飞行（560ms）叠加，落地瞬间封面还在半透明 → 观感就是"顿一下"。 */
-.main.fly-active .cover-col,
-.main.fly-active .cover-main {
+/* 封面飞入期间：封面不参与切歌淡入淡出（与飞行叠加会"顿一下"） */
+.layout.fly-active .cover-main {
   opacity: 1;
   transform: none;
   transition: none;
 }
 
-.cover-col {
-  flex-shrink: 0;
-}
-
-.cover-main {
-  position: relative;
-}
-
 .cover-main :deep(img),
 .cover-main :deep(.cover-fallback) {
   display: block;
-  width: min(42vh, 30vw);
-  height: min(42vh, 30vw);
-  border-radius: 12px;
-  box-shadow: none; /* 去掉黑色投影，避免结尾出现黑色光晕 */
+  width: var(--cover-w);
+  height: var(--cover-w);
+  border-radius: 10px;
+  box-shadow: 0 20px 48px rgba(70, 58, 34, 0.18);
 }
 
-/* ---------- 歌词 ---------- */
-.lyric-scroll {
-  flex: 0 1 520px;
+.format-line {
+  min-height: 16px;
+  font-size: 12px;
+  color: var(--lyric-time);
+  letter-spacing: 0.4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 进度条（左栏、与封面同宽） ---------- */
+.progress-block {
+  width: var(--cover-w);
+}
+
+.progress-edge {
+  position: relative;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--lyric-ps-track);
+  transition: height var(--dur-fast) var(--ease-out), background 0.2s var(--ease-out);
+}
+
+.progress-track {
+  position: absolute;
+  inset: -8px 0;
+  cursor: pointer;
+  border-radius: 999px;
+}
+
+.progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-radius: 999px;
+  background: var(--lyric-ps-fill);
+  transition: width 80ms linear;
+  pointer-events: none;
+}
+
+.progress-thumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--lyric-ps-thumb);
+  transform: translate(-50%, -50%) scale(0.6);
+  pointer-events: none;
+  transition: opacity 0.12s var(--ease-out), transform 0.18s var(--ease-spring);
+}
+
+.progress-block.is-dragging .progress-thumb {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.progress-block.is-dragging .progress-fill {
+  transition: none;
+}
+
+.progress-block:hover .progress-edge,
+.progress-block.is-dragging .progress-edge {
+  height: 5px;
+  background: var(--lyric-ps-track-hover);
+}
+
+.progress-bubble {
+  position: absolute;
+  bottom: 14px;
+  left: 0;
+  transform: translateX(-50%) scale(0.9);
+  transform-origin: center bottom;
+  padding: 3px 9px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--lyric-progress-bubble-text);
+  background: var(--lyric-progress-bubble-bg);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 14px rgba(70, 58, 34, 0.16);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+}
+
+.progress-bubble.show {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+.progress-times {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 9px;
+  font-size: 11px;
+  color: var(--lyric-time);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-times .cur {
+  color: var(--lyric-text-active);
+  font-weight: 600;
+}
+
+/* ---------- 大号三键控制 ---------- */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-top: 20px;
+}
+
+.ctrl-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  color: var(--lyric-control);
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+
+.ctrl-btn:hover {
+  color: var(--lyric-control-hover);
+  background: var(--lyric-control-bg);
+}
+
+.ctrl-btn:active {
+  transform: scale(0.9);
+}
+
+.ctrl-btn.play {
+  color: var(--lyric-play-icon);
+}
+
+/* ---------- 左栏底部小按钮行：播放模式 / 音量 / 字号 / 退出 ---------- */
+.sub-row {
+  margin-top: auto;
+  padding-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+}
+
+.sub-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--lyric-control);
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+
+.sub-btn:hover {
+  color: var(--lyric-control-hover);
+  background: var(--lyric-control-bg);
+}
+
+.sub-btn:active {
+  transform: scale(0.9);
+}
+
+.sub-btn.mode:active {
+  transform: scale(0.9) rotate(-14deg);
+}
+
+.sub-btn .aa {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+.volume-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.volume-slider {
+  width: 0;
+  height: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--lyric-ps-fill) var(--vol, 80%),
+    var(--lyric-ps-track) var(--vol, 80%)
+  );
+  cursor: pointer;
+  opacity: 0;
+  margin-left: 0;
+  transition: width var(--dur-med) var(--ease-out), opacity var(--dur-med) var(--ease-out),
+    margin var(--dur-med) var(--ease-out);
+}
+
+.volume-wrap:hover .volume-slider,
+.volume-slider:focus-visible {
+  width: 72px;
+  opacity: 1;
+  margin-left: 6px;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lyric-ps-thumb);
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.volume-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.2);
+}
+
+/* ---------- 右栏歌词 ---------- */
+.lyric-col {
+  flex: 1;
   min-width: 0;
+  position: relative;
+  display: flex;
+}
+
+.lyric-scroll {
+  flex: 1;
   height: 100%;
   overflow-y: auto;
-  mask-image: linear-gradient(transparent, var(--lyric-mask) 15%, var(--lyric-mask) 85%, transparent);
-  -webkit-mask-image: linear-gradient(transparent, var(--lyric-mask) 15%, var(--lyric-mask) 85%, transparent);
+  text-align: center;
+  padding: 0 4vw;
+  mask-image: linear-gradient(transparent, var(--lyric-mask) 12%, var(--lyric-mask) 88%, transparent);
+  -webkit-mask-image: linear-gradient(transparent, var(--lyric-mask) 12%, var(--lyric-mask) 88%, transparent);
   scrollbar-width: none;
+  transition: opacity 520ms var(--ease-out), transform 560ms var(--ease-out);
 }
 
 .lyric-scroll::-webkit-scrollbar {
   display: none;
 }
 
-.lyric-inner {
-  padding: 45vh 12px 55vh;
-  display: flex;
-  flex-direction: column;
-  gap: 30px;
+.layout.switching .lyric-scroll,
+.layout.switching .no-lyrics-hint {
+  opacity: 0.55;
+  transform: translateY(22px);
 }
 
-/* 景深：只用 opacity + transform 表达远近，不用 filter: blur()。
-   blur 会让每一行都成为独立的重绘层，几十行同时过渡时直接掉帧——
-   这是旧版"卡顿抽搐"的主因。 */
+.lyric-inner {
+  padding: 42vh 0 50vh;
+  display: flex;
+  flex-direction: column;
+  gap: 34px;
+}
+
+/* 景深：只用 opacity + transform 表达远近，不用 filter: blur()（多行同时过渡会掉帧）。
+   当前行加粗变黑、其余灰阶，对照参考排版。 */
 .lyric-line {
   cursor: pointer;
-  opacity: 0.4;
-  transform-origin: left center;
-  transform: scale(0.95);
+  opacity: 0.72;
+  transform-origin: center center;
+  transform: scale(0.97);
   transition: opacity 0.35s var(--ease-out), transform 0.35s var(--ease-out);
 }
 
-.lyric-line.dim-1 { opacity: 0.55; }
-.lyric-line.dim-2 { opacity: 0.42; }
-.lyric-line.dim-3 { opacity: 0.3; }
+.lyric-line.dim-1 { opacity: 0.6; }
+.lyric-line.dim-2 { opacity: 0.45; }
+.lyric-line.dim-3 { opacity: 0.32; }
 .lyric-line.dim-4 { opacity: 0.22; }
 
 .lyric-line:hover {
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
-/* 当前行：字号固定不变（改 font-size 会触发整行重排），
-   只放大 + 提亮 + 上浮，全部走合成器 */
 .lyric-line.active {
   opacity: 1;
   transform: scale(1);
@@ -1033,11 +1262,10 @@ onMounted(() => {
 
 .lyric-line.active .lyric-text {
   color: var(--lyric-text-active);
+  font-weight: 700;
   text-shadow: var(--lyric-shadow);
 }
 
-/* 字号由 --lyric-fs / --lyric-fs-sub 统一控制（歌词页内可调节档位）。
-   当前行不再改字号：改 font-size 会触发整行重排，是卡顿源之一。 */
 .lyric-text {
   font-size: var(--lyric-fs);
   font-weight: 500;
@@ -1050,12 +1278,21 @@ onMounted(() => {
 .lyric-text.sub {
   font-size: var(--lyric-fs-sub);
   font-weight: 400;
-  opacity: 0.72;
+  opacity: 0.75;
 }
 
 .lyric-line.active .lyric-text.sub {
   color: var(--lyric-text-sub);
   opacity: 0.9;
+}
+
+/* 首行元数据："歌名 - 歌手"（不可点击，弱于普通行） */
+.lyric-head {
+  cursor: default;
+  color: var(--lyric-text);
+  font-size: calc(var(--lyric-fs) * 0.72);
+  font-weight: 500;
+  opacity: 0.6;
 }
 
 .no-lyrics-hint {
@@ -1065,337 +1302,33 @@ onMounted(() => {
   justify-content: center;
   color: var(--lyric-hint);
   font-size: 15px;
+  transition: opacity 520ms var(--ease-out), transform 560ms var(--ease-out);
 }
 
-/* ---------- 底部液态玻璃迷你播放条（重设计：进度条作为底边线，多层玻璃） ----------
-   视觉构造（自下而上）：
-     1) .mini-bar：胶囊主体，液态玻璃（多层渐变底 + backdrop 模糊 + 1px 描边 + 顶内高光 + 底内阴影 + 外长投影）
-     2) .mini-progress-edge：胶囊底边内嵌的细进度条，3px 高，左圆角；未播放段半透明白，已播放段白
-     3) .mini-bar:hover 整体轻微提亮 + 进度条 hover 高亮 */
-.mini-bar {
+/* 歌词来源徽标（右栏左下角）：词 LRC / 词 EMBEDDED */
+.lyric-badge {
   position: absolute;
-  left: 50%;
-  bottom: 24px;
-  transform: translateX(-50%);
-  z-index: 2;
+  left: 4vw;
+  bottom: 26px;
   display: flex;
   align-items: center;
-  gap: 22px;
-  min-width: 500px;
-  max-width: 76vw;
-  padding: 12px 22px 34px; /* 底部留白给进度条 + 拖拽时间气泡 */
-  border-radius: 22px;
-  /* 玻璃底：低透明度 + 暗色透出 + 极弱高光，胶囊像「轻浮」在背景之上 */
-  background:
-    linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.1) 0%,
-      rgba(255, 255, 255, 0.04) 45%,
-      rgba(255, 255, 255, 0.07) 100%
-    ),
-    rgba(20, 22, 28, 0.28);
-  backdrop-filter: blur(48px) saturate(1.5);
-  -webkit-backdrop-filter: blur(48px) saturate(1.5);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  /* 拟物玻璃：顶缘 rim 高光 + 底缘微弱反射（回显环境光）+ 柔和外光（避免大黑阴影成黑色光晕） */
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.07),
-    0 14px 40px rgba(0, 0, 0, 0.26);
-  animation: bar-in 520ms var(--ease-spring) 120ms backwards;
-  transition: background 0.3s var(--ease-out), box-shadow 0.3s var(--ease-out);
-}
-
-.mini-bar:hover {
-  background:
-    linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.14) 0%,
-      rgba(255, 255, 255, 0.06) 45%,
-      rgba(255, 255, 255, 0.1) 100%
-    ),
-    rgba(20, 22, 28, 0.36);
-}
-
-@keyframes bar-in {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(20px) scale(0.96);
-  }
-}
-
-.mini-left {
-  min-width: 0;
-  flex: 1;
-}
-
-.mini-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--lyric-text-active);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 220px;
-  letter-spacing: 0.2px;
-}
-
-.mini-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.mini-right {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.mini-time {
-  font-size: 11px;
+  gap: 8px;
+  font-size: 12px;
   color: var(--lyric-time);
-  font-variant-numeric: tabular-nums;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  letter-spacing: 0.5px;
 }
 
-.mini-time .cur {
-  color: var(--lyric-text-active);
-  font-weight: 600;
-}
-
-.mini-time .sep {
-  opacity: 0.4;
-}
-
-.mini-btn {
-  display: flex;
+.badge-tag {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  color: var(--lyric-control);
-  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out),
-    transform var(--dur-fast) var(--ease-spring);
-}
-
-.mini-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
-  color: var(--lyric-control-hover);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 0 14px rgba(255, 255, 255, 0.08);
-}
-
-.mini-btn:active {
-  transform: scale(0.9);
-}
-
-/* 模式按钮点击时轻旋转回位，增强「触感」 */
-.mini-btn.mode:active {
-  transform: scale(0.9) rotate(-14deg);
-}
-
-.mini-btn.play {
-  position: relative;
-  isolation: isolate;
-  width: 40px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.95);
-  color: var(--lyric-play-icon);
-  box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  transition: background 0.15s var(--ease-out), transform var(--dur-fast) var(--ease-spring);
-}
-
-/* 播放时柔光呼吸：白/低饱和 radial 微光，走合成器，避免黑色光晕 */
-.mini-btn.play::after {
-  content: '';
-  position: absolute;
-  inset: -5px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 70%);
-  opacity: 0;
-  z-index: -1;
-  pointer-events: none;
-  transition: opacity 0.3s var(--ease-out);
-}
-
-.mini-btn.play.playing::after {
-  opacity: 0.55;
-  animation: play-glow 2.4s ease-in-out infinite;
-}
-
-@keyframes play-glow {
-  0%,
-  100% {
-    transform: scale(0.82);
-    opacity: 0.35;
-  }
-  50% {
-    transform: scale(1.08);
-    opacity: 0.6;
-  }
-}
-
-.mini-btn.play:hover {
-  background: var(--lyric-play-bg-hover);
-  transform: scale(1.06);
-}
-
-.mini-btn.play:active {
-  transform: scale(0.94);
-}
-
-/* 音量按钮 + 音量条组合：hover 控件区时音量条从左侧展开 */
-.mini-volume-wrap {
-  display: flex;
-  align-items: center;
-  margin-left: 2px;
-}
-
-.mini-volume {
-  width: 0;
-  height: 4px;
-  appearance: none;
-  -webkit-appearance: none;
-  border-radius: 2px;
-  background: linear-gradient(
-    to right,
-    var(--lyric-text-active) var(--vol, 80%),
-    rgba(255, 255, 255, 0.18) var(--vol, 80%)
-  );
-  cursor: pointer;
-  opacity: 0;
-  margin-left: 0;
-  transition: width var(--dur-med) var(--ease-out), opacity var(--dur-med) var(--ease-out),
-    margin var(--dur-med) var(--ease-out);
-}
-
-.mini-controls:hover .mini-volume,
-.mini-volume-wrap:hover .mini-volume,
-.mini-volume:focus-visible {
-  width: 72px;
-  opacity: 1;
-  margin-left: 6px;
-}
-
-.mini-volume::-webkit-slider-thumb {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: var(--lyric-text-active);
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
-  transition: transform var(--dur-fast) var(--ease-spring);
-}
-
-.mini-volume:hover::-webkit-slider-thumb {
-  transform: scale(1.2);
-}
-
-/* 进度条边线：作为 mini-bar 整体底边，3px 高，圆角胶囊两端收边 */
-.mini-progress-edge {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 6px;
-  height: 3px;
-  border-radius: 999px;
-  pointer-events: none;
-  overflow: visible;
-  background: rgba(255, 255, 255, 0.12);
-  transition: height var(--dur-fast) var(--ease-out), background 0.2s var(--ease-out);
-}
-
-/* 实际可拖的轨道：覆盖在底边上，撑满 mini-bar 底边宽度，热区上下扩 8px */
-.mini-progress-track {
-  position: absolute;
-  inset: -8px 0;
-  cursor: pointer;
-  pointer-events: auto;
-  border-radius: 999px;
-}
-
-.mini-progress-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 0;
-  border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.7) 0%,
-    var(--lyric-text-active) 100%
-  );
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.35);
-  transition: width 80ms linear;
-  pointer-events: none;
-}
-
-/* 拖拽时显示 thumb 圆点，跟随落点 */
-.mini-progress-thumb {
-  position: absolute;
-  top: 50%;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--lyric-text-active);
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.55), 0 1px 3px rgba(0, 0, 0, 0.3);
-  transform: translate(-50%, -50%) scale(0.6);
-  pointer-events: none;
-  transition: opacity 0.12s var(--ease-out), transform 0.18s var(--ease-spring);
-  z-index: 1;
-}
-
-.mini-bar.is-dragging .mini-progress-thumb {
-  transform: translate(-50%, -50%) scale(1);
-}
-
-/* hover / 拖拽时进度条微微变粗变亮，给出"可拖动"反馈 */
-.mini-bar:hover .mini-progress-edge,
-.mini-bar.is-dragging .mini-progress-edge {
-  height: 4px;
-  background: rgba(255, 255, 255, 0.18);
-}
-
-.mini-bar.is-dragging .mini-progress-fill {
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
-  transition: none; /* 拖拽时关闭 width 过渡，fill 即时跟手 */
-}
-
-/* 拖拽时间气泡：仅拖拽时显示，跟随拇指、弹出小玻璃胶囊，显示目标时间 */
-.mini-progress-bubble {
-  position: absolute;
-  bottom: 8px; /* 悬于底边上，落在预留的底部留白里 */
-  left: 0;
-  transform: translateX(-50%) scale(0.9);
-  transform-origin: center bottom;
-  padding: 3px 9px;
-  border-radius: 8px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 5px;
   font-size: 11px;
-  line-height: 1.5;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  color: var(--lyric-progress-bubble-text);
-  background: var(--lyric-progress-bubble-bg);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(12px) saturate(1.3);
-  -webkit-backdrop-filter: blur(12px) saturate(1.3);
-  opacity: 0;
-  pointer-events: none;
-  z-index: 2;
-  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
 }
 
-.mini-progress-bubble.show {
-  opacity: 1;
-  transform: translateX(-50%) scale(1);
-}
+/* ---------- 迷你播放条已移除：进度与控制键并入左栏（对照参考排版） ---------- */
 </style>

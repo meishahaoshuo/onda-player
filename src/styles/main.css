@@ -115,33 +115,34 @@
   --radius-item: 10px;
 }
 
-/* ---------- 歌词页令牌（沉浸页：两主题同值深色，故定义在 :root 全局不随主题切换） ---------- */
+/* ---------- 歌词页令牌（浅色暖调版式 · 独立沉浸域：两主题同值，定义在 :root 全局不随主题切换） ---------- */
 
 :root {
-  --lyric-bg: #17191d;
-  --lyric-mask: #000;
-  --lyric-shade: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.3));
-  --lyric-text: rgba(255, 255, 255, 0.88);
-  --lyric-text-active: #fff;
-  --lyric-text-sub: rgba(255, 255, 255, 0.92);
-  --lyric-hint: rgba(255, 255, 255, 0.6);
-  --lyric-time: rgba(255, 255, 255, 0.55);
-  --lyric-shadow: 0 2px 16px rgba(0, 0, 0, 0.25);
-  --lyric-control: rgba(255, 255, 255, 0.75);
-  --lyric-control-hover: #fff;
-  --lyric-control-bg: rgba(255, 255, 255, 0.12);
-  --lyric-bar-bg: rgba(28, 28, 30, 0.12);
-  --lyric-play-bg: rgba(255, 255, 255, 0.92);
-  --lyric-play-bg-hover: #fff;
-  --lyric-play-icon: #1a1c20;
-  --lyric-ps-track: rgba(255, 255, 255, 0.07);
-  --lyric-ps-fill: rgba(255, 255, 255, 0.2);
-  --lyric-ps-thumb: rgba(255, 255, 255, 0.8);
-  --lyric-ps-fill-hover: rgba(255, 255, 255, 0.3);
-  --lyric-ps-track-hover: rgba(255, 255, 255, 0.1);
-  --lyric-accent: #fff;
-  --lyric-progress-bubble-bg: rgba(24, 26, 30, 0.86);
-  --lyric-progress-bubble-text: rgba(255, 255, 255, 0.95);
+  --lyric-bg: #f6f3ec;
+  --lyric-bg-deep: #ebe6db;
+  --lyric-mask: #f6f3ec;
+  --lyric-shade: linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(0, 0, 0, 0.04));
+  --lyric-text: #9a958b;
+  --lyric-text-active: #1d1d1f;
+  --lyric-text-sub: #b3aea4;
+  --lyric-hint: #a8a399;
+  --lyric-time: #8f8a80;
+  --lyric-shadow: none;
+  --lyric-control: #4a4741;
+  --lyric-control-hover: #000;
+  --lyric-control-bg: rgba(0, 0, 0, 0.06);
+  --lyric-bar-bg: rgba(255, 255, 255, 0.5);
+  --lyric-play-bg: transparent;
+  --lyric-play-bg-hover: rgba(0, 0, 0, 0.05);
+  --lyric-play-icon: #1d1d1f;
+  --lyric-ps-track: rgba(0, 0, 0, 0.12);
+  --lyric-ps-fill: #1d1d1f;
+  --lyric-ps-thumb: #1d1d1f;
+  --lyric-ps-fill-hover: #000;
+  --lyric-ps-track-hover: rgba(0, 0, 0, 0.18);
+  --lyric-accent: #fa233b;
+  --lyric-progress-bubble-bg: rgba(255, 255, 255, 0.92);
+  --lyric-progress-bubble-text: #1d1d1f;
 
   /* 歌词字号（歌词页内可切换档位，此处为默认「中」档） */
   --lyric-fs: 22px;
