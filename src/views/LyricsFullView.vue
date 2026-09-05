@@ -35,10 +35,14 @@ const FLY_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
 const ambientUrl = ref<string | null>(null)
 const ambientShown = ref(false)
+/** 切歌交叉渐变：换图的瞬间旧背景垫底，新背景从 0 淡入盖住它，避免颜色瞬跳 */
+const ambientPrev = ref<string | null>(null)
+const ambientTopReady = ref(false)
 const ambientCache = new Map<string, string>()
 /** 流光圆斑颜色：从封面提取的明亮饱和色（浅色底的亮眼点缀） */
 const flowColors = ref<string[]>([])
 const flowCache = new Map<string, string[]>()
+let ambientPrevTimer = 0
 
 function revealAmbient() {
   requestAnimationFrame(() => {
@@ -46,19 +50,38 @@ function revealAmbient() {
   })
 }
 
+/** 双层交叉渐变换背景：旧图垫底，新图双 rAF 后开始淡入，渐变完成移除旧层 */
+function applyAmbient(url: string) {
+  if (ambientUrl.value && ambientUrl.value !== url) {
+    ambientPrev.value = ambientUrl.value
+    ambientTopReady.value = false
+    ambientUrl.value = url
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        ambientTopReady.value = true
+      }),
+    )
+    window.clearTimeout(ambientPrevTimer)
+    ambientPrevTimer = window.setTimeout(() => {
+      ambientPrev.value = null
+    }, 650)
+    return
+  }
+  ambientUrl.value = url
+  revealAmbient() // 首次显示：沿用整层淡入
+}
+
 watch(
   () => player.current?.coverId ?? null,
   async (coverId) => {
     if (!coverId) {
       ambientUrl.value = null
+      ambientPrev.value = null
       ambientShown.value = false
       flowColors.value = []
       return
     }
-    const apply = (url: string) => {
-      ambientUrl.value = url
-      revealAmbient()
-    }
+    const apply = (url: string) => applyAmbient(url)
     const cached = ambientCache.get(coverId)
     if (cached) {
       apply(cached)
@@ -129,12 +152,21 @@ const groups = computed<LyricGroup[]>(() =>
 const loading = ref(false)
 /** 歌词加载完成标记（有无歌词都置 true），飞入动画据此等布局稳定 */
 const lyricsSettled = ref(false)
-/** 切歌切换动画开关 */
-const switching = ref(false)
+/** 切歌「精修交叉淡变」：out=旧内容快速下沉淡出，in=新内容分块错峰上浮。
+    epoch 防快速连切串台：只有当前代的定时器能推进相位。 */
+type SwitchPhase = 'idle' | 'out' | 'in'
+const switchPhase = ref<SwitchPhase>('idle')
 /** 歌词滚动容器（须在 watch 前声明，避免 immediate 访问时 TDZ） */
 const scroller = ref<HTMLElement | null>(null)
-/** 切歌淡出起始时刻（须在 watch 前声明） */
+/** 出口阶段起始时刻（须在 watch 前声明） */
 let switchStart = 0
+let switchEpoch = 0
+let switchInTimer = 0
+let switchIdleTimer = 0
+
+const SW_OUT_MS = 200 // 出口阶段最短时长
+const SW_IN_MAX_DELAY = 100 // 入场最大错峰延迟
+const SW_IN_MS = 200 // 单块入场时长
 /** 是否首次挂载：首次打开歌词页由 flyIn 接管入场，不触发「切歌」过场，避免与飞入状态冲突 */
 let currentPathFirstRun = true
 
@@ -144,19 +176,20 @@ watch(
     lyricsSettled.value = false
     const isFirstRun = currentPathFirstRun
     currentPathFirstRun = false
+    const myEpoch = ++switchEpoch
     if (!isFirstRun) {
-      switching.value = true // 切歌：内容淡出淡入
+      switchPhase.value = 'out' // 切歌：旧内容快速沉场
       switchStart = performance.now()
     }
     baseGroups.value = []
     const song = player.current
     if (!path || !song) {
       lyricsSettled.value = true
-      switching.value = false // 未播放时不应停留在淡出态
+      switchPhase.value = 'idle' // 未播放时不应停留在过场态
       return
     }
     loading.value = true
-    // 关键：不要 scrollTo(0)。歌词此时仍透明（flyIn/switching 控制），
+    // 关键：不要 scrollTo(0)。歌词此时仍透明（flyIn/切歌过场控制），
     // 但 scrollTop=0 会导致歌词可见时显示在第一行，与 flyIn 落地后的 scrollToActive
     // 形成「从 0 跳到活动行」的明显跳变。先留默认位置，最后统一处理。
 
@@ -177,11 +210,18 @@ watch(
     scrollToActive(false)
     // 保证入场阶段真正可见（至少 640ms 与封面滑入对齐）再归位，
     // 切歌才有完整过场；少于 640ms 就延后到刚好 640ms
-    if (isFirstRun) return // 首次挂载：不停留在切换态，直接就位
+    if (isFirstRun) return // 首次挂载：由 flyIn 接管入场，不跑切歌过场
+    // 数据就绪且出口阶段播完（取 max）才浮出新内容，不空场
     const elapsed = performance.now() - switchStart
-    window.setTimeout(() => {
-      switching.value = false
-    }, Math.max(0, 640 - elapsed))
+    window.clearTimeout(switchInTimer)
+    switchInTimer = window.setTimeout(() => {
+      if (myEpoch !== switchEpoch) return
+      switchPhase.value = 'in'
+      window.clearTimeout(switchIdleTimer)
+      switchIdleTimer = window.setTimeout(() => {
+        if (myEpoch === switchEpoch) switchPhase.value = 'idle'
+      }, SW_IN_MAX_DELAY + SW_IN_MS + 60)
+    }, Math.max(0, SW_OUT_MS - elapsed))
   },
   { immediate: true },
 )
@@ -777,16 +817,18 @@ onMounted(() => {
   <div
     class="lyrics-full"
     ref="pageEl"
-    :class="{ closing, 'fly-active': flyActive, switching }"
+    :class="{ closing, 'fly-active': flyActive, 'sw-out': switchPhase === 'out', 'sw-in': switchPhase === 'in' }"
     :style="lyricVars"
     @mousemove="onPageMouseMove"
   >
     <!-- 背景：浅色暖调渐变 + 低透明度环境光 + 封面明亮色流光圆斑 -->
     <div class="bg" />
+    <!-- 背景双层：旧图垫底、新图淡入盖住，切歌时环境光平滑交接 -->
+    <div v-if="ambientPrev" class="bg-ambient show" :style="{ backgroundImage: `url(${ambientPrev})` }" />
     <div
       v-if="ambientUrl"
       class="bg-ambient"
-      :class="{ show: ambientShown }"
+      :class="{ show: ambientShown, 'bg-top': !!ambientPrev, ready: ambientTopReady }"
       :style="{ backgroundImage: `url(${ambientUrl})` }"
     />
     <div
@@ -836,7 +878,7 @@ onMounted(() => {
     </div>
 
     <!-- 双栏布局：左栏信息+控制，右栏歌词 -->
-    <div class="layout" :class="{ switching, 'fly-active': flyActive }">
+    <div class="layout" :class="{ 'fly-active': flyActive }">
       <aside class="info-col">
         <div class="stack">
         <header class="track-head">
@@ -1002,10 +1044,27 @@ onMounted(() => {
   }
 }
 
-/* 飞入/切歌过场期间暂停背景呼吸，避免呼吸与过场动画叠加抢帧（单层已很轻，此为双保险） */
+/* 飞入/切歌过场期间暂停背景呼吸，避免呼吸与过场动画叠加抢帧（单层已很轻，此为双保险）；
+   切歌出口阶段环境光压暗，给背景交叉渐变让出可感知度 */
 .lyrics-full.fly-active .bg-ambient,
-.lyrics-full.switching .bg-ambient {
+.lyrics-full.sw-out .bg-ambient,
+.lyrics-full.sw-in .bg-ambient {
   animation-play-state: paused;
+}
+
+.lyrics-full.sw-out .bg-ambient {
+  opacity: 0.08;
+  transition-duration: 180ms;
+}
+
+/* 切歌交叉渐变的顶层：垫底的旧图之上从 0 淡入新图 */
+.bg-ambient.bg-top {
+  transition-duration: 420ms;
+  animation: none;
+}
+
+.bg-ambient.bg-top.ready {
+  opacity: 0.16;
 }
 
 /* ---------- 封面明亮色流光：radial 柔光圆斑缓慢漂移（只动 transform，无 filter），
@@ -1044,10 +1103,20 @@ onMounted(() => {
   to { transform: translate(-8vw, -6vh) scale(0.92); }
 }
 
-/* 飞入/切歌过场期间暂停背景呼吸与流光漂移，避免动画叠加抢帧 */
+/* 飞入/切歌过场期间暂停背景呼吸与流光漂移，避免动画叠加抢帧；
+   切歌出口阶段流光压暗，颜色在新歌取色就绪后于暗场中更换、浮出阶段恢复 */
 .lyrics-full.fly-active .flow,
-.lyrics-full.switching .flow {
+.lyrics-full.sw-out .flow,
+.lyrics-full.sw-in .flow {
   animation-play-state: paused;
+}
+
+.flow {
+  transition: opacity 220ms var(--ease-out);
+}
+
+.lyrics-full.sw-out .flow {
+  opacity: 0.15;
 }
 
 /* 底部稍压暗，保证迷你条与歌词可读 —— 已在 palette.renderAmbientUrl 烘焙进图内，无需单独压暗层 */
@@ -1124,12 +1193,7 @@ onMounted(() => {
   transition: transform 640ms var(--ease-out), opacity 460ms var(--ease-out);
 }
 
-.layout.switching .cover-main {
-  transform: scale(0.96);
-  opacity: 0.55;
-}
-
-/* 封面飞入期间：封面不参与切歌淡入淡出（与飞行叠加会"顿一下"）；
+/* 封面飞入期间：封面不参与切歌过场（与飞行叠加会"顿一下"）；
    视差 translate 同步冻结归零——克隆落点按未偏移位置计算，两边必须一致 */
 .layout.fly-active .cover-main {
   opacity: 1;
@@ -1531,10 +1595,54 @@ onMounted(() => {
   display: none;
 }
 
-.layout.switching .lyric-scroll,
-.layout.switching .no-lyrics-hint {
-  opacity: 0.55;
-  transform: translateY(22px);
+/* ---------- 切歌「精修交叉淡变」：旧内容快速下沉淡出，新内容分块错峰上浮 ----------
+   沉没关键帧只写 to（快速、整齐）；浮出只写 from（从中断处续动），错峰让换新有节奏而不拖沓 */
+@keyframes sw-sink {
+  to {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes sw-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+.sw-out .track-head {
+  animation: sw-sink 160ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+.sw-out .cover-main {
+  animation: sw-sink 160ms cubic-bezier(0.4, 0, 1, 1) 25ms both;
+}
+.sw-out .progress-block {
+  animation: sw-sink 160ms cubic-bezier(0.4, 0, 1, 1) 50ms both;
+}
+.sw-out .controls {
+  animation: sw-sink 160ms cubic-bezier(0.4, 0, 1, 1) 75ms both;
+}
+.sw-out .lyric-scroll,
+.sw-out .no-lyrics-hint {
+  animation: sw-sink 160ms cubic-bezier(0.4, 0, 1, 1) 30ms both;
+}
+
+.sw-in .track-head {
+  animation: sw-rise 200ms var(--ease-out) both;
+}
+.sw-in .cover-main {
+  animation: sw-rise 200ms var(--ease-out) 40ms both;
+}
+.sw-in .progress-block {
+  animation: sw-rise 200ms var(--ease-out) 80ms both;
+}
+.sw-in .controls {
+  animation: sw-rise 200ms var(--ease-out) 100ms both;
+}
+.sw-in .lyric-scroll,
+.sw-in .no-lyrics-hint {
+  animation: sw-rise 200ms var(--ease-out) 60ms both;
 }
 
 .lyric-inner {
@@ -1644,6 +1752,11 @@ onMounted(() => {
   .cover-main :deep(.cover-fallback) {
     transform: none;
     transition: none;
+  }
+  /* 切歌过场降级：不编排，内容直接切换 */
+  .sw-out :is(.track-head, .cover-main, .progress-block, .controls, .lyric-scroll, .no-lyrics-hint),
+  .sw-in :is(.track-head, .cover-main, .progress-block, .controls, .lyric-scroll, .no-lyrics-hint) {
+    animation: none;
   }
 }
 </style>
