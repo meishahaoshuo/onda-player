@@ -106,6 +106,52 @@ export const useLibraryStore = defineStore('library', () => {
         }),
     )
     loaded.value = true
+    schedulePrewarm()
+  }
+
+  /* ---------- 封面 URL 预热 ----------
+     启动后空闲时把封面 URL 预读进内存缓存（coverId → objectURL），
+     本次会话第一次进任何页面，封面都不用再"先占位、后蹦出"。
+     256px 缩略图每张仅十几 KB；上限兜底超大歌库，超出部分仍按需加载。 */
+  const PREWARM_LIMIT = 600
+  let prewarmStarted = false
+
+  function schedulePrewarm() {
+    const ric = (window as Window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback
+    if (ric) ric(() => void prewarmCovers())
+    else window.setTimeout(() => void prewarmCovers(), 800)
+  }
+
+  async function prewarmCovers() {
+    if (prewarmStarted) return
+    prewarmStarted = true
+    const ids: string[] = []
+    const seen = new Set<string>()
+    for (const s of songs.value) {
+      if (s.coverId && !seen.has(s.coverId)) {
+        seen.add(s.coverId)
+        ids.push(s.coverId)
+        if (ids.length >= PREWARM_LIMIT) break
+      }
+    }
+    if (ids.length === 0) {
+      prewarmStarted = false // 首次启动曲库为空，扫描完成后再预热
+      return
+    }
+    let i = 0
+    const worker = async () => {
+      while (i < ids.length) {
+        const id = ids[i++]
+        if (!coverUrls.value.has(id)) {
+          try {
+            await coverUrl(id)
+          } catch {
+            /* 预热失败不阻塞，按需加载兜底 */
+          }
+        }
+      }
+    }
+    await Promise.all([worker(), worker(), worker()])
   }
 
   async function addFolder(): Promise<boolean> {
@@ -178,6 +224,7 @@ export const useLibraryStore = defineStore('library', () => {
       }
     } finally {
       scanning.value = false
+      schedulePrewarm() // 扫描产生的新封面在空闲时补预热
     }
   }
 
