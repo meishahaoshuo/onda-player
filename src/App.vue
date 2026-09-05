@@ -6,6 +6,7 @@ import SongsView from '@/views/SongsView.vue'
 import FoldersView from '@/views/FoldersView.vue'
 import AlbumsView from '@/views/AlbumsView.vue'
 import AlbumDetailView from '@/views/AlbumDetailView.vue'
+import ArtistDetailView from '@/views/ArtistDetailView.vue'
 import ArtistsView from '@/views/ArtistsView.vue'
 import GenresView from '@/views/GenresView.vue'
 import PlaylistsView from '@/views/PlaylistsView.vue'
@@ -45,7 +46,7 @@ const sectionEl = ref<HTMLElement | null>(null)
    回来时（Transition enter 或同视图钻取返回）恢复。
    key：`view:<视图>|<detailKey>`；SongList/VirtualList 的内部滚动由组件自己记（list:*）。 */
 const scrollKey = (view: string, detail: string | null) => `view:${view}|${detail ?? ''}`
-const INLINE_DETAIL_VIEWS = new Set<string>(['artists', 'genres', 'playlists'])
+const INLINE_DETAIL_VIEWS = new Set<string>(['genres', 'playlists'])
 
 watch(
   [() => ui.activeView, () => ui.detailKey] as const,
@@ -124,6 +125,12 @@ watch(
         <AlbumDetailView
           v-if="ui.activeView === 'albums' && ui.detailKey"
           :album-key="ui.detailKey"
+          class="detail-layer"
+        />
+        <!-- 艺术家详情：与专辑详情同架构（覆盖层 + 引力坍缩过渡） -->
+        <ArtistDetailView
+          v-else-if="ui.activeView === 'artists' && ui.detailKey"
+          :artist-name="ui.detailKey"
           class="detail-layer"
         />
       </main>

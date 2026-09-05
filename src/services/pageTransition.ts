@@ -136,9 +136,9 @@ export function beginAlbumEnter(o: {
 
 /** 清掉网格卡片的行内 transform（磁吸引力场的残留） */
 function clearInlineTransforms(cardEl: HTMLElement) {
-  const grid = cardEl.closest('.album-grid')
+  const grid = cardEl.closest('.album-grid, .artist-grid')
   if (!grid) return
-  for (const c of grid.querySelectorAll<HTMLElement>('.album-card')) c.style.transform = ''
+  for (const c of grid.querySelectorAll<HTMLElement>('.album-card, .artist-card')) c.style.transform = ''
 }
 
 /** 周边卡片被吸入点击点：越近越先被吞，带一点旋转（被"拽"进去的失控感） */

@@ -1,86 +1,88 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
-import SongList from '@/components/SongList.vue'
-import AppIcon from '@/components/AppIcon.vue'
-import { capturePageTransition, playPageTransition } from '@/services/legacyFlip'
+import { beginAlbumEnter } from '@/services/pageTransition'
+import { paletteCache } from '@/services/paletteCache'
+import { useMagneticGrid } from '@/composables/useMagneticGrid'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
-import { useUiStore } from '@/stores/ui'
-import type { SongRecord } from '@/types'
 
+/**
+ * 艺术家网格：与专辑页同一套「引力坍缩」过渡 + 磁吸引力场。
+ * 详情渲染在覆盖层组件 ArtistDetailView（由 App.vue 挂载），网格常驻不卸载。
+ */
 const library = useLibraryStore()
-const ui = useUiStore()
 const player = usePlayerStore()
 
-const currentArtist = computed(() =>
-  library.artists.find((a) => a.name === ui.detailKey),
-)
+const gridEl = ref<HTMLElement | null>(null)
+const magnet = useMagneticGrid(gridEl, '.artist-card')
 
-/* 共享元素过渡 + 内容错峰浮现 + 返回轻淡出 */
-const artistRevealed = ref(false)
-const artistClosing = ref(false)
-
-watch(
-  currentArtist,
-  async (artist) => {
-    artistRevealed.value = false
-    artistClosing.value = false
-    if (!artist) return
-    await nextTick()
-    await playPageTransition(document.querySelector<HTMLElement>('.artist-detail .header-cover'))
-    artistRevealed.value = true
-  },
-  { immediate: true, flush: 'post' },
-)
-
-function closeArtist() {
-  if (artistClosing.value || !currentArtist.value) return
-  artistClosing.value = true
-  window.setTimeout(() => {
-    ui.closeDetail()
-    artistClosing.value = false
-  }, 180)
+function openArtist(artist: { name: string; coverId: string | null }, e: MouseEvent) {
+  const cardEl = e.currentTarget as HTMLElement
+  const cover = cardEl.querySelector<HTMLElement>('img, .cover-fallback')
+  if (!cover) return
+  beginAlbumEnter({
+    cardEl,
+    coverEl: cover,
+    click: { x: e.clientX, y: e.clientY },
+    albumKey: artist.name,
+    coverId: artist.coverId,
+  })
 }
 
-function openArtist(artist: { name: string }, e: MouseEvent) {
-  const cover = (e.currentTarget as HTMLElement).querySelector<HTMLElement>('img, .cover-fallback')
-  capturePageTransition(cover, { x: e.clientX, y: e.clientY })
-  ui.openDetail(artist.name)
-}
-
-function onPlay(song: SongRecord) {
-  if (!currentArtist.value) return
-  void player.playSong(song, currentArtist.value.songs)
-}
-
-/** 当前播放的曲目是否属于这位艺术家（艺术家 key = artist） */
+/** 当前播放的曲目是否属于这位艺术家 */
 function isPlayingArtist(artist: { name: string }) {
   return player.current?.artist === artist.name
 }
+
+/* 封面主色预取：过渡涟漪与详情环境色的取色来源 */
+let scrollEl: HTMLElement | null = null
+let scrollTimer = 0
+
+function primeVisible() {
+  const cards = gridEl.value?.querySelectorAll<HTMLElement>('.artist-card')
+  if (cards) paletteCache.prime(cards)
+}
+
+function onScroll() {
+  window.clearTimeout(scrollTimer)
+  scrollTimer = window.setTimeout(primeVisible, 200)
+}
+
+/** hover 视为"用户可能要点"，插队优先取色 */
+function onHover(e: MouseEvent) {
+  const card = (e.target as HTMLElement | null)?.closest<HTMLElement>('.artist-card')
+  paletteCache.primeNow(card?.dataset.coverId)
+}
+
+onMounted(() => {
+  scrollEl = (gridEl.value?.closest('.view-body') as HTMLElement | null) ?? null
+  scrollEl?.addEventListener('scroll', onScroll, { passive: true })
+  const ric = (window as Window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback
+  if (ric) ric(() => primeVisible())
+  else window.setTimeout(primeVisible, 300)
+})
+
+onBeforeUnmount(() => {
+  scrollEl?.removeEventListener('scroll', onScroll)
+  window.clearTimeout(scrollTimer)
+})
 </script>
 
 <template>
-  <div v-if="currentArtist" class="artist-detail" :class="{ revealed: artistRevealed, closing: artistClosing }">
-    <button class="back-btn" @click="closeArtist">
-      <AppIcon name="close" :size="14" /> 返回艺术家列表
-    </button>
-    <header class="artist-header">
-      <CoverImage :cover-id="currentArtist.coverId" :size="120" class="header-cover" />
-      <div>
-        <h1 class="artist-name">{{ currentArtist.name }}</h1>
-        <div class="artist-sub">{{ currentArtist.songs.length }} 首歌曲</div>
-      </div>
-    </header>
-    <SongList class="list" :songs="currentArtist.songs" :current-path="player.currentPath" :persist-key="`list:artist:${currentArtist.name}`" @play="onPlay" />
-  </div>
-
-  <div v-else class="artist-grid">
+  <div
+    ref="gridEl"
+    class="artist-grid"
+    @mouseover="onHover"
+    @mousemove="magnet.onMouseMove"
+    @mouseleave="magnet.onMouseLeave"
+  >
     <button
       v-for="artist in library.artists"
       :key="artist.name"
       class="artist-card"
       :class="{ playing: isPlayingArtist(artist) }"
+      :data-cover-id="artist.coverId ?? ''"
       @click="openArtist(artist, $event)"
     >
       <span class="cover-wrap">
@@ -94,51 +96,6 @@ function isPlayingArtist(artist: { name: string }) {
 </template>
 
 <style scoped>
-.artist-detail {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  align-self: flex-start;
-  font-size: 13px;
-  color: var(--text-secondary);
-  padding: 6px 10px;
-  border-radius: 6px;
-}
-
-.back-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.artist-header {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
-.artist-name {
-  font-size: 24px;
-  font-weight: 600;
-}
-
-.artist-sub {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-top: 4px;
-}
-
-.list {
-  flex: 1;
-  min-height: 0;
-}
-
 .artist-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -155,7 +112,8 @@ function isPlayingArtist(artist: { name: string }) {
   text-align: center;
   position: relative;
   overflow: hidden;
-  transition: background 0.15s;
+  transition: background var(--dur-fast) var(--ease-out), transform 200ms var(--ease-out),
+    box-shadow var(--dur-med) var(--ease-out);
 }
 
 .cover-wrap {
@@ -166,22 +124,17 @@ function isPlayingArtist(artist: { name: string }) {
   color: var(--accent);
 }
 
+/* hover：背景变亮 + 投影，位移交给磁吸引力场 */
 @media (hover: hover) and (pointer: fine) {
   .artist-card:hover {
     background: var(--bg-hover);
-    transform: translateY(-3px);
     box-shadow: var(--shadow-2);
-  }
-  .artist-card:hover .artist-cover :deep(img),
-  .artist-card:hover .artist-cover :deep(.cover-fallback) {
-    transform: scale(1.05);
   }
 }
 
 .artist-card :deep(img),
 .artist-card :deep(.cover-fallback) {
   border-radius: 50%;
-  transition: transform var(--dur-med) var(--ease-spring);
 }
 
 .artist-name {
@@ -204,66 +157,8 @@ function isPlayingArtist(artist: { name: string }) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .artist-card:hover {
-    transform: none;
-  }
-  .artist-card:hover .artist-cover :deep(img),
-  .artist-card:hover .artist-cover :deep(.cover-fallback) {
-    transform: none;
-  }
-}
-
-/* 共享元素过渡落定后的错峰浮现 + 返回轻淡出 */
-.artist-detail {
-  transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
-}
-
-.artist-detail.closing {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-.artist-detail .back-btn,
-.artist-detail .artist-header,
-.artist-detail .list {
-  opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 320ms var(--ease-out), transform 320ms var(--ease-out);
-}
-
-.artist-detail.revealed .back-btn {
-  transition-delay: 40ms;
-}
-
-.artist-detail.revealed .artist-header {
-  transition-delay: 80ms;
-}
-
-.artist-detail.revealed .list {
-  transition-delay: 120ms;
-}
-
-.artist-detail.revealed .back-btn,
-.artist-detail.revealed .artist-header,
-.artist-detail.revealed .list {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .artist-detail {
+  .artist-card {
     transition: none;
-  }
-  .artist-detail.closing {
-    transform: none;
-  }
-  .artist-detail .back-btn,
-  .artist-detail .artist-header,
-  .artist-detail .list {
-    opacity: 1;
-    transform: none;
-    transition: none;
-    transition-delay: 0ms;
   }
 }
 </style>
