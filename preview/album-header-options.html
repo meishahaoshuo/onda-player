@@ -134,25 +134,53 @@
     line-height: 1.4;
   }
 
-  /* ===== 方案 A：专辑信息面板 ===== */
+  /* ===== 方案 A：专辑信息面板（玻璃质感版） ===== */
   .optA-panel {
     position: relative; z-index: 2;
     margin-left: auto;
     align-self: center;
-    display: grid;
-    grid-template-columns: auto auto;
-    gap: 10px 28px;
     font-size: 13px;
-    padding: 18px 22px;
+    padding: 6px 20px;
+    border-radius: 14px;
+    background: linear-gradient(120deg, rgba(255, 255, 255, 0.72), rgba(250, 250, 252, 0.6) 55%, rgba(255, 255, 255, 0.66));
+    backdrop-filter: blur(32px) saturate(1.4);
+    -webkit-backdrop-filter: blur(32px) saturate(1.4);
     border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-item);
-    background: color-mix(in srgb, var(--bg-base) 55%, transparent);
-    backdrop-filter: blur(6px);
-    max-width: 380px;
+    box-shadow:
+      0 10px 30px rgba(0, 0, 0, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.03);
+    max-width: 360px;
   }
-  .optA-panel .k { color: var(--text-tertiary); font-size: 12px; align-self: center; }
-  .optA-panel .v { color: var(--text-primary); text-align: right; }
-  .optA-panel .v .badge { margin-left: 6px; }
+  html.dark .optA-panel {
+    background: linear-gradient(120deg, rgba(28, 28, 30, 0.72), rgba(36, 36, 38, 0.6) 55%, rgba(28, 28, 30, 0.66));
+    box-shadow:
+      0 10px 30px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  }
+  .optA-row {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 20px;
+    align-items: baseline;
+    padding: 9px 0;
+  }
+  .optA-row + .optA-row { border-top: 1px solid var(--border-subtle); }
+  .optA-row .k { color: var(--text-tertiary); font-size: 11px; letter-spacing: 0.08em; }
+  .optA-row .v {
+    color: var(--text-primary);
+    text-align: right;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+  }
+  .optA-row .v .badge {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.4px;
+    color: #fff; border: none; border-radius: 3px;
+    padding: 2px 5px; line-height: 1.2;
+    background: var(--accent);
+  }
 
   /* ===== 方案 B：快捷操作按钮列 ===== */
   .optB-col {
@@ -248,12 +276,11 @@
           </div>
         </div>
         <div class="optA-panel">
-          <span class="k">流派</span><span class="v">流行 / Pop</span>
-          <span class="k">音质</span><span class="v">24bit / 96kHz <span class="badge">Hi-Res</span></span>
-          <span class="k">格式</span><span class="v">FLAC × 11</span>
-          <span class="k">总大小</span><span class="v">1.8 GB</span>
-          <span class="k">碟片</span><span class="v">1 张</span>
-          <span class="k">平均码率</span><span class="v">≈ 950 kbps</span>
+          <div class="optA-row"><span class="k">流派</span><span class="v">流行 / Pop</span></div>
+          <div class="optA-row"><span class="k">音质</span><span class="v">24bit / 96 kHz <span class="badge">Hi-Res</span></span></div>
+          <div class="optA-row"><span class="k">格式</span><span class="v">FLAC × 11</span></div>
+          <div class="optA-row"><span class="k">总大小</span><span class="v">1.8 GB</span></div>
+          <div class="optA-row"><span class="k">平均码率</span><span class="v">≈ 950 kbps</span></div>
         </div>
       </div>
     </div>

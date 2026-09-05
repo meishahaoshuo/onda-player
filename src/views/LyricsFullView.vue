@@ -610,32 +610,18 @@ function waitForLyrics(timeout: number): Promise<void> {
 
 /** 落地后的收尾：恢复真实封面、清掉飞行层、补上歌词定位 */
 function settleFly(flying: HTMLElement | null, dstEl: HTMLElement | null) {
-  const finish = () => {
-    if (flying) {
-      flying.style.willChange = ''
-      flying.remove()
-    }
-    if (dstEl) dstEl.style.transition = ''
-    requestAnimationFrame(() => {
-      flyActive.value = false
-      requestAnimationFrame(() => scrollToActive(false))
-    })
-  }
-  // 交接：真实封面立即不透明并藏于克隆之下，再仅淡出克隆——避免两者同时半透明让背景透出（闪一下）
-  if (flying && dstEl) {
-    // 真实封面立即不透明（被仍在顶层的克隆盖住），再只淡出克隆：
-    // 两者若同时半透明会让背景透出、亮度坍塌成「闪一下」
+  if (dstEl) {
     dstEl.style.transition = 'none'
     dstEl.style.opacity = '1'
-    flying.style.transition = 'opacity 120ms linear'
-    flying.style.opacity = '0'
-    requestAnimationFrame(() => {
-      window.setTimeout(finish, 130)
-    })
-  } else {
-    if (dstEl) dstEl.style.opacity = '1'
-    finish()
   }
+  // 单帧硬切换，零重叠：克隆与真实封面此刻逐像素一致（同图源/同圆角/同投影/同位置），
+  // 同帧互换视觉零变化；任何重叠淡出都会让两份投影叠成「黑色光晕」再消退（顿挫感来源）
+  flying?.remove()
+  requestAnimationFrame(() => {
+    if (dstEl) dstEl.style.transition = ''
+    flyActive.value = false
+    requestAnimationFrame(() => scrollToActive(false))
+  })
 }
 
 function flyIn() {
