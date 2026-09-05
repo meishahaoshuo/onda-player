@@ -140,12 +140,8 @@ watch(
     const lrc = await readLrcFile(song.rootId, path.slice(song.rootId.length + 1))
     if (lrc && lrc.trim()) {
       groups.value = parseLrc(lrc)
-      lyricSource.value = 'lrc'
     } else if (song.embeddedLyrics) {
       groups.value = parseEmbeddedLyrics(song.embeddedLyrics)
-      lyricSource.value = 'embedded'
-    } else {
-      lyricSource.value = null
     }
     loading.value = false
     lyricsSettled.value = true
@@ -274,23 +270,6 @@ function lineClass(i: number) {
 }
 
 const hasLyrics = computed(() => groups.value.length > 0)
-
-/** 歌词来源徽标（右栏左下角）：LRC 文件 / EMBEDDED 内嵌 */
-const lyricSource = ref<'lrc' | 'embedded' | null>(null)
-const lyricSourceLabel = computed(() =>
-  lyricSource.value === 'lrc' ? 'LRC' : lyricSource.value === 'embedded' ? 'EMBEDDED' : '',
-)
-
-/** 音频格式行（左栏封面下方）：容器 + 采样率 + 位深 */
-const formatMeta = computed(() => {
-  const s = player.current
-  if (!s) return ''
-  const parts: string[] = []
-  if (s.container) parts.push(s.container.toUpperCase())
-  if (s.sampleRateHz) parts.push(`${(s.sampleRateHz / 1000).toFixed(1)} kHz`)
-  if (s.bitsPerSample) parts.push(`${s.bitsPerSample}bit`)
-  return parts.join('  ')
-})
 
 /* ---------- 底部进度条（作为 mini-bar 整体底边线） ---------- */
 
@@ -616,7 +595,6 @@ onMounted(() => {
           <div class="cover-main" v-if="player.current">
             <CoverImage :cover-id="player.current.coverId" :size="420" hires />
           </div>
-          <div class="format-line">{{ formatMeta }}</div>
 
           <div class="progress-block" :class="{ 'is-dragging': progressDragging }">
             <div class="progress-edge">
@@ -687,10 +665,6 @@ onMounted(() => {
         </div>
         <div v-else class="no-lyrics-hint">
           {{ loading ? '正在加载歌词…' : player.current ? '当前歌曲没有歌词（需要与音频同目录的同名 .lrc 文件）' : '未在播放' }}
-        </div>
-        <div v-if="lyricSourceLabel" class="lyric-badge">
-          <span class="badge-tag">词</span>
-          <span class="badge-src">{{ lyricSourceLabel }}</span>
         </div>
       </section>
     </div>
@@ -811,7 +785,7 @@ onMounted(() => {
 /* 切歌切换动画：封面平滑缩入 + 歌词上浮淡入 */
 .cover-main {
   position: relative;
-  margin: 26px 0 0;
+  margin: 26px 0 4px;
   transition: transform 640ms var(--ease-out), opacity 460ms var(--ease-out);
 }
 
@@ -834,16 +808,6 @@ onMounted(() => {
   height: var(--cover-w);
   border-radius: 10px;
   box-shadow: 0 20px 48px rgba(70, 58, 34, 0.18);
-}
-
-.format-line {
-  margin-top: 14px;
-  min-height: 16px;
-  font-size: 12px;
-  color: var(--lyric-time);
-  letter-spacing: 0.4px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- 进度条（左栏、与封面同宽） ---------- */
@@ -1128,31 +1092,4 @@ onMounted(() => {
   font-size: 15px;
   transition: opacity 520ms var(--ease-out), transform 560ms var(--ease-out);
 }
-
-/* 歌词来源徽标（右栏左下角）：词 LRC / 词 EMBEDDED */
-.lyric-badge {
-  position: absolute;
-  left: 4vw;
-  bottom: 26px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--lyric-time);
-  letter-spacing: 0.5px;
-}
-
-.badge-tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 4px;
-  border: 1px solid currentColor;
-  border-radius: 5px;
-  font-size: 11px;
-}
-
-/* ---------- 迷你播放条已移除：进度与控制键并入左栏（对照参考排版） ---------- */
 </style>
