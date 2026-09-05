@@ -15,6 +15,8 @@ export const useUiStore = defineStore('ui', () => {
   const lyricsOpen = ref(false)
   /** 专辑过渡编排状态：idle 空闲 / enter 推进中 / exit 返回中（同时用作连点闸门） */
   const dolly = ref<'idle' | 'enter' | 'exit'>('idle')
+  /** 专辑网格的浏览位置（切视图卸载前捕获，回来时恢复） */
+  const albumsScrollTop = ref(0)
 
   function navigate(view: ViewId) {
     activeView.value = view
@@ -56,6 +58,7 @@ export const useUiStore = defineStore('ui', () => {
     playlistCreateRequested,
     lyricsOpen,
     dolly,
+    albumsScrollTop,
     navigate,
     requestPlaylistCreate,
     openDetail,

@@ -39,7 +39,9 @@ export const useLibraryStore = defineStore('library', () => {
   const albums = computed<AlbumSummary[]>(() => {
     const map = new Map<string, SongRecord[]>()
     for (const s of songs.value) {
-      const key = `${s.album}\n${s.albumArtist}`
+      // 按封面归组：同一张封面就是同一张专辑（合辑/同封面多艺术家不再拆成多张卡片）；
+      // 没有封面的歌回退到 专辑名+专辑艺术家 归组
+      const key = s.coverId ? `cover:${s.coverId}` : `meta:${s.album}\n${s.albumArtist}`
       const list = map.get(key)
       if (list) list.push(s)
       else map.set(key, [s])
@@ -52,10 +54,11 @@ export const useLibraryStore = defineStore('library', () => {
           a.title.localeCompare(b.title, 'zh-Hans-CN'),
       )
       const withYear = sorted.find((s) => s.year !== null)
+      const albumArtists = [...new Set(sorted.map((s) => s.albumArtist).filter(Boolean))]
       return {
         key,
         name: sorted[0].album,
-        artist: sorted[0].albumArtist,
+        artist: albumArtists.length === 1 ? albumArtists[0] : '群星',
         year: withYear?.year ?? null,
         songs: sorted,
         coverId: sorted.find((s) => s.coverId)?.coverId ?? null,

@@ -31,10 +31,12 @@ function openAlbum(album: { key: string; coverId: string | null }, e: MouseEvent
   })
 }
 
-/** 当前播放的曲目是否属于这张专辑（专辑 key = album + \n + albumArtist） */
-function isPlayingAlbum(album: { key: string }) {
+/** 当前播放的曲目是否属于这张专辑（有封面按封面比对，无封面回退元数据 key） */
+function isPlayingAlbum(album: { key: string; coverId: string | null }) {
   const c = player.current
-  return c ? `${c.album}\n${c.albumArtist}` === album.key : false
+  if (!c) return false
+  if (album.coverId) return c.coverId === album.coverId
+  return `${c.album}\n${c.albumArtist}` === album.key
 }
 
 /* ---------- 封面主色预取 ----------
@@ -129,11 +131,13 @@ function clearMagnet() {
 
 /* ---------- 入场错峰浮现 ----------
    进入专辑页时前 24 张卡片按序轻轻浮现（一次性、不循环）；
-   视口外的卡片不做动画（否则延迟会累积到数秒）。 */
+   视口外的卡片不做动画（否则延迟会累积到数秒）。
+   从列表中部恢复浏览位置时跳过——对看不见的卡片做动画只会显得像在加载。 */
 let entrancePlayed = false
 
 function playEntrance() {
   if (reducedMotion()) return
+  if (ui.albumsScrollTop > 10) return
   const cards = gridEl.value?.querySelectorAll<HTMLElement>('.album-card')
   if (!cards?.length) return
   const n = Math.min(cards.length, 24)
@@ -145,6 +149,14 @@ function playEntrance() {
   }
 }
 
+/* ---------- 浏览位置记忆：切视图卸载前捕获，回来时恢复 ---------- */
+function restoreScroll() {
+  const el = scrollEl
+  if (!el || ui.albumsScrollTop <= 0) return
+  el.scrollTop = ui.albumsScrollTop
+  requestAnimationFrame(refreshRects)
+}
+
 watch(
   () => sortedAlbums.value.length,
   (n, o) => {
@@ -152,6 +164,7 @@ watch(
       entrancePlayed = true
       playEntrance()
     }
+    if (n > 0) restoreScroll()
   },
   { flush: 'post' },
 )
@@ -168,6 +181,7 @@ onMounted(() => {
   scrollEl = (gridEl.value?.closest('.view-body') as HTMLElement | null) ?? null
   scrollEl?.addEventListener('scroll', onScroll, { passive: true })
   window.addEventListener('resize', onScroll, { passive: true })
+  restoreScroll()
   if (sortedAlbums.value.length && !entrancePlayed) {
     entrancePlayed = true
     playEntrance()
@@ -179,6 +193,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  ui.albumsScrollTop = scrollEl?.scrollTop ?? 0
   scrollEl?.removeEventListener('scroll', onScroll)
   window.removeEventListener('resize', onScroll)
   window.clearTimeout(scrollTimer)
