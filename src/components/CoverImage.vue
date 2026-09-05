@@ -11,7 +11,8 @@ import AppIcon from './AppIcon.vue'
 const props = defineProps<{ coverId: string | null; size?: number; hires?: boolean }>()
 
 const library = useLibraryStore()
-const url = ref<string | null>(null)
+/** 首帧同步取缓存 URL：切页回来时封面不再"先占位后蹦出"。 */
+const url = ref<string | null>(library.peekCoverUrl(props.coverId))
 
 /** 等图片位图真正就绪再替换 src，替换瞬间即可见 */
 function preload(src: string): Promise<void> {
@@ -29,7 +30,7 @@ function preload(src: string): Promise<void> {
 
 async function load() {
   const id = props.coverId
-  url.value = await library.coverUrl(id)
+  url.value = library.peekCoverUrl(id) ?? (await library.coverUrl(id))
   if (!props.hires || !id) return
   const hi = await library.coverUrlHi(id)
   if (!hi || props.coverId !== id) return

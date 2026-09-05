@@ -188,6 +188,11 @@ export const useLibraryStore = defineStore('library', () => {
   /* ---------- 封面 URL 缓存 ---------- */
   const coverUrls = ref(new Map<string, string>())
 
+  /** 同步读取已缓存的封面 URL（未命中返回 null）。供组件首帧直接上 src，避免切页回来时封面闪一下。 */
+  function peekCoverUrl(coverId: string | null): string | null {
+    return coverId ? coverUrls.value.get(coverId) ?? null : null
+  }
+
   async function coverUrl(coverId: string | null): Promise<string | null> {
     if (!coverId) return null
     const cached = coverUrls.value.get(coverId)
@@ -268,6 +273,7 @@ export const useLibraryStore = defineStore('library', () => {
     rescan,
     cancelScan,
     coverUrl,
+    peekCoverUrl,
     coverUrlHi,
   }
 })
