@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import { useLibraryStore } from '@/stores/library'
 import { useUiStore } from '@/stores/ui'
@@ -50,7 +50,13 @@ function primeVisible() {
 
 function onScroll() {
   window.clearTimeout(scrollTimer)
-  scrollTimer = window.setTimeout(primeVisible, 200)
+  scrollTimer = window.setTimeout(onSettled, 200)
+}
+
+/** 滚动/尺寸稳定后：预取可视区封面主色 + 刷新磁吸矩形缓存 */
+function onSettled() {
+  primeVisible()
+  refreshRects()
 }
 
 /** hover 视为"用户可能要点"，插队优先取色 */
@@ -59,24 +65,131 @@ function onHover(e: MouseEvent) {
   paletteCache.primeNow(card?.dataset.coverId)
 }
 
+/* ---------- 磁吸引力场 ----------
+   与进入详情的「引力坍缩」同一套叙事：平时封面就有微弱的引力，
+   光标靠近（240px 内）被轻轻吸过来（≤4px，按距离衰减），离开即弹回。
+   性能护栏：矩形缓存 + rAF 节流，只写半径内卡片的 transform。 */
+const MAGNET_RADIUS = 240
+const MAGNET_STRENGTH = 0.05
+const cardRects = new Map<HTMLElement, { cx: number; cy: number }>()
+const magnetActive = new Set<HTMLElement>()
+let magnetRaf = 0
+let magnetEvt: MouseEvent | null = null
+
+function reducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+function refreshRects() {
+  cardRects.clear()
+  for (const c of gridEl.value?.querySelectorAll<HTMLElement>('.album-card') ?? []) {
+    const r = c.getBoundingClientRect()
+    cardRects.set(c, { cx: r.left + r.width / 2, cy: r.top + r.height / 2 })
+  }
+}
+
+function magnetFrame() {
+  magnetRaf = 0
+  const e = magnetEvt
+  if (!e) return
+  const next = new Set<HTMLElement>()
+  cardRects.forEach((p, c) => {
+    const dx = e.clientX - p.cx
+    const dy = e.clientY - p.cy
+    const d = Math.hypot(dx, dy)
+    if (d >= MAGNET_RADIUS) return
+    const pull = 1 - d / MAGNET_RADIUS
+    next.add(c)
+    c.style.transform = `translate(${(dx * pull * MAGNET_STRENGTH).toFixed(1)}px, ${(dy * pull * MAGNET_STRENGTH).toFixed(1)}px)`
+  })
+  magnetActive.forEach((c) => {
+    if (!next.has(c)) {
+      c.style.transform = ''
+      magnetActive.delete(c)
+    }
+  })
+  next.forEach((c) => magnetActive.add(c))
+}
+
+function onGridMouseMove(e: MouseEvent) {
+  if (reducedMotion() || ui.dolly !== 'idle') return
+  if (cardRects.size === 0) refreshRects()
+  magnetEvt = e
+  if (!magnetRaf) magnetRaf = requestAnimationFrame(magnetFrame)
+}
+
+function clearMagnet() {
+  if (magnetRaf) {
+    cancelAnimationFrame(magnetRaf)
+    magnetRaf = 0
+  }
+  magnetActive.forEach((c) => (c.style.transform = ''))
+  magnetActive.clear()
+}
+
+/* ---------- 入场错峰浮现 ----------
+   进入专辑页时前 24 张卡片按序轻轻浮现（一次性、不循环）；
+   视口外的卡片不做动画（否则延迟会累积到数秒）。 */
+let entrancePlayed = false
+
+function playEntrance() {
+  if (reducedMotion()) return
+  const cards = gridEl.value?.querySelectorAll<HTMLElement>('.album-card')
+  if (!cards?.length) return
+  const n = Math.min(cards.length, 24)
+  for (let i = 0; i < n; i++) {
+    cards[i].animate(
+      [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }],
+      { duration: 340, delay: i * 30, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)', fill: 'backwards' },
+    )
+  }
+}
+
+watch(
+  () => sortedAlbums.value.length,
+  (n, o) => {
+    if (n > 0 && o === 0 && !entrancePlayed) {
+      entrancePlayed = true
+      playEntrance()
+    }
+  },
+  { flush: 'post' },
+)
+
+/* 过渡结束（详情返回/进入落定）后矩形缓存可能过时，回到 idle 时刷新 */
+watch(
+  () => ui.dolly,
+  (v) => {
+    if (v === 'idle') refreshRects()
+  },
+)
+
 onMounted(() => {
   scrollEl = (gridEl.value?.closest('.view-body') as HTMLElement | null) ?? null
   scrollEl?.addEventListener('scroll', onScroll, { passive: true })
+  window.addEventListener('resize', onScroll, { passive: true })
+  if (sortedAlbums.value.length && !entrancePlayed) {
+    entrancePlayed = true
+    playEntrance()
+  }
   const ric = (window as Window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback
-  if (ric) ric(() => primeVisible())
-  else window.setTimeout(primeVisible, 300)
+  const idle = () => onSettled()
+  if (ric) ric(idle)
+  else window.setTimeout(idle, 300)
 })
 
 onBeforeUnmount(() => {
   scrollEl?.removeEventListener('scroll', onScroll)
+  window.removeEventListener('resize', onScroll)
   window.clearTimeout(scrollTimer)
+  clearMagnet()
   // 网格被卸载（切到别的视图）时清理过渡遗留，避免动画引用已销毁的 DOM
   if (ui.dolly === 'idle') clearTransitionState()
 })
 </script>
 
 <template>
-  <div ref="gridEl" class="album-grid" @mouseover="onHover">
+  <div ref="gridEl" class="album-grid" @mouseover="onHover" @mousemove="onGridMouseMove" @mouseleave="clearMagnet">
     <button
       v-for="album in sortedAlbums"
       :key="album.key"
@@ -112,7 +225,7 @@ onBeforeUnmount(() => {
   padding: 12px;
   border-radius: var(--radius-panel);
   text-align: left;
-  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-med) var(--ease-spring),
+  transition: background var(--dur-fast) var(--ease-out), transform 200ms var(--ease-out),
     box-shadow var(--dur-med) var(--ease-out);
   position: relative;
   overflow: hidden;
@@ -127,10 +240,10 @@ onBeforeUnmount(() => {
   color: var(--accent);
 }
 
+/* hover：只留背景变亮 + 投影，位移交给磁吸引力场 */
 @media (hover: hover) and (pointer: fine) {
   .album-card:hover {
     background: var(--bg-hover);
-    transform: translateY(-3px);
     box-shadow: var(--shadow-2);
   }
 }
@@ -145,14 +258,6 @@ onBeforeUnmount(() => {
   width: 140px;
   height: 140px;
   border-radius: 8px;
-  transition: transform var(--dur-med) var(--ease-spring);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .album-card:hover .album-cover :deep(img),
-  .album-card:hover .album-cover :deep(.cover-fallback) {
-    transform: scale(1.04);
-  }
 }
 
 .album-name {
@@ -180,12 +285,8 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .album-card:hover {
-    transform: none;
-  }
-  .album-card:hover .album-cover :deep(img),
-  .album-card:hover .album-cover :deep(.cover-fallback) {
-    transform: none;
+  .album-card {
+    transition: none;
   }
 }
 </style>
