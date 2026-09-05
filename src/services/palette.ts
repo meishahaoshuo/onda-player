@@ -108,8 +108,8 @@ function computeAmbient(data: Uint8ClampedArray, W: number, H: number) {
   return { foci, base }
 }
 
-/** 取一张 64×N 采样画布（读回像素供 computeAmbient 使用）。 */
-async function sampleBitmap(blob: Blob): Promise<{
+/** 取一张 64×N 采样画布（读回像素供 computeAmbient 使用）。已导出：歌词页流光取色复用。 */
+export async function sampleBitmap(blob: Blob): Promise<{
   W: number
   H: number
   data: Uint8ClampedArray
@@ -125,6 +125,69 @@ async function sampleBitmap(blob: Blob): Promise<{
   ctx.drawImage(bitmap, 0, 0, W, H)
   const { data } = ctx.getImageData(0, 0, W, H)
   return { W, H, data, bitmap }
+}
+
+/**
+ * 提取封面的「明亮饱和色」2-3 个（给歌词页浅色流光背景用）：
+ * 与 computeAmbient 的压暗策略相反——专挑饱和度高且足够亮的色块，
+ * 过滤近黑/近白，按色距去重后轻微混白提亮。
+ */
+export async function extractBrightColors(blob: Blob): Promise<string[]> {
+  const { W, H, data, bitmap } = await sampleBitmap(blob)
+  try {
+    const gridX = 4
+    const gridY = 3
+    const cands: { score: number; r: number; g: number; b: number }[] = []
+    for (let gy = 0; gy < gridY; gy++) {
+      for (let gx = 0; gx < gridX; gx++) {
+        let r = 0
+        let g = 0
+        let b = 0
+        let n = 0
+        const sy = Math.floor((gy * H) / gridY)
+        const ey = Math.floor(((gy + 1) * H) / gridY)
+        const sx = Math.floor((gx * W) / gridX)
+        const ex = Math.floor(((gx + 1) * W) / gridX)
+        for (let y = sy; y < ey; y++) {
+          for (let x = sx; x < ex; x++) {
+            const i = (y * W + x) * 4
+            r += data[i]
+            g += data[i + 1]
+            b += data[i + 2]
+            n++
+          }
+        }
+        r = Math.round(r / n)
+        g = Math.round(g / n)
+        b = Math.round(b / n)
+        const max = Math.max(r, g, b)
+        const min = Math.min(r, g, b)
+        const lum = (r + g + b) / 3
+        if (lum < 40) continue // 近黑
+        const sat = max === 0 ? 0 : (max - min) / max
+        if (sat < 0.08 && lum > 230) continue // 近白
+        cands.push({ score: sat * 0.7 + (lum / 255) * 0.3, r, g, b })
+      }
+    }
+    cands.sort((a, b) => b.score - a.score)
+    const out: string[] = []
+    for (const c of cands) {
+      // 色距去重：与已选颜色太接近的跳过
+      const dup = out.some((rgb) => {
+        const m = rgb.match(/\d+/g)
+        if (!m) return false
+        return Math.hypot(Number(m[0]) - c.r, Number(m[1]) - c.g, Number(m[2]) - c.b) < 60
+      })
+      if (dup) continue
+      // 混白 12% 提亮，让浅色底上的流光更轻盈
+      const lift = (v: number) => Math.round(v + (255 - v) * 0.12)
+      out.push(`rgb(${lift(c.r)},${lift(c.g)},${lift(c.b)})`)
+      if (out.length >= 3) break
+    }
+    return out
+  } finally {
+    bitmap.close()
+  }
 }
 
 /** 多背景 image 的 CSS 字符串（单层场景：专辑详情头图等）。 */

@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import CoverImage from '@/components/CoverImage.vue'
 import { readLrcFile } from '@/services/fs'
 import { parseLrc, type LyricGroup } from '@/services/lyrics'
-import { renderAmbientUrl } from '@/services/palette'
+import { extractBrightColors, renderAmbientUrl } from '@/services/palette'
+import { getAudio } from '@/services/player'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
-import { useSettingsStore } from '@/stores/settings'
+import { LYRIC_FS_STEPS, useSettingsStore, type LyricFontSize } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 import { formatDuration } from '@/utils/format'
+import type { PlayMode } from '@/types'
 
 /**
  * 全屏歌词页（对照 Salt Player 截图）：
@@ -34,6 +36,9 @@ const FLY_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
 const ambientUrl = ref<string | null>(null)
 const ambientShown = ref(false)
 const ambientCache = new Map<string, string>()
+/** 流光圆斑颜色：从封面提取的明亮饱和色（浅色底的亮眼点缀） */
+const flowColors = ref<string[]>([])
+const flowCache = new Map<string, string[]>()
 
 function revealAmbient() {
   requestAnimationFrame(() => {
@@ -47,6 +52,7 @@ watch(
     if (!coverId) {
       ambientUrl.value = null
       ambientShown.value = false
+      flowColors.value = []
       return
     }
     const apply = (url: string) => {
@@ -56,6 +62,7 @@ watch(
     const cached = ambientCache.get(coverId)
     if (cached) {
       apply(cached)
+      flowColors.value = flowCache.get(coverId) ?? []
       return
     }
     try {
@@ -67,8 +74,12 @@ watch(
       const baked = await renderAmbientUrl(blob)
       ambientCache.set(coverId, baked)
       apply(baked)
+      // 流光取色：与背景烘焙共用一次解码，失败不阻塞
+      const colors = await extractBrightColors(blob).catch(() => [] as string[])
+      flowCache.set(coverId, colors)
+      flowColors.value = colors
     } catch {
-      // 取色失败保持深色底
+      // 取色失败保持浅色底
     }
   },
   { immediate: true },
@@ -270,6 +281,102 @@ function lineClass(i: number) {
 }
 
 const hasLyrics = computed(() => groups.value.length > 0)
+
+/* ---------- 逐字加深（卡拉OK）：rAF 采样 audio.currentTime，写入当前行 --p ----------
+   player.currentTime 只有 4Hz（timeupdate），逐字效果必须自己采样音频元素。
+   只写一个 CSS 变量，CSS 侧用 background-clip:text 逐字填色，无 span 开销。 */
+const lineProgress = ref(100)
+let lyricRaf = 0
+
+function tickLyric() {
+  const i = activeIdx.value
+  if (i >= 0 && groups.value[i]?.time >= 0) {
+    const startT = groups.value[i].time
+    const endT = groups.value[i + 1]?.time ?? startT + 8
+    const p = (getAudio().currentTime - startT) / Math.max(0.5, endT - startT)
+    lineProgress.value = Math.min(1, Math.max(0, p)) * 100
+  }
+  lyricRaf = requestAnimationFrame(tickLyric)
+}
+
+function syncLyricRaf() {
+  cancelAnimationFrame(lyricRaf)
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (ui.lyricsOpen && player.playing && !reduced) lyricRaf = requestAnimationFrame(tickLyric)
+  // 暂停时冻结当前进度（不清零，恢复播放后继续）
+}
+
+watch([() => player.playing, () => ui.lyricsOpen], syncLyricRaf, { immediate: true })
+watch(activeIdx, () => {
+  lineProgress.value = 0 // 换行：进度归零，避免新行开场即满
+})
+
+/* ---------- 鼠标视差 + 封面倾斜（浅色页面的纵深呼吸感） ---------- */
+const pageEl = ref<HTMLElement | null>(null)
+let parallaxRaf = 0
+let parallaxEvt: MouseEvent | null = null
+
+function applyParallax() {
+  parallaxRaf = 0
+  const e = parallaxEvt
+  const el = pageEl.value
+  if (!e || !el) return
+  const x = (e.clientX / window.innerWidth) * 2 - 1
+  const y = (e.clientY / window.innerHeight) * 2 - 1
+  el.style.setProperty('--mx', x.toFixed(3))
+  el.style.setProperty('--my', y.toFixed(3))
+}
+
+function onPageMouseMove(e: MouseEvent) {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  parallaxEvt = e
+  if (!parallaxRaf) parallaxRaf = requestAnimationFrame(applyParallax)
+}
+
+function onCoverMouseMove(e: MouseEvent) {
+  const el = pageEl.value
+  if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const target = e.currentTarget as HTMLElement
+  const r = target.getBoundingClientRect()
+  const px = (e.clientX - r.left) / r.width - 0.5
+  const py = (e.clientY - r.top) / r.height - 0.5
+  el.style.setProperty('--rx', `${(-py * 6).toFixed(2)}deg`)
+  el.style.setProperty('--ry', `${(px * 6).toFixed(2)}deg`)
+}
+
+function onCoverMouseLeave() {
+  const el = pageEl.value
+  el?.style.setProperty('--rx', '0deg')
+  el?.style.setProperty('--ry', '0deg')
+}
+
+onBeforeUnmount(() => {
+  cancelAnimationFrame(lyricRaf)
+  cancelAnimationFrame(parallaxRaf)
+})
+
+/* ---------- 左栏小按钮行：播放模式 / 音量 / 字号 ---------- */
+const MODE_META: { mode: PlayMode; icon: 'order' | 'repeat' | 'repeatOne' | 'shuffle'; label: string }[] = [
+  { mode: 'order', icon: 'order', label: '顺序播放' },
+  { mode: 'one', icon: 'repeatOne', label: '单曲循环' },
+  { mode: 'loop', icon: 'repeat', label: '列表循环' },
+  { mode: 'shuffle', icon: 'shuffle', label: '随机播放' },
+]
+const modeMeta = computed(() => MODE_META.find((m) => m.mode === player.playMode)!)
+
+function cycleMode() {
+  const idx = MODE_META.findIndex((m) => m.mode === player.playMode)
+  player.setPlayMode(MODE_META[(idx + 1) % MODE_META.length].mode)
+}
+
+const fsOpen = ref(false)
+
+function pickFontSize(size: LyricFontSize) {
+  settings.setLyricFontSize(size)
+  fsOpen.value = false
+  // 字号变了行高也变，需重新把当前行摆到视口上 1/3
+  requestAnimationFrame(() => scrollToActive(false))
+}
 
 /* ---------- 底部进度条（作为 mini-bar 整体底边线） ---------- */
 
@@ -573,14 +680,27 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="lyrics-full" :class="{ closing, 'fly-active': flyActive, switching }" :style="lyricVars">
-    <!-- 背景：纯深色底 + 单层预烘焙环境光（多焦点已画进一张小模糊图，无需多个全屏 blur 层） -->
+  <div
+    class="lyrics-full"
+    ref="pageEl"
+    :class="{ closing, 'fly-active': flyActive, switching }"
+    :style="lyricVars"
+    @mousemove="onPageMouseMove"
+  >
+    <!-- 背景：浅色暖调渐变 + 低透明度环境光 + 封面明亮色流光圆斑 -->
     <div class="bg" />
     <div
       v-if="ambientUrl"
       class="bg-ambient"
       :class="{ show: ambientShown }"
       :style="{ backgroundImage: `url(${ambientUrl})` }"
+    />
+    <div
+      v-for="(c, i) in flowColors"
+      :key="i"
+      class="flow"
+      :class="`flow-${i}`"
+      :style="{ '--fc': c }"
     />
 
     <!-- 双栏布局：左栏信息+控制，右栏歌词 -->
@@ -592,7 +712,12 @@ onMounted(() => {
           <div class="track-artist">{{ player.current?.artist ?? '' }}</div>
         </header>
 
-          <div class="cover-main" v-if="player.current">
+          <div
+            class="cover-main"
+            v-if="player.current"
+            @mousemove="onCoverMouseMove"
+            @mouseleave="onCoverMouseLeave"
+          >
             <CoverImage :cover-id="player.current.coverId" :size="420" hires />
           </div>
 
@@ -640,6 +765,51 @@ onMounted(() => {
               <AppIcon name="next" :size="24" />
             </button>
           </div>
+
+          <div class="sub-row">
+            <button class="sub-btn mode" :title="modeMeta.label" @click="cycleMode">
+              <AppIcon :name="modeMeta.icon" :size="17" />
+            </button>
+            <div class="volume-wrap">
+              <button class="sub-btn" :title="`音量 ${player.volume}%`" @click="player.toggleMute()">
+                <AppIcon :name="player.volume === 0 ? 'volumeMute' : 'volume'" :size="17" />
+              </button>
+              <input
+                class="volume-slider"
+                type="range"
+                min="0"
+                max="100"
+                :value="player.volume"
+                :style="{ '--vol': `${player.volume}%` }"
+                title="音量"
+                @input="(e) => player.setVolume(Number((e.target as HTMLInputElement).value))"
+              />
+            </div>
+            <div class="fs-picker" :class="{ open: fsOpen }">
+              <button
+                class="sub-btn"
+                :class="{ 'is-active': fsOpen }"
+                title="调节歌词字号"
+                @click="fsOpen = !fsOpen"
+              >
+                <span class="aa">Aa</span>
+              </button>
+              <Transition name="fs-pop">
+                <div v-if="fsOpen" class="fs-menu">
+                  <button
+                    v-for="step in LYRIC_FS_STEPS"
+                    :key="step.id"
+                    class="fs-item"
+                    :class="{ current: settings.lyricFontSize === step.id }"
+                    @click="pickFontSize(step.id)"
+                  >
+                    <span class="fs-dot" :style="{ width: `${step.main / 3.2}px`, height: `${step.main / 3.2}px` }" />
+                    <span class="fs-label">{{ step.label }}</span>
+                  </button>
+                </div>
+              </Transition>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -657,7 +827,13 @@ onMounted(() => {
               :class="lineClass(i)"
               @click="player.seek(g.time)"
             >
-              <div v-for="(text, j) in g.texts" :key="j" class="lyric-text" :class="{ sub: j > 0 }">
+              <div
+                v-for="(text, j) in g.texts"
+                :key="j"
+                class="lyric-text"
+                :class="{ sub: j > 0, karaoke: j === 0 && i === activeIdx && g.time >= 0 }"
+                :style="j === 0 && i === activeIdx && g.time >= 0 ? { '--p': lineProgress + '%' } : undefined"
+              >
                 {{ text }}
               </div>
             </div>
@@ -733,6 +909,59 @@ onMounted(() => {
   animation-play-state: paused;
 }
 
+/* ---------- 封面明亮色流光：radial 柔光圆斑缓慢漂移（只动 transform，无 filter），
+   鼠标视差经独立的 translate 属性叠加，二者互不打架 ---------- */
+.flow {
+  position: absolute;
+  width: 46vw;
+  height: 46vw;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, var(--fc), transparent 70%);
+  opacity: 0.32;
+  will-change: transform;
+  translate: calc(var(--mx, 0) * 12px) calc(var(--my, 0) * 9px);
+}
+
+.flow-0 {
+  top: -12%;
+  left: -10%;
+  animation: flow-a 38s ease-in-out infinite alternate;
+}
+
+.flow-1 {
+  bottom: -16%;
+  right: 4%;
+  animation: flow-b 46s ease-in-out infinite alternate;
+}
+
+.flow-2 {
+  top: 28%;
+  left: 40%;
+  animation: flow-c 52s ease-in-out infinite alternate;
+}
+
+@keyframes flow-a {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(9vw, 7vh) scale(1.18); }
+}
+
+@keyframes flow-b {
+  from { transform: translate(0, 0) scale(1.05); }
+  to { transform: translate(-8vw, -6vh) scale(0.92); }
+}
+
+@keyframes flow-c {
+  from { transform: translate(0, 0) scale(0.95); }
+  to { transform: translate(6vw, -8vh) scale(1.12); }
+}
+
+/* 飞入/切歌过场期间暂停背景呼吸与流光漂移，避免动画叠加抢帧 */
+.lyrics-full.fly-active .flow,
+.lyrics-full.switching .flow {
+  animation-play-state: paused;
+}
+
 /* 底部稍压暗，保证迷你条与歌词可读 —— 已在 palette.renderAmbientUrl 烘焙进图内，无需单独压暗层 */
 
 /* ---------- 双栏主体：左栏信息+控制（约45%），右栏歌词 ---------- */
@@ -745,12 +974,11 @@ onMounted(() => {
 }
 
 .info-col {
-  --cover-w: min(52vh, 32vw);
-  width: 45%;
-  min-width: 400px;
+  --cover-w: min(54vh, 36vw);
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  padding: 32px 36px 28px;
+  padding: 32px 8px 28px 36px;
 }
 
 /* 内容栈：与封面同宽 —— 歌名/歌手与封面左缘严格对齐；整组在栏内垂直居中聚拢 */
@@ -767,25 +995,39 @@ onMounted(() => {
 
 .track-title {
   margin: 0;
-  font-size: 24px;
-  font-weight: 700;
+  font-size: clamp(26px, 2.6vw, 34px);
+  font-weight: 800;
   color: var(--lyric-text-active);
-  letter-spacing: 0.3px;
+  letter-spacing: 0.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .track-artist {
-  margin-top: 5px;
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 14px;
   color: var(--lyric-time);
+}
+
+/* 歌手名前的品牌红竖条：左栏唯一的强调色点缀 */
+.track-artist::before {
+  content: '';
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--lyric-accent);
 }
 
 /* 切歌切换动画：封面平滑缩入 + 歌词上浮淡入 */
 .cover-main {
   position: relative;
-  margin: 26px 0 4px;
+  margin: 30px 0 30px;
+  /* 鼠标视差：封面与流光反向微移，制造纵深（translate 属性与 transform 动画独立叠加） */
+  translate: calc(var(--mx, 0) * -6px) calc(var(--my, 0) * -5px);
   transition: transform 640ms var(--ease-out), opacity 460ms var(--ease-out);
 }
 
@@ -808,6 +1050,9 @@ onMounted(() => {
   height: var(--cover-w);
   border-radius: 10px;
   box-shadow: 0 20px 48px rgba(70, 58, 34, 0.18);
+  /* hover 倾斜：随光标位置轻微 3D 端详（--rx/--ry 由封面 mousemove 写入） */
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition: transform 0.25s var(--ease-out);
 }
 
 /* ---------- 进度条（左栏、与封面同宽） ---------- */
@@ -958,6 +1203,165 @@ onMounted(() => {
   transform: scale(0.95);
 }
 
+/* ---------- 左栏小按钮行：播放模式 / 音量 / 字号 ---------- */
+.sub-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  margin-top: 20px;
+}
+
+.sub-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: var(--lyric-control);
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+
+.sub-btn:hover {
+  color: var(--lyric-control-hover);
+  background: var(--lyric-control-bg);
+}
+
+.sub-btn:active {
+  transform: scale(0.9);
+}
+
+.sub-btn.mode:active {
+  transform: scale(0.9) rotate(-14deg);
+}
+
+.sub-btn .aa {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+.volume-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.volume-slider {
+  width: 0;
+  height: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--lyric-ps-fill) var(--vol, 80%),
+    var(--lyric-ps-track) var(--vol, 80%)
+  );
+  cursor: pointer;
+  opacity: 0;
+  margin-left: 0;
+  transition: width var(--dur-med) var(--ease-out), opacity var(--dur-med) var(--ease-out),
+    margin var(--dur-med) var(--ease-out);
+}
+
+.volume-wrap:hover .volume-slider,
+.volume-slider:focus-visible {
+  width: 68px;
+  opacity: 1;
+  margin-left: 6px;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lyric-ps-thumb);
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.volume-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.2);
+}
+
+/* 字号菜单：自底向上弹出 */
+.fs-picker {
+  position: relative;
+}
+
+.fs-menu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  margin-left: -64px;
+  min-width: 128px;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(32px) saturate(1.4);
+  -webkit-backdrop-filter: blur(32px) saturate(1.4);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 12px 32px rgba(70, 58, 34, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transform-origin: bottom center;
+}
+
+.fs-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  color: var(--lyric-control);
+  font-size: 13px;
+  transition: background 0.12s var(--ease-out), color 0.12s var(--ease-out);
+}
+
+.fs-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--lyric-text-active);
+}
+
+.fs-item.current {
+  color: var(--lyric-text-active);
+}
+
+.fs-dot {
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--lyric-control);
+  transition: background 0.12s;
+}
+
+.fs-item.current .fs-dot {
+  background: var(--lyric-text-active);
+}
+
+.fs-label {
+  flex: 1;
+  text-align: left;
+}
+
+.fs-pop-enter-active {
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+}
+
+.fs-pop-leave-active {
+  transition: opacity 100ms var(--ease-out), transform 100ms var(--ease-out);
+}
+
+.fs-pop-enter-from,
+.fs-pop-leave-to {
+  opacity: 0;
+  transform: scale(0.92) translateY(4px);
+}
+
 /* 退出按钮：页面右上角 */
 .close-btn {
   position: absolute;
@@ -993,6 +1397,7 @@ onMounted(() => {
   min-width: 0;
   position: relative;
   display: flex;
+  padding: 0 3vw 0 0;
 }
 
 .lyric-scroll {
@@ -1074,6 +1479,19 @@ onMounted(() => {
   opacity: 0.9;
 }
 
+/* 逐字加深：当前行按播放进度用 background-clip:text 逐字填色（--p 由 rAF 驱动） */
+.lyric-text.karaoke {
+  background-image: linear-gradient(
+    90deg,
+    var(--lyric-text-active) var(--p, 100%),
+    var(--lyric-text) var(--p, 100%)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
 /* 首行元数据："歌名 - 歌手"（不可点击，弱于普通行） */
 .lyric-head {
   cursor: default;
@@ -1091,5 +1509,24 @@ onMounted(() => {
   color: var(--lyric-hint);
   font-size: 15px;
   transition: opacity 520ms var(--ease-out), transform 560ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow {
+    animation: none;
+    translate: none;
+    opacity: 0.22;
+  }
+  .bg-ambient {
+    animation: none;
+  }
+  .cover-main {
+    translate: none;
+  }
+  .cover-main :deep(img),
+  .cover-main :deep(.cover-fallback) {
+    transform: none;
+    transition: none;
+  }
 }
 </style>
