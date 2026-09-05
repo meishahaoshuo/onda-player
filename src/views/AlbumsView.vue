@@ -87,7 +87,6 @@ onBeforeUnmount(() => {
     >
       <span class="cover-wrap">
         <CoverImage :cover-id="album.coverId" :size="140" class="album-cover" />
-        <span class="cover-ring" aria-hidden="true"></span>
       </span>
       <div class="album-name" :title="album.name">{{ album.name }}</div>
       <div class="album-sub">
@@ -119,39 +118,13 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-/* 播放态：封面外圈缓慢旋转的光环（强调色 conic 高光，像「正在播放」）+ 标题转强调色 */
+/* 播放态：标题转强调色（封面外圈的旋转光环已按需求移除） */
 .cover-wrap {
   position: relative;
 }
 
-.cover-ring {
-  position: absolute;
-  inset: -3px;
-  border-radius: 8px;
-  padding: 3px;
-  pointer-events: none;
-  opacity: 0;
-  background: conic-gradient(from 0deg, transparent, var(--accent), transparent 45%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  transition: opacity var(--dur-med) var(--ease-out);
-}
-
-.album-card.playing .cover-ring {
-  opacity: 1;
-  animation: cover-spin 3.2s linear infinite;
-}
-
 .album-card.playing .album-name {
   color: var(--accent);
-}
-
-@keyframes cover-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -159,26 +132,6 @@ onBeforeUnmount(() => {
     background: var(--bg-hover);
     transform: translateY(-3px);
     box-shadow: var(--shadow-2);
-  }
-}
-
-/* 光泽扫过 */
-.album-card::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 60%;
-  height: 100%;
-  background: linear-gradient(105deg, transparent, var(--sheen), transparent);
-  transform: translateX(-150%) skewX(-18deg);
-  transition: transform 0.32s var(--ease-out);
-  pointer-events: none;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .album-card:hover::after {
-    transform: translateX(250%) skewX(-18deg);
   }
 }
 
@@ -227,18 +180,12 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cover-ring {
-    animation: none;
-  }
   .album-card:hover {
     transform: none;
   }
   .album-card:hover .album-cover :deep(img),
   .album-card:hover .album-cover :deep(.cover-fallback) {
     transform: none;
-  }
-  .album-card::after {
-    transition: none;
   }
 }
 </style>

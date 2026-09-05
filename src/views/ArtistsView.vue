@@ -85,7 +85,6 @@ function isPlayingArtist(artist: { name: string }) {
     >
       <span class="cover-wrap">
         <CoverImage :cover-id="artist.coverId" :size="120" class="artist-cover" />
-        <span class="cover-ring" aria-hidden="true"></span>
       </span>
       <div class="artist-name" :title="artist.name">{{ artist.name }}</div>
       <div class="artist-sub">{{ artist.songs.length }} 首</div>
@@ -163,34 +162,8 @@ function isPlayingArtist(artist: { name: string }) {
   position: relative;
 }
 
-.cover-ring {
-  position: absolute;
-  inset: -3px;
-  border-radius: 50%;
-  padding: 3px;
-  pointer-events: none;
-  opacity: 0;
-  background: conic-gradient(from 0deg, transparent, var(--accent), transparent 45%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  transition: opacity var(--dur-med) var(--ease-out);
-}
-
-.artist-card.playing .cover-ring {
-  opacity: 1;
-  animation: cover-spin 3.2s linear infinite;
-}
-
 .artist-card.playing .artist-name {
   color: var(--accent);
-}
-
-@keyframes cover-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -202,26 +175,6 @@ function isPlayingArtist(artist: { name: string }) {
   .artist-card:hover .artist-cover :deep(img),
   .artist-card:hover .artist-cover :deep(.cover-fallback) {
     transform: scale(1.05);
-  }
-}
-
-/* 光泽扫过（transform 化，避免动 left） */
-.artist-card::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 60%;
-  height: 100%;
-  background: linear-gradient(105deg, transparent, var(--sheen), transparent);
-  transform: translateX(-150%) skewX(-18deg);
-  transition: transform 0.32s var(--ease-out);
-  pointer-events: none;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .artist-card:hover::after {
-    transform: translateX(250%) skewX(-18deg);
   }
 }
 
@@ -251,18 +204,12 @@ function isPlayingArtist(artist: { name: string }) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cover-ring {
-    animation: none;
-  }
   .artist-card:hover {
     transform: none;
   }
   .artist-card:hover .artist-cover :deep(img),
   .artist-card:hover .artist-cover :deep(.cover-fallback) {
     transform: none;
-  }
-  .artist-card::after {
-    transition: none;
   }
 }
 
