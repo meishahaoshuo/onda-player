@@ -329,8 +329,10 @@ export async function playAlbumExit(root: HTMLElement | null): Promise<void> {
 
   collapseContent(root)
   foldLayerOut(root, layerBox, o.cardRect)
-  await Promise.all([restoreGrid(), cover && from ? flyCoverBack(o, cover, from, to) : Promise.resolve()])
-  restoreOriginCard()
+  const hasFlight = !!(cover && from)
+  // 卡片在封面落定前后淡回（与克隆的 130ms 淡出交叉），不能等全部归位后再出现——否则落点处会有一段真空期
+  restoreOriginCard(hasFlight ? COVER_EXIT - 100 : 0)
+  await Promise.all([restoreGrid(), hasFlight ? flyCoverBack(o, cover as HTMLElement, from as Box, to) : Promise.resolve()])
   clearTransitionState()
 }
 
@@ -396,14 +398,16 @@ function restoreGrid(): Promise<void> {
   return Promise.all(jobs).then(() => undefined)
 }
 
-function restoreOriginCard() {
+/** 让被点卡片淡回（delay ≈ 飞行时长 - 100ms）：与克隆落定后的淡出交叉衔接，落点处不出现真空 */
+function restoreOriginCard(delayMs = 0) {
   const el = originCardEl
+  if (!el) return
   originCardEl = null
   originCardAnim?.cancel()
   originCardAnim = null
-  if (!el) return
   const back = el.animate([{ opacity: 0 }, { opacity: 1 }], {
     duration: dur(200),
+    delay: dur(delayMs),
     easing: EASE,
     fill: 'both',
   })
@@ -419,10 +423,14 @@ function flyCoverBack(o: Origin, target: HTMLElement, from: Box, to: Box): Promi
   const flying = target.cloneNode(true) as HTMLElement
   flying.classList.add('page-flight')
   const s = to.width / from.width
-  const oX = ((o.click.x - o.rect.left) / o.rect.width) * from.width
-  const oY = ((o.click.y - o.rect.top) / o.rect.height) * from.height
-  const tx = to.left - from.left + oX * (1 - s)
-  const ty = to.top - from.top + oY * (1 - s)
+  // transform-origin 相对克隆自身（from 尺寸）；落点矩形 to 是新鲜测量，比进动画时缓存的 o.rect 可靠
+  const oX = ((o.click.x - to.left) / to.width) * from.width
+  const oY = ((o.click.y - to.top) / to.height) * from.height
+  // 终态必须让克隆外框精确盖住 to：local(0,0) → from.left + oX(1-s) + tx = to.left
+  const tx = to.left - from.left - oX * (1 - s)
+  const ty = to.top - from.top - oY * (1 - s)
+  // 克隆终态被缩放 s 倍，圆角要预除 s 才能落定后与卡片封面一致
+  const radius = parseFloat(getComputedStyle(o.coverEl).borderRadius) || 0
 
   Object.assign(flying.style, {
     position: 'fixed',
@@ -431,6 +439,7 @@ function flyCoverBack(o: Origin, target: HTMLElement, from: Box, to: Box): Promi
     top: `${from.top}px`,
     width: `${from.width}px`,
     height: `${from.height}px`,
+    borderRadius: `${(radius / s).toFixed(1)}px`,
     objectFit: 'cover',
     zIndex: '70',
     pointerEvents: 'none',
