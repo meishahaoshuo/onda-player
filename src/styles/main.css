@@ -1,7 +1,7 @@
 /* =====================================================================
-   Aria · 咏叹 设计系统
+   ONDA · 澜 设计系统
    主题切换 = <html data-theme="dark" | "light">，组件只允许引用变量
-   关键词：红白 / 液态玻璃 / 苹果式简约 / 克制的动效
+   关键词：海军蓝 / 液态玻璃 / 苹果式简约 / 克制的动效
    ===================================================================== */
 
 :root,
@@ -12,13 +12,13 @@
   --bg-panel: rgba(28, 28, 30, 0.66);
   --bg-playerbar: rgba(28, 28, 30, 0.72);
   --bg-hover: rgba(255, 255, 255, 0.08);
-  --bg-active: rgba(250, 35, 59, 0.2);
+  --bg-active: rgba(92, 124, 224, 0.18);
 
-  /* 强调：Apple Music 红 */
-  --accent: #ff3b50;
-  --accent-strong: #e62e46;
+  /* 强调：ONDA 海军蓝（亮调，保证在近黑底上仍可读） */
+  --accent: #5c7ce0;
+  --accent-strong: #4760c8;
   --accent-text: #ffffff;
-  --accent-soft: rgba(250, 35, 59, 0.2);
+  --accent-soft: rgba(92, 124, 224, 0.22);
 
   /* 文字：中性白梯度 */
   --text-primary: #ffffff;
@@ -55,7 +55,7 @@
   --queue-bg: linear-gradient(120deg, rgba(28, 28, 30, 0.9), rgba(22, 22, 24, 0.88));
 
   /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
-  --ambient-fallback: rgba(255, 59, 80, 0.18);
+  --ambient-fallback: rgba(92, 124, 224, 0.18);
 }
 
 :root[data-theme='light'] {
@@ -64,12 +64,12 @@
   --bg-panel: rgba(255, 255, 255, 0.66);
   --bg-playerbar: rgba(255, 255, 255, 0.7);
   --bg-hover: rgba(0, 0, 0, 0.05);
-  --bg-active: rgba(250, 35, 59, 0.12);
+  --bg-active: rgba(23, 37, 84, 0.1);
 
-  --accent: #fa233b;
-  --accent-strong: #d41b30;
+  --accent: #172554;
+  --accent-strong: #0f1b40;
   --accent-text: #ffffff;
-  --accent-soft: rgba(250, 35, 59, 0.12);
+  --accent-soft: rgba(23, 37, 84, 0.12);
 
   --text-primary: #000000;
   --text-secondary: #86868b;
@@ -99,7 +99,7 @@
   --queue-bg: linear-gradient(120deg, rgba(255, 255, 255, 0.94), rgba(248, 248, 250, 0.92));
 
   /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
-  --ambient-fallback: rgba(250, 35, 59, 0.1);
+  --ambient-fallback: rgba(23, 37, 84, 0.1);
 }
 
 /* ---------- 动效令牌 ---------- */
@@ -140,7 +140,7 @@
   --lyric-ps-thumb: #1d1d1f;
   --lyric-ps-fill-hover: #000;
   --lyric-ps-track-hover: rgba(0, 0, 0, 0.18);
-  --lyric-accent: #fa233b;
+  --lyric-accent: #172554;
   --lyric-progress-bubble-bg: rgba(255, 255, 255, 0.92);
   --lyric-progress-bubble-text: #1d1d1f;
 

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 200" role="img" aria-label="BEAM 光弦">
+  <rect width="760" height="200" rx="28" fill="#F8F7F4"/>
+  <g transform="translate(36,22) scale(0.145)">
+    <line x1="300" y1="724" x2="724" y2="300" stroke="#2563EB" stroke-width="152" stroke-linecap="round"/>
+    <circle cx="724" cy="300" r="112" fill="#2563EB"/>
+  </g>
+  <text x="212" y="86" font-family="'Helvetica Neue',Arial,sans-serif" font-weight="700" font-size="58" letter-spacing="5" fill="#15151A">BEAM</text>
+  <text x="216" y="134" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="24" letter-spacing="12" fill="#5B6470">光 弦</text>
+</svg>

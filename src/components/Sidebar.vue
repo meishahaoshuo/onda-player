@@ -20,7 +20,7 @@ const navItems: { id: ViewId; label: string; icon: IconName }[] = [
 ]
 
 const brandLogo = computed(() =>
-  settings.resolvedTheme === 'dark' ? '/logo/aria-logo-main.svg' : '/logo/aria-logo-app.svg',
+  settings.resolvedTheme === 'dark' ? '/logo/onda-logo-main.svg' : '/logo/onda-logo-app.svg',
 )
 
 const themeIcon = { system: 'monitor', dark: 'moon', light: 'sun' } as const
@@ -69,10 +69,10 @@ watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.le
 <template>
   <aside class="sidebar">
     <div class="brand">
-      <img :src="brandLogo" alt="Aria" class="brand-logo" :class="{ 'no-shadow': settings.resolvedTheme === 'dark' }" />
+      <img :src="brandLogo" alt="ONDA" class="brand-logo" :class="{ 'no-shadow': settings.resolvedTheme === 'dark' }" />
       <div class="brand-text">
-        <span class="brand-name">Aria</span>
-        <span class="brand-sub">咏叹</span>
+        <span class="brand-name">ONDA</span>
+        <span class="brand-sub">澜</span>
       </div>
     </div>
 

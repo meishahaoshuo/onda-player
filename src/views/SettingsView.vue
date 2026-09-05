@@ -18,7 +18,7 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: 'monitor' | 'moon' 
 
 const permLabel = { granted: '已授权', prompt: '待确认权限', denied: '无法访问' }
 const brandLogo = computed(() =>
-  settings.resolvedTheme === 'dark' ? '/logo/aria-logo-main.svg' : '/logo/aria-logo-app.svg',
+  settings.resolvedTheme === 'dark' ? '/logo/onda-logo-main.svg' : '/logo/onda-logo-app.svg',
 )
 </script>
 
@@ -81,9 +81,9 @@ const brandLogo = computed(() =>
     <section class="setting-card">
       <h2 class="section-title">关于</h2>
       <div class="about-brand">
-        <img :src="brandLogo" alt="Aria · 咏叹" class="about-brand-logo" :class="{ 'no-shadow': settings.resolvedTheme === 'dark' }" />
+        <img :src="brandLogo" alt="ONDA · 澜" class="about-brand-logo" :class="{ 'no-shadow': settings.resolvedTheme === 'dark' }" />
         <div class="about-brand-text">
-          <span class="about-brand-name">Aria · 咏叹</span>
+          <span class="about-brand-name">ONDA · 澜</span>
           <span class="about-brand-ver">v0.1.0 · 网页版本地音乐播放器</span>
         </div>
       </div>

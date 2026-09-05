@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="ONDA icon">
+  <defs>
+    <clipPath id="r"><rect width="1024" height="1024" rx="232"/></clipPath>
+    <linearGradient id="wg" gradientUnits="userSpaceOnUse" x1="0" y1="330" x2="0" y2="694">
+      <stop offset="0" stop-color="#3E5A98"/>
+      <stop offset="0.5" stop-color="#22356A"/>
+      <stop offset="1" stop-color="#172554"/>
+    </linearGradient>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect width="1024" height="1024" fill="#FFFFFF"/>
+    <path d="M210 512 Q 386 352 512 512 T 814 512" transform="translate(0,-150)" fill="none" stroke="url(#wg)" stroke-width="64" stroke-linecap="round"/>
+    <path d="M210 512 Q 386 352 512 512 T 814 512" transform="translate(0,150)" fill="none" stroke="url(#wg)" stroke-width="64" stroke-linecap="round"/>
+    <path d="M210 512 Q 386 352 512 512 T 814 512" fill="none" stroke="url(#wg)" stroke-width="88" stroke-linecap="round"/>
+  </g>
+</svg>

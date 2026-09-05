@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 200" role="img" aria-label="ONDA 澜">
+  <defs>
+    <linearGradient id="wg" gradientUnits="userSpaceOnUse" x1="0" y1="330" x2="0" y2="694">
+      <stop offset="0" stop-color="#3E5A98"/>
+      <stop offset="0.5" stop-color="#22356A"/>
+      <stop offset="1" stop-color="#172554"/>
+    </linearGradient>
+  </defs>
+  <rect width="760" height="200" rx="28" fill="#F8F7F4"/>
+  <g transform="translate(36,22) scale(0.145)">
+    <path d="M210 512 Q 386 352 512 512 T 814 512" transform="translate(0,-150)" fill="none" stroke="url(#wg)" stroke-width="64" stroke-linecap="round"/>
+    <path d="M210 512 Q 386 352 512 512 T 814 512" transform="translate(0,150)" fill="none" stroke="url(#wg)" stroke-width="64" stroke-linecap="round"/>
+    <path d="M210 512 Q 386 352 512 512 T 814 512" fill="none" stroke="url(#wg)" stroke-width="88" stroke-linecap="round"/>
+  </g>
+  <text x="212" y="86" font-family="'Helvetica Neue',Arial,sans-serif" font-weight="700" font-size="58" letter-spacing="5" fill="#15151A">ONDA</text>
+  <text x="216" y="134" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="24" letter-spacing="12" fill="#5B6470">澜</text>
+</svg>

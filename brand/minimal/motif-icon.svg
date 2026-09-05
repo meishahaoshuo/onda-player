@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="MOTIF icon">
+  <defs>
+    <clipPath id="r"><rect width="1024" height="1024" rx="232"/></clipPath>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect width="1024" height="1024" fill="#FFFFFF"/>
+    <circle cx="340" cy="720" r="128" fill="#1D4ED8"/>
+    <path d="M440 720 Q 540 720 600 540 T 680 360" fill="none" stroke="#1D4ED8" stroke-width="128" stroke-linecap="round"/>
+    <circle cx="680" cy="360" r="88" fill="#1D4ED8"/>
+  </g>
+</svg>
