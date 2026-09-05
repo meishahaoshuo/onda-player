@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 200" role="img" aria-label="PULSE 脉音">
+  <defs>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF3B5C"/>
+      <stop offset="1" stop-color="#FF7A3C"/>
+    </linearGradient>
+  </defs>
+  <rect width="760" height="200" rx="28" fill="#F4F1EC"/>
+  <g transform="translate(34,12)">
+    <rect x="0" y="0" width="176" height="176" rx="40" fill="url(#red)"/>
+    <path d="M34 96 L70 96 L92 50 L120 142 L144 96 L150 96" fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="244" y="88" font-family="'Helvetica Neue',Arial,sans-serif" font-weight="700" font-size="60" letter-spacing="4" fill="#15151A">PULSE</text>
+  <text x="248" y="136" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="24" letter-spacing="12" fill="#8A8782">脉 音</text>
+</svg>

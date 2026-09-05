@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import QualityBadge from '@/components/QualityBadge.vue'
-import { paletteCache } from '@/services/paletteCache'
+import { extractBrightColors } from '@/services/palette'
 import { playAlbumEnter, playAlbumExit } from '@/services/pageTransition'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
@@ -52,14 +52,27 @@ async function close() {
   closing.value = false
 }
 
-/* 头部玻璃面板的色调渲染：取封面主色，低透明度融进磨砂玻璃 */
-const ambientBase = ref<string>('transparent')
+/* 头部背景（方案 B · 流光呼吸增强版）：
+   2 个加大变柔的明亮色光斑做呼吸式起伏（缩放+透明度同步），叠胶片噪点提质感 */
+const flowColors = ref<string[]>([])
+const flowCache = new Map<string, string[]>()
 
 watch(
   () => props.albumKey,
-  (key) => {
+  async (key) => {
+    flowColors.value = flowCache.get(key) ?? []
     const album = library.albums.find((a) => a.key === key)
-    ambientBase.value = paletteCache.colorOf(album?.coverId)
+    if (!album?.coverId) return
+    try {
+      const url = await library.coverUrl(album.coverId)
+      if (!url) return
+      const blob = await (await fetch(url)).blob()
+      const colors = await extractBrightColors(blob).catch(() => [] as string[])
+      flowCache.set(key, colors)
+      if (props.albumKey === key) flowColors.value = colors
+    } catch {
+      /* 取色失败则保留中性底 */
+    }
   },
   { immediate: true },
 )
@@ -99,10 +112,14 @@ function playSong(song: SongRecord) {
     </button>
 
     <header class="album-header">
-      <!-- 磨砂玻璃面板：内含封面主色的淡色调渲染 -->
-      <div class="glass" aria-hidden="true" :style="{ '--tint': ambientBase }">
-        <div class="glass-tint"></div>
-      </div>
+      <!-- 流光呼吸光斑 -->
+      <div
+        v-for="(c, i) in flowColors.slice(0, 2)"
+        :key="i"
+        class="blob"
+        :class="`hb-${i}`"
+        :style="{ '--fc': c }"
+      />
       <CoverImage :cover-id="album.coverId" :size="192" class="header-cover" hires />
       <div class="header-info">
         <h1 class="album-title">{{ album.name }}</h1>
@@ -197,64 +214,55 @@ function playSong(song: SongRecord) {
   overflow: hidden;
 }
 
-/* 磨砂玻璃面板：白色渐变玻璃 + 封面主色调渲染层 + rim 高光 + hover 扫光。
-   主色融进玻璃而不是糊在底上 —— 有色调但不重。 */
-.glass {
-  position: absolute;
-  inset: 10px;
-  border-radius: calc(var(--radius-panel) - 6px);
-  z-index: 0;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18));
-  backdrop-filter: blur(12px) saturate(1.3);
-  -webkit-backdrop-filter: blur(12px) saturate(1.3);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.8),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.25),
-    0 10px 30px rgba(30, 60, 60, 0.1);
-  overflow: hidden;
-  transition: opacity 380ms var(--ease-out);
+/* 头部背景：中性浅色渐变（主题自适应），光斑与噪点提供质感 */
+.album-header {
+  background: linear-gradient(120deg, var(--bg-hover) 0%, var(--bg-base) 70%);
 }
 
-/* 封面主色调渲染层：左低右高的径向淡色 */
-.glass-tint {
+/* 呼吸光斑：缩放与透明度同步起伏，周期 10-12s 交错 */
+.blob {
   position: absolute;
-  inset: 0;
-  background: radial-gradient(120% 170% at 10% 30%, var(--tint), transparent 62%);
-  opacity: 0.26;
+  width: clamp(300px, 32vw, 460px);
+  height: clamp(300px, 32vw, 460px);
+  border-radius: 50%;
   pointer-events: none;
+  background: radial-gradient(closest-side, var(--fc), transparent 70%);
+  will-change: transform, opacity;
+  z-index: 0;
 }
 
-.glass::before {
+.blob.hb-0 {
+  top: -46%;
+  left: -4%;
+  animation: hb-0 10s ease-in-out infinite alternate;
+}
+
+.blob.hb-1 {
+  top: -18%;
+  right: -5%;
+  animation: hb-1 12s ease-in-out infinite alternate;
+}
+
+@keyframes hb-0 {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.2; }
+  50% { transform: translate(2vw, 1.5vh) scale(1.1); opacity: 0.3; }
+}
+
+@keyframes hb-1 {
+  0%, 100% { transform: translate(0, 0) scale(1.04); opacity: 0.14; }
+  50% { transform: translate(-2vw, 2vh) scale(0.94); opacity: 0.22; }
+}
+
+/* 胶片噪点：一层 4% 的细颗粒，flat 渐变的"塑料感"就靠它破掉 */
+.album-header::after {
   content: '';
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 1;
   pointer-events: none;
-  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.5) 48%, transparent 62%);
-  transform: translateX(-60%);
-  transition: transform 0.9s var(--ease-out);
-}
-
-.album-header:hover .glass::before {
-  transform: translateX(60%);
-}
-
-:root[data-theme='dark'] .glass {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
-    0 10px 30px rgba(0, 0, 0, 0.35);
-}
-
-:root[data-theme='dark'] .glass-tint {
-  opacity: 0.2;
-}
-
-:root[data-theme='dark'] .glass::before {
-  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.14) 48%, transparent 62%);
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
 }
 
 .header-cover {
@@ -429,13 +437,18 @@ function playSong(song: SongRecord) {
   opacity: 1;
 }
 
-/* 玻璃面板随推进淡入 */
-.album-detail .glass {
+/* 背景层随推进淡入 */
+.album-detail .blob,
+.album-detail .album-header::after {
   opacity: 0;
 }
 
-.album-detail.blooming .glass {
-  opacity: 1;
+.album-detail.blooming .blob {
+  opacity: 0.2;
+}
+
+.album-detail.blooming .album-header::after {
+  opacity: 0.04;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -447,12 +460,13 @@ function playSong(song: SongRecord) {
     transform: none;
     transition: none;
   }
-  .album-detail .glass {
-    opacity: 1;
+  .album-detail .blob {
+    opacity: 0.2;
+    animation: none;
     transition: none;
   }
-  .album-header:hover .glass::before,
-  .glass::before {
+  .album-detail .album-header::after {
+    opacity: 0.04;
     transition: none;
   }
 }

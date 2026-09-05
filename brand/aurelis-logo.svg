@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 200" role="img" aria-label="AURELIS 弦境">
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F6E0A6"/>
+      <stop offset="0.5" stop-color="#D9B468"/>
+      <stop offset="1" stop-color="#A9823B"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFF4D8"/>
+      <stop offset="1" stop-color="#D9B468" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="760" height="200" rx="28" fill="#0E0E11"/>
+  <g transform="translate(44,20)">
+    <circle cx="80" cy="80" r="74" fill="url(#glow)" opacity="0.55"/>
+    <circle cx="80" cy="80" r="70" fill="none" stroke="url(#gold)" stroke-width="6"/>
+    <path d="M28 80 Q 54 38 80 80 T 132 80" fill="none" stroke="url(#gold)" stroke-width="5" stroke-linecap="round" opacity="0.92"/>
+    <circle cx="154" cy="30" r="8" fill="url(#gold)"/>
+    <circle cx="80" cy="80" r="6" fill="#FFF4D8"/>
+  </g>
+  <text x="252" y="86" font-family="Georgia, 'Times New Roman', serif" font-size="60" letter-spacing="9" fill="url(#gold)">AURELIS</text>
+  <text x="256" y="134" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="24" letter-spacing="14" fill="#B9B4A8">弦 境</text>
+</svg>

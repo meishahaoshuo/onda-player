@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>音乐播放器 · 品牌重塑方案</title>
+<style>
+  :root{
+    --ink:#0E0E11; --paper:#F4F1EC; --muted:#8A8782;
+    --gold:#D9B468; --red:#FF4A55; --iri:#A78BFA; --noir:#141414;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"PingFang SC","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+    background:#070708; color:#EDEAE3; line-height:1.7; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:64px 28px 96px}
+  /* HERO */
+  .hero{text-align:center;padding:40px 0 56px;border-bottom:1px solid rgba(255,255,255,.08)}
+  .hero .kicker{font-size:13px;letter-spacing:.42em;color:var(--muted);text-transform:uppercase}
+  .hero h1{font-size:46px;font-weight:700;letter-spacing:.04em;margin:18px 0 10px}
+  .hero h1 .em{background:linear-gradient(90deg,#F6E0A6,#D9B468,#FF6A3D,#A78BFA);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p{max-width:640px;margin:0 auto;color:#B7B2A8;font-size:15px}
+  /* NAV */
+  .nav{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:36px 0 8px}
+  .nav a{font-size:13px;letter-spacing:.12em;color:#CFC9BE;text-decoration:none;padding:8px 16px;border:1px solid rgba(255,255,255,.14);border-radius:999px;transition:.2s}
+  .nav a:hover{background:rgba(255,255,255,.06);color:#fff}
+  /* SECTION */
+  .dir{padding:64px 0;border-bottom:1px solid rgba(255,255,255,.07)}
+  .dir-head{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+  .dir-no{font-size:14px;letter-spacing:.3em;color:var(--muted)}
+  .dir-name{font-size:34px;font-weight:700;letter-spacing:.04em}
+  .dir-cn{font-size:18px;color:#B7B2A8;letter-spacing:.3em}
+  .dir-tag{margin-left:auto;font-size:12px;letter-spacing:.2em;color:var(--muted);border:1px solid rgba(255,255,255,.14);padding:5px 12px;border-radius:999px}
+  .stage{display:grid;grid-template-columns:1.15fr .85fr;gap:28px;margin:28px 0 8px;align-items:center}
+  @media(max-width:820px){.stage{grid-template-columns:1fr}}
+  .logo-card{border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.08)}
+  .logo-card img{display:block;width:100%;height:auto}
+  .icon-col{display:flex;flex-direction:column;align-items:center;gap:14px}
+  .phone{width:200px;height:200px;border-radius:44px;padding:14px;background:linear-gradient(160deg,#23232a,#0d0d10);box-shadow:0 30px 60px rgba(0,0,0,.55),inset 0 0 0 1px rgba(255,255,255,.06)}
+  .phone img{width:100%;height:100%;border-radius:32px;display:block}
+  .icon-col .cap{font-size:12px;letter-spacing:.2em;color:var(--muted)}
+  /* TEXT BLOCKS */
+  .blocks{display:grid;grid-template-columns:repeat(2,1fr);gap:22px;margin-top:30px}
+  @media(max-width:820px){.blocks{grid-template-columns:1fr}}
+  .blk h4{font-size:13px;letter-spacing:.16em;color:#CFC9BE;margin-bottom:8px;text-transform:uppercase}
+  .blk p{font-size:14.5px;color:#CFC9BE}
+  .blk .hl{color:#fff;font-weight:600}
+  .vibe{margin-top:26px;padding:20px 22px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}
+  .vibe b{color:#fff}
+  /* COMPARE */
+  .cmp{margin-top:72px}
+  .cmp h2{font-size:26px;letter-spacing:.04em;margin-bottom:20px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:14px 12px;border-bottom:1px solid rgba(255,255,255,.08);vertical-align:top}
+  th{color:var(--muted);font-weight:600;letter-spacing:.1em;font-size:12px;text-transform:uppercase}
+  td b{color:#fff}
+  .swatch{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:middle;margin-right:8px;border:1px solid rgba(255,255,255,.2)}
+  .foot{margin-top:56px;text-align:center;color:#7d7a72;font-size:13px}
+  .foot b{color:#CFC9BE}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="kicker">Brand Reboot · 2026</div>
+    <h1>音乐播放器 <span class="em">品牌重塑方案</span></h1>
+    <p>四套方向差异明显的品牌系统，覆盖产品名称、Logo 与应用程序图标。本提案允许脱离现有红白设计规范，追求高端、大气、国际化的视觉质感。</p>
+    <nav class="nav">
+      <a href="#d1">01 · AURELIS 弦境</a>
+      <a href="#d2">02 · PULSE 脉音</a>
+      <a href="#d3">03 · LUMEN 光音</a>
+      <a href="#d4">04 · NOIR 玄音</a>
+    </nav>
+  </header>
+
+  <!-- 01 -->
+  <section class="dir" id="d1">
+    <div class="dir-head">
+      <span class="dir-no">01</span>
+      <span class="dir-name">AURELIS</span>
+      <span class="dir-cn">弦 境</span>
+      <span class="dir-tag">静奢 · 编辑 · 收藏家</span>
+    </div>
+    <div class="stage">
+      <div class="logo-card"><img src="aurelis-logo.svg" alt="AURELIS 弦境 Logo"></div>
+      <div class="icon-col">
+        <div class="phone"><img src="aurelis-icon.svg" alt="AURELIS 应用图标"></div>
+        <span class="cap">iOS / 桌面应用图标 · 1024</span>
+      </div>
+    </div>
+    <div class="blocks">
+      <div class="blk">
+        <h4>命名逻辑</h4>
+        <p><span class="hl">AURELIS = aurum（金）+ resonance（共鸣）</span>，意为「金色共鸣」。中文「弦境」取「弦（乐音之本）」与「境（精神空间）」，将音乐喻为一处可居游之境。读音清亮、字形对称，天然携带奢华暗示。</p>
+      </div>
+      <div class="blk">
+        <h4>Logo 设计方向</h4>
+        <p>「轨道环 + 波形弧 + 光点」构成声学图腾：外环如黑胶／唱盘／轨道，细金波形描出乐句，顶端金点为律动峰值，<span class="hl">中心微光即声源</span>。整体像一枚私人徽章，编辑感强。</p>
+      </div>
+      <div class="blk">
+        <h4>应用图标 · 风格基调</h4>
+        <p>深空近黑底 + 暖金渐变环与波形，<span class="hl">克制、静奢、无描边</span>。在深色 Dock 与高端硬件上尤其出彩。</p>
+      </div>
+      <div class="blk">
+        <h4>应用图标 · 图形意象</h4>
+        <p>声在轨上行进——一枚会发光的收藏家徽章。图形意象 = 「声音沿金色轨道流动」，呼应无损珍藏的定位。</p>
+      </div>
+    </div>
+    <div class="vibe"><b>整体气质：</b>静奢、编辑、收藏家。像黑胶俱乐部的会员徽章，而非大众播放器。最适合定位「高阶听感 / 无损珍藏 / 高端联名」。</div>
+  </section>
+
+  <!-- 02 -->
+  <section class="dir" id="d2">
+    <div class="dir-head">
+      <span class="dir-no">02</span>
+      <span class="dir-name">PULSE</span>
+      <span class="dir-cn">脉 音</span>
+      <span class="dir-tag">年轻 · 炽热 · 动能</span>
+    </div>
+    <div class="stage">
+      <div class="logo-card"><img src="pulse-logo.svg" alt="PULSE 脉音 Logo"></div>
+      <div class="icon-col">
+        <div class="phone"><img src="pulse-icon.svg" alt="PULSE 应用图标"></div>
+        <span class="cap">iOS / 桌面应用图标 · 1024</span>
+      </div>
+    </div>
+    <div class="blocks">
+      <div class="blk">
+        <h4>命名逻辑</h4>
+        <p><span class="hl">PULSE = 脉搏 / 律动</span>，直指音乐即生命的节拍。中文「脉音」取「脉（血脉·地脉）」与「音」，强调音乐与身体同频。短、冲、好记，全球通用。</p>
+      </div>
+      <div class="blk">
+        <h4>Logo 设计方向</h4>
+        <p>圆角方牌内一道<span class="hl">心跳脉冲线</span>，白线在红橙渐变上炸开，符号即「P」的变体（脉冲起笔）。强识别、强能量、强记忆点。</p>
+      </div>
+      <div class="blk">
+        <h4>应用图标 · 风格基调</h4>
+        <p>满版红橙渐变 + 白色脉冲，<span class="hl">无边框、无描边、纯能量块</span>。比现有品牌红更「燃」一档。</p>
+      </div>
+      <div class="blk">
+        <h4>应用图标 · 图形意象</h4>
+        <p>一次心跳 / 一声鼓点。图形意象 = 「律动峰值」，在桌面与状态栏里最跳、最抓眼。</p>
+      </div>
+    </div>
+    <div class="vibe"><b>整体气质：</b>年轻、炽热、动能。适合主打「现场感 / 节奏 / 运动听歌 / 社交分享」场景。</div>
+  </section>
+
+  <!-- 03 -->
+  <section class="dir" id="d3">
+    <div class="dir-head">
+      <span class="dir-no">03</span>
+      <span class="dir-name">LUMEN</span>
+      <span class="dir-cn">光 音</span>
+      <span class="dir-tag">空灵 · 未来 · 艺术</span>
+    </div>
+    <div class="stage">
+      <div class="logo-card"><img src="lumen-logo.svg" alt="LUMEN 光音 Logo"></div>
+      <div class="icon-col">
+        <div class="phone"><img src="lumen-icon.svg" alt="LUMEN 应用图标"></div>
+        <span class="cap">iOS / 桌面应用图标 · 1024</span>
+      </div>
+    </div>
+    <div class="blocks">
+      <div class="blk">
+        <h4>命名逻辑</h4>
+        <p><span class="hl">LUMEN = 光通量单位（流明）</span>，亦近 luminous（发光）。中文「光音」取自佛典「光音天」之乐，把声音可视化为光。科技与诗意并存，国际且空灵。</p>
+      </div>
+      <div class="blk">
+        <h4>Logo 设计方向</h4>
+        <p>由一点光源向外的<span class="hl">三段虹彩声波扇面</span>，渐变横跨青→蓝→紫→粉，喻「声化作光、层层扩散」。轻盈、通透、未来。</p>
+      </div>
+      <div class="blk">
+        <h4>应用图标 · 风格基调</h4>
+        <p>深空极光底 + 虹彩扇弧从白点绽放，像棱镜分光。<span class="hl">无实色块、靠光感立形</span>。</p>
+      </div>
+      <div class="blk">
+        <h4>应用图标 · 图形意象</h4>
+        <p>图形意象 = 棱镜 / 极光 / 声波衍射。在暗色 Dock 上如一枚会发光的宝石。</p>
+      </div>
+    </div>
+    <div class="vibe"><b>整体气质：</b>空灵、未来、艺术。适合「空间音频 / 沉浸式 / 氛围听歌」定位，科技诗意两不误。</div>
+  </section>
+
+  <!-- 04 -->
+  <section class="dir" id="d4">
+    <div class="dir-head">
+      <span class="dir-no">04</span>
+      <span class="dir-name">NOIR</span>
+      <span class="dir-cn">玄 音</span>
+      <span class="dir-tag">极简 · 暗黑 · 画廊级</span>
+    </div>
+    <div class="stage">
+      <div class="logo-card"><img src="noir-logo.svg" alt="NOIR 玄音 Logo"></div>
+      <div class="icon-col">
+        <div class="phone"><img src="noir-icon.svg" alt="NOIR 应用图标"></div>
+        <span class="cap">iOS / 桌面应用图标 · 1024</span>
+      </div>
+    </div>
+    <div class="blocks">
+      <div class="blk">
+        <h4>命名逻辑</h4>
+        <p><span class="hl">NOIR = 法语「黑」</span>，自带电影「黑色电影」的高级与神秘基因。中文「玄音」取「玄（黑·道·深奥）」与「音」，东方哲学里的至深之音。东西合璧，极简即奢侈。</p>
+      </div>
+      <div class="blk">
+        <h4>Logo 设计方向</h4>
+        <p>一个细圈（声孔／黑胶）+ 一笔竖线（音符 stem）+ 实心圆点（符头），<span class="hl">纯单色、零装饰</span>，像画廊墙上的签名。</p>
+      </div>
+      <div class="blk">
+        <h4>应用图标 · 风格基调</h4>
+        <p>纯黑底 + 米白单色符号，<span class="hl">无渐变、无色彩、极致克制</span>。去色彩即去噪音。</p>
+      </div>
+      <div class="blk">
+        <h4>应用图标 · 图形意象</h4>
+        <p>图形意象 = 黑胶声孔中的一枚音符。在任意背景下都像「设计师出品」。</p>
+      </div>
+    </div>
+    <div class="vibe"><b>整体气质：</b>极简、暗黑、画廊级。适合「专注聆听 / 极简主义 / 高端硬件预装」定位。</div>
+  </section>
+
+  <!-- COMPARE -->
+  <section class="cmp">
+    <h2>四方案速览对比</h2>
+    <table>
+      <thead>
+        <tr><th>方向</th><th>名称</th><th>主色系</th><th>关键词</th><th>最适合定位</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>01</b></td>
+          <td><b>AURELIS</b> 弦境</td>
+          <td><span class="swatch" style="background:#D9B468"></span>暖金 × 近黑</td>
+          <td>静奢 / 编辑 / 收藏</td>
+          <td>高阶听感 · 无损珍藏 · 联名</td>
+        </tr>
+        <tr>
+          <td><b>02</b></td>
+          <td><b>PULSE</b> 脉音</td>
+          <td><span class="swatch" style="background:#FF4A55"></span>红橙渐变</td>
+          <td>年轻 / 炽热 / 动能</td>
+          <td>现场感 · 节奏 · 运动听歌</td>
+        </tr>
+        <tr>
+          <td><b>03</b></td>
+          <td><b>LUMEN</b> 光音</td>
+          <td><span class="swatch" style="background:#A78BFA"></span>虹彩 × 极光深空</td>
+          <td>空灵 / 未来 / 艺术</td>
+          <td>空间音频 · 沉浸式 · 氛围</td>
+        </tr>
+        <tr>
+          <td><b>04</b></td>
+          <td><b>NOIR</b> 玄音</td>
+          <td><span class="swatch" style="background:#141414"></span>纯黑 × 米白</td>
+          <td>极简 / 暗黑 / 画廊</td>
+          <td>专注聆听 · 极简 · 硬件预装</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="foot">四套方案均可突破现有红白设计规范。建议下一步锁定 1 套做系统化延伸——<b>字体 / 动效 / 空状态 / 明暗主题</b>，并做一轮小范围 A/B 验证。</p>
+  </section>
+
+</div>
+</body>
+</html>
