@@ -4,12 +4,12 @@ import SongList from '@/components/SongList.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
+import { useUiStore } from '@/stores/ui'
 import type { SongRecord } from '@/types'
 
 const library = useLibraryStore()
 const player = usePlayerStore()
-
-const emit = defineEmits<{ addFolder: [] }>()
+const ui = useUiStore()
 
 function onPlay(song: SongRecord) {
   player.playSong(song, library.sortedSongs)
@@ -35,22 +35,12 @@ const scanPct = computed(() =>
       <button class="scan-cancel" @click="library.lastError = null">关闭</button>
     </div>
 
-    <!-- 常驻工具栏：任何状态下都能添加文件夹 -->
-    <div v-if="library.roots.length > 0" class="toolbar">
-      <button class="primary-btn small" @click="emit('addFolder')">
-        <AppIcon name="plus" :size="14" /> 添加文件夹
-      </button>
-      <button class="ghost-btn" :disabled="library.scanning" @click="library.rescan()">
-        <AppIcon name="scan" :size="14" /> 重新扫描
-      </button>
-    </div>
-
-    <!-- 空状态：还没有音乐文件夹 -->
+    <!-- 空状态：还没有音乐文件夹（添加/扫描入口统一在文件夹板块） -->
     <div v-if="library.roots.length === 0" class="empty">
       <AppIcon name="folder" :size="48" class="empty-icon" />
-      <p class="empty-title">添加你的音乐文件夹</p>
+      <p class="empty-title">还没有音乐文件</p>
       <p class="empty-hint">支持 MP3 / FLAC / OGG / OPUS / WAV / M4A，文件保留在原处不会被复制</p>
-      <button class="primary-btn" @click="emit('addFolder')">选择音乐文件夹</button>
+      <button class="primary-btn" @click="ui.navigate('folders')">去文件夹板块添加</button>
     </div>
 
     <template v-else>
@@ -157,44 +147,6 @@ const scanPct = computed(() =>
   border: 1px solid var(--border-subtle);
   font-size: 13px;
   color: var(--text-secondary);
-}
-
-.toolbar {
-  display: flex;
-  gap: 10px;
-}
-
-.primary-btn.small {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 0;
-  padding: 7px 14px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-size: 13px;
-}
-
-.ghost-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.ghost-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.ghost-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 .error-banner {

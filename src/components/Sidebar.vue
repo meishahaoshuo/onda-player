@@ -13,7 +13,8 @@ const playlistStore = usePlaylistStore()
 
 const navItems: { id: ViewId; label: string; icon: IconName }[] = [
   { id: 'songs', label: '歌曲', icon: 'music' },
-  { id: 'genres', label: '曲风', icon: 'genre' },
+  { id: 'favorites', label: '我喜欢的音乐', icon: 'heart' },
+  { id: 'charts', label: '排行榜', icon: 'chart' },
   { id: 'albums', label: '专辑', icon: 'disc' },
   { id: 'artists', label: '艺术家', icon: 'artist' },
   { id: 'folders', label: '文件夹', icon: 'folder' },

@@ -12,6 +12,8 @@ import {
   updatePositionState,
 } from '@/services/player'
 import { useLibraryStore } from '@/stores/library'
+import { useStatsStore } from '@/stores/stats'
+import { useSettingsStore } from '@/stores/settings'
 import type { PlayMode, SongRecord } from '@/types'
 
 /**
@@ -31,6 +33,8 @@ const STATE_KEY = 'playerState'
 
 export const usePlayerStore = defineStore('player', () => {
   const library = useLibraryStore()
+  const stats = useStatsStore()
+  const settings = useSettingsStore()
 
   const queue = ref<SongRecord[]>([])
   const index = ref(-1)
@@ -191,17 +195,97 @@ export const usePlayerStore = defineStore('player', () => {
     playMode.value = mode
   }
 
+  /* ---------- 队列编辑（右键菜单 / 队列面板用） ---------- */
+
+  /** 下一首播放：移到当前曲目之后；随机模式下置顶随机顺序 */
+  function insertNext(song: SongRecord) {
+    const existing = queue.value.findIndex((s) => s.path === song.path)
+    if (existing >= 0) {
+      queue.value.splice(existing, 1)
+      if (existing < index.value) index.value--
+    }
+    const at = index.value + 1
+    queue.value.splice(at, 0, song)
+    if (playMode.value === 'shuffle') reshuffleAround(index.value, at)
+    scheduleSave()
+  }
+
+  /** 从队列移除一首；删到当前曲则自动接播下一首 */
+  function removeAt(i: number) {
+    if (i < 0 || i >= queue.value.length) return
+    const wasCurrent = i === index.value
+    queue.value.splice(i, 1)
+    if (queue.value.length === 0) {
+      index.value = -1
+      stop()
+      scheduleSave()
+      return
+    }
+    if (i < index.value) {
+      index.value--
+    } else if (wasCurrent) {
+      index.value = Math.min(i, queue.value.length - 1)
+      void load(index.value)
+    }
+    if (playMode.value === 'shuffle' && index.value >= 0) reshuffleAround(index.value)
+    scheduleSave()
+  }
+
+  /** 清空队列并清掉持久化状态 */
+  function clearQueue() {
+    stop()
+    queue.value = []
+    index.value = -1
+    void db.kvSet(STATE_KEY, null)
+  }
+
+  /** 队列内拖拽排序，维护当前曲目索引跟随移动 */
+  function moveInQueue(from: number, to: number) {
+    if (from === to || from < 0 || to < 0 || from >= queue.value.length || to >= queue.value.length)
+      return
+    const [song] = queue.value.splice(from, 1)
+    queue.value.splice(to, 0, song)
+    if (from === index.value) {
+      index.value = to
+    } else if (from < index.value && to >= index.value) {
+      index.value--
+    } else if (from > index.value && to <= index.value) {
+      index.value++
+    }
+    if (playMode.value === 'shuffle') reshuffleAround(index.value)
+    scheduleSave()
+  }
+
+  /* ---------- 播放计数：听满 30 秒或进度 50%（先到）计一次 ---------- */
+
+  let countedPath: string | null = null
+
+  watch([currentTime, duration], () => {
+    const path = currentPath.value
+    if (!path || !playing.value || countedPath === path) return
+    const t = currentTime.value
+    const dur = duration.value || current.value?.durationSec || 0
+    if (t >= 30 || (dur > 0 && t >= dur / 2)) {
+      countedPath = path
+      stats.recordPlay(path)
+    }
+  })
+  watch(currentPath, () => {
+    countedPath = null
+  })
+
   /* ---------- 随机顺序 ---------- */
 
   let shuffleOrder: number[] = []
 
-  function reshuffleAround(currentIdx: number) {
-    const rest = queue.value.map((_, i) => i).filter((i) => i !== currentIdx)
+  /** 重建随机顺序；pinFirst 为需要排在下一个的队列索引（下一首播放用） */
+  function reshuffleAround(currentIdx: number, pinFirst?: number) {
+    const rest = queue.value.map((_, i) => i).filter((i) => i !== currentIdx && i !== pinFirst)
     for (let i = rest.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
       ;[rest[i], rest[j]] = [rest[j], rest[i]]
     }
-    shuffleOrder = rest
+    shuffleOrder = pinFirst != null ? [pinFirst, ...rest] : rest
   }
 
   watch(playMode, (mode) => {
@@ -227,7 +311,10 @@ export const usePlayerStore = defineStore('player', () => {
       duration.value = a.duration || current.value?.durationSec || 0
       updatePositionState(duration.value, a.currentTime)
     })
-    a.addEventListener('ended', () => next(false))
+    a.addEventListener('ended', () => {
+      countedPath = null // 单曲循环重播时重新计数
+      next(false)
+    })
     a.addEventListener('error', () => {
       if (current.value) next(false)
     })
@@ -274,6 +361,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function restore() {
     bindAudioEvents()
+    if (!settings.autoRestoreQueue) return
     const state = await db.kvGet<PersistedState>(STATE_KEY)
     if (!state || state.paths.length === 0) return
     const byPath = new Map(library.songs.map((s) => [s.path, s]))
@@ -288,6 +376,8 @@ export const usePlayerStore = defineStore('player', () => {
     duration.value = current.value?.durationSec ?? 0
     // 不自动播放：等用户点击播放时从头加载；恢复的进度存下来供 seek
     pendingSeekSec = state.time
+    // 设置开启时尝试自动续播；被浏览器自动播放策略拒绝则保持暂停态
+    if (settings.autoResume) void load(index.value)
   }
 
   let pendingSeekSec = 0
@@ -323,6 +413,10 @@ export const usePlayerStore = defineStore('player', () => {
     setVolume,
     toggleMute,
     setPlayMode,
+    insertNext,
+    removeAt,
+    clearQueue,
+    moveInQueue,
     restore,
   }
 })

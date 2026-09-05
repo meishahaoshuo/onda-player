@@ -4,7 +4,8 @@ export type ThemeMode = 'system' | 'dark' | 'light'
 
 export type ViewId =
   | 'songs'
-  | 'genres'
+  | 'favorites'
+  | 'charts'
   | 'albums'
   | 'artists'
   | 'folders'
@@ -67,11 +68,6 @@ export interface ArtistSummary {
   name: string
   songs: SongRecord[]
   coverId: string | null
-}
-
-export interface GenreSummary {
-  name: string
-  songs: SongRecord[]
 }
 
 export type Quality = 'hires' | 'lossless' | 'lossy'

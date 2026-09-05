@@ -8,7 +8,8 @@ import AlbumsView from '@/views/AlbumsView.vue'
 import AlbumDetailView from '@/views/AlbumDetailView.vue'
 import ArtistDetailView from '@/views/ArtistDetailView.vue'
 import ArtistsView from '@/views/ArtistsView.vue'
-import GenresView from '@/views/GenresView.vue'
+import FavoritesView from '@/views/FavoritesView.vue'
+import ChartsView from '@/views/ChartsView.vue'
 import PlaylistsView from '@/views/PlaylistsView.vue'
 import LyricsFullView from '@/views/LyricsFullView.vue'
 import SettingsView from '@/views/SettingsView.vue'
@@ -17,6 +18,8 @@ import { useUiStore } from '@/stores/ui'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { usePlaylistStore } from '@/stores/playlist'
+import { useStatsStore } from '@/stores/stats'
+import { useFavoritesStore } from '@/stores/favorites'
 import { useSettingsStore } from '@/stores/settings'
 import { clearTransitionState } from '@/services/pageTransition'
 import type { ViewId } from '@/types'
@@ -25,11 +28,14 @@ const ui = useUiStore()
 const library = useLibraryStore()
 const player = usePlayerStore()
 const playlistStore = usePlaylistStore()
+const stats = useStatsStore()
+const favorites = useFavoritesStore()
 const settings = useSettingsStore()
 
 const viewTitles: Record<ViewId, string> = {
   songs: '歌曲',
-  genres: '曲风',
+  favorites: '我喜欢的音乐',
+  charts: '排行榜',
   albums: '专辑',
   artists: '艺术家',
   folders: '文件夹',
@@ -46,7 +52,7 @@ const sectionEl = ref<HTMLElement | null>(null)
    回来时（Transition enter 或同视图钻取返回）恢复。
    key：`view:<视图>|<detailKey>`；SongList/VirtualList 的内部滚动由组件自己记（list:*）。 */
 const scrollKey = (view: string, detail: string | null) => `view:${view}|${detail ?? ''}`
-const INLINE_DETAIL_VIEWS = new Set<string>(['genres', 'playlists'])
+const INLINE_DETAIL_VIEWS = new Set<string>(['playlists'])
 
 watch(
   [() => ui.activeView, () => ui.detailKey] as const,
@@ -76,6 +82,8 @@ function addFolder() {
 onMounted(async () => {
   settings // 触发主题初始化
   playlistStore.load()
+  void stats.load()
+  void favorites.load()
   await library.init()
   await player.restore()
 })
@@ -111,12 +119,15 @@ watch(
                  曾经 template v-if 与 SongsView 的 v-if 断开成两条链，
                  songs 视图下兜底的 PlaceholderView 也会渲染，view-body 被撑出
                  双倍高度 → 外层滚动条出现 + 内层虚拟列表失效。 -->
-            <SongsView v-if="ui.activeView === 'songs'" @add-folder="addFolder" />
+            <SongsView v-if="ui.activeView === 'songs'" />
+
+            <FavoritesView v-else-if="ui.activeView === 'favorites'" />
+
+            <ChartsView v-else-if="ui.activeView === 'charts'" />
 
             <AlbumsView v-else-if="ui.activeView === 'albums'" />
 
             <ArtistsView v-else-if="ui.activeView === 'artists'" />
-            <GenresView v-else-if="ui.activeView === 'genres'" />
 
             <FoldersView v-else-if="ui.activeView === 'folders'" v-model:selected-root="selectedRootId" @add-folder="addFolder" />
 

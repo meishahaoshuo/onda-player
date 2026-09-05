@@ -14,13 +14,20 @@ let dbPromise: Promise<MusicPlayerDB> | null = null
 
 function getDB(): Promise<MusicPlayerDB> {
   if (!dbPromise) {
-    dbPromise = openDB('music-player', 1, {
-      upgrade(db) {
-        db.createObjectStore('handles')
-        db.createObjectStore('songs', { keyPath: 'path' })
-        db.createObjectStore('covers')
-        db.createObjectStore('playlists', { keyPath: 'id' })
-        db.createObjectStore('kv')
+    dbPromise = openDB('music-player', 2, {
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          db.createObjectStore('handles')
+          db.createObjectStore('songs', { keyPath: 'path' })
+          db.createObjectStore('covers')
+          db.createObjectStore('playlists', { keyPath: 'id' })
+          db.createObjectStore('kv')
+        }
+        // v2：播放统计与我喜欢的音乐
+        if (oldVersion < 2) {
+          db.createObjectStore('stats')
+          db.createObjectStore('favorites')
+        }
       },
     }) as Promise<MusicPlayerDB>
   }
@@ -163,4 +170,65 @@ export async function kvSet(key: string, value: unknown) {
 export async function kvGet<T>(key: string): Promise<T | undefined> {
   const db = await getDB()
   return db.get('kv', key)
+}
+
+/* ---------- stats（播放统计，key = 歌曲 path） ---------- */
+
+export interface PlayStat {
+  playCount: number
+  lastPlayedAt: number
+}
+
+export async function putStat(path: string, stat: PlayStat) {
+  const db = await getDB()
+  await db.put('stats', stat, path)
+}
+
+/** 全部统计，按 path 配对返回 */
+export async function getAllStats(): Promise<{ path: string; stat: PlayStat }[]> {
+  const db = await getDB()
+  const tx = db.transaction('stats')
+  const [keys, vals] = await Promise.all([tx.store.getAllKeys(), tx.store.getAll()])
+  await tx.done
+  return keys.map((k, i) => ({
+    path: String(k),
+    stat: vals[i] as PlayStat,
+  }))
+}
+
+export async function clearStats() {
+  const db = await getDB()
+  await db.clear('stats')
+}
+
+/* ---------- favorites（我喜欢的音乐，key = 歌曲 path） ---------- */
+
+export interface FavoriteEntry {
+  addedAt: number
+}
+
+export async function putFavorite(path: string, entry: FavoriteEntry) {
+  const db = await getDB()
+  await db.put('favorites', entry, path)
+}
+
+export async function deleteFavorite(path: string) {
+  const db = await getDB()
+  await db.delete('favorites', path)
+}
+
+export async function getAllFavorites(): Promise<{ path: string; addedAt: number }[]> {
+  const db = await getDB()
+  const tx = db.transaction('favorites')
+  const [keys, vals] = await Promise.all([tx.store.getAllKeys(), tx.store.getAll()])
+  await tx.done
+  return keys.map((k, i) => ({
+    path: String(k),
+    addedAt: (vals[i] as FavoriteEntry).addedAt,
+  }))
+}
+
+export async function clearFavorites() {
+  const db = await getDB()
+  await db.clear('favorites')
 }

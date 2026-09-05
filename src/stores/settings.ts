@@ -34,6 +34,26 @@ function loadLyricOffset(): number {
   return Number.isFinite(raw) ? Math.min(3, Math.max(-3, raw)) : 0
 }
 
+/** 启动时恢复上次队列（关闭则每次冷启动为空队列） */
+const AUTO_RESTORE_KEY = 'settings.autoRestoreQueue'
+function loadAutoRestore(): boolean {
+  return localStorage.getItem(AUTO_RESTORE_KEY) !== '0'
+}
+
+/** 恢复队列后尝试自动续播（受浏览器自动播放策略限制，可能需要一次交互） */
+const AUTO_RESUME_KEY = 'settings.autoResume'
+function loadAutoResume(): boolean {
+  return localStorage.getItem(AUTO_RESUME_KEY) === '1'
+}
+
+/** 排行榜容量 */
+export type ChartsLimit = 'top50' | 'top100' | 'all'
+const CHARTS_LIMIT_KEY = 'settings.chartsLimit'
+function loadChartsLimit(): ChartsLimit {
+  const raw = localStorage.getItem(CHARTS_LIMIT_KEY)
+  return raw === 'top100' || raw === 'all' ? raw : 'top50'
+}
+
 /**
  * 主题设置：跟随系统 / 深色 / 浅色，切换即时生效并持久化。
  * 注：第 2 阶段 IndexedDB 就绪后仍保留 localStorage——主题需要在
@@ -43,6 +63,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const themeMode = ref<ThemeMode>(loadMode())
   const lyricFontSize = ref<LyricFontSize>(loadLyricFs())
   const lyricOffset = ref(loadLyricOffset())
+  const autoRestoreQueue = ref(loadAutoRestore())
+  const autoResume = ref(loadAutoResume())
+  const chartsLimit = ref<ChartsLimit>(loadChartsLimit())
 
   // 实际生效的主题（system 模式下随系统实时变化）
   const resolvedTheme = ref<'dark' | 'light'>(media.matches ? 'dark' : 'light')
@@ -107,6 +130,21 @@ export const useSettingsStore = defineStore('settings', () => {
           : 'dark'
   }
 
+  function setAutoRestoreQueue(v: boolean) {
+    autoRestoreQueue.value = v
+    localStorage.setItem(AUTO_RESTORE_KEY, v ? '1' : '0')
+  }
+
+  function setAutoResume(v: boolean) {
+    autoResume.value = v
+    localStorage.setItem(AUTO_RESUME_KEY, v ? '1' : '0')
+  }
+
+  function setChartsLimit(v: ChartsLimit) {
+    chartsLimit.value = v
+    localStorage.setItem(CHARTS_LIMIT_KEY, v)
+  }
+
   return {
     themeMode,
     resolvedTheme,
@@ -119,5 +157,11 @@ export const useSettingsStore = defineStore('settings', () => {
     lyricOffset,
     setLyricOffset,
     nudgeLyricOffset,
+    autoRestoreQueue,
+    setAutoRestoreQueue,
+    autoResume,
+    setAutoResume,
+    chartsLimit,
+    setChartsLimit,
   }
 })

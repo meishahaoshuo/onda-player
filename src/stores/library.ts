@@ -83,19 +83,6 @@ export const useLibraryStore = defineStore('library', () => {
       .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
   })
 
-  const genres = computed(() => {
-    const map = new Map<string, SongRecord[]>()
-    for (const s of songs.value) {
-      const g = s.genre || '未知曲风'
-      const list = map.get(g)
-      if (list) list.push(s)
-      else map.set(g, [s])
-    }
-    return [...map.entries()]
-      .map(([name, list]) => ({ name, songs: list }))
-      .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
-  })
-
   /** 启动：从 DB 恢复歌曲列表与根文件夹（权限需用户点击确认后才恢复） */
   async function init() {
     songs.value = await db.getAllSongs()
@@ -312,7 +299,6 @@ export const useLibraryStore = defineStore('library', () => {
     sortedSongs,
     albums,
     artists,
-    genres,
     loaded,
     scanning,
     scanProgress,
