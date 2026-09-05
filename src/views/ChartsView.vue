@@ -6,15 +6,24 @@ import { formatDuration } from '@/utils/format'
 import { useStatsStore } from '@/stores/stats'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
+import { useSettingsStore } from '@/stores/settings'
 import type { SongRecord } from '@/types'
 
-/** 排行榜：按播放次数降序，默认 Top 50，可展开全部 */
+/** 排行榜：按播放次数降序，容量取设置页配置，超出可展开 */
 const stats = useStatsStore()
 const library = useLibraryStore()
 const player = usePlayerStore()
+const settings = useSettingsStore()
 
 const expanded = ref(false)
-const DEFAULT_LIMIT = 50
+
+const defaultLimit = computed(() => {
+  switch (settings.chartsLimit) {
+    case 'top100': return 100
+    case 'all': return Number.POSITIVE_INFINITY
+    default: return 50
+  }
+})
 
 /** 次数降序、同次数按标题；rank 从 1 起 */
 const ranked = computed(() => {
@@ -29,9 +38,10 @@ const ranked = computed(() => {
   return rows
 })
 
-const visible = computed(() =>
-  expanded.value ? ranked.value : ranked.value.slice(0, DEFAULT_LIMIT),
-)
+const visible = computed(() => {
+  const limit = defaultLimit.value
+  return expanded.value ? ranked.value : ranked.value.slice(0, limit)
+})
 
 const MEDAL: Record<number, string> = { 1: 'gold', 2: 'silver', 3: 'bronze' }
 
@@ -75,7 +85,7 @@ function onPlay(song: SongRecord) {
         </div>
       </div>
       <button
-        v-if="!expanded && ranked.length > DEFAULT_LIMIT"
+        v-if="!expanded && Number.isFinite(defaultLimit) && ranked.length > defaultLimit"
         class="expand-btn"
         @click="expanded = true"
       >

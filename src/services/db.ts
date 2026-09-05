@@ -232,3 +232,17 @@ export async function clearFavorites() {
   const db = await getDB()
   await db.clear('favorites')
 }
+
+/** 清空全部资料（歌曲/封面/歌单/统计/收藏/文件夹与播放状态），设置保留在 localStorage 不受影响 */
+export async function clearAllData() {
+  const db = await getDB()
+  await Promise.all([
+    db.clear('songs'),
+    db.clear('covers'),
+    db.clear('playlists'),
+    db.clear('stats'),
+    db.clear('favorites'),
+    db.clear('handles'),
+    db.clear('kv'),
+  ])
+}
