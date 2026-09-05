@@ -112,7 +112,15 @@ function preloadImage(src: string): Promise<void> {
   })
 }
 
-const groups = ref<LyricGroup[]>([])
+const baseGroups = ref<LyricGroup[]>([])
+/** 应用歌词偏移后的时间轴：偏移 > 0 = 歌词提前显示。
+    高亮、逐字加深、点击跳播共用这份平移后的时间，保证三者的语义一致。 */
+const groups = computed<LyricGroup[]>(() =>
+  baseGroups.value.map((g) => ({
+    ...g,
+    time: g.time < 0 ? g.time : Math.max(0, g.time - settings.lyricOffset),
+  })),
+)
 const loading = ref(false)
 /** 歌词加载完成标记（有无歌词都置 true），飞入动画据此等布局稳定 */
 const lyricsSettled = ref(false)
@@ -135,7 +143,7 @@ watch(
       switching.value = true // 切歌：内容淡出淡入
       switchStart = performance.now()
     }
-    groups.value = []
+    baseGroups.value = []
     const song = player.current
     if (!path || !song) {
       lyricsSettled.value = true
@@ -150,9 +158,9 @@ watch(
     // 优先同目录 .lrc 文件，其次音频内嵌歌词
     const lrc = await readLrcFile(song.rootId, path.slice(song.rootId.length + 1))
     if (lrc && lrc.trim()) {
-      groups.value = parseLrc(lrc)
+      baseGroups.value = parseLrc(lrc)
     } else if (song.embeddedLyrics) {
-      groups.value = parseEmbeddedLyrics(song.embeddedLyrics)
+      baseGroups.value = parseEmbeddedLyrics(song.embeddedLyrics)
     }
     loading.value = false
     lyricsSettled.value = true
@@ -465,6 +473,15 @@ watch(
   },
 )
 
+/* 偏移变化 → 时间轴整体平移，立即重算高亮行并重新定位视口 */
+watch(
+  () => settings.lyricOffset,
+  () => {
+    activeIdx.value = computeActiveIdx(getAudio().currentTime)
+    nextTick(() => scrollToActive(false))
+  },
+)
+
 /** 歌词页根元素内联字号变量（档位切换即时生效） */
 const lyricVars = computed(() => ({
   '--lyric-fs': `${settings.lyricFontPx.main}px`,
@@ -742,6 +759,12 @@ onMounted(() => {
               <span class="fs-dot" :style="{ width: `${step.main / 3.2}px`, height: `${step.main / 3.2}px` }" />
               <span class="fs-label">{{ step.label }}</span>
             </button>
+            <div class="fs-heading" title="正数歌词提前显示，负数延后">歌词偏移</div>
+            <div class="offset-row">
+              <button class="offset-btn" title="延后 0.1s" @click="settings.nudgeLyricOffset(-0.1)">−</button>
+              <span class="offset-val">{{ settings.lyricOffset.toFixed(1) }}s</span>
+              <button class="offset-btn" title="提前 0.1s" @click="settings.nudgeLyricOffset(0.1)">＋</button>
+            </div>
           </div>
         </Transition>
       </div>
@@ -1366,6 +1389,39 @@ onMounted(() => {
 .fs-label {
   flex: 1;
   text-align: left;
+}
+
+.offset-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px 6px;
+}
+
+.offset-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--lyric-control);
+  transition: background 0.12s var(--ease-out), color 0.12s var(--ease-out);
+}
+
+.offset-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--lyric-text-active);
+}
+
+.offset-val {
+  min-width: 42px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--lyric-text-active);
+  font-variant-numeric: tabular-nums;
 }
 
 .fs-pop-enter-active {

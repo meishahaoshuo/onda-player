@@ -4,6 +4,7 @@ import type { ThemeMode } from '@/types'
 
 const STORAGE_KEY = 'settings.themeMode'
 const LYRIC_FS_KEY = 'settings.lyricFontSize'
+const LYRIC_OFFSET_KEY = 'settings.lyricOffset'
 const media = window.matchMedia('(prefers-color-scheme: dark)')
 
 function loadMode(): ThemeMode {
@@ -26,6 +27,13 @@ function loadLyricFs(): LyricFontSize {
   return LYRIC_FS_STEPS.some((s) => s.id === raw) ? (raw as LyricFontSize) : 'md'
 }
 
+/** 歌词偏移（秒，-3 ~ +3）：正数 = 歌词整体提前显示，负数 = 延后。
+    不同来源的 LRC 时间轴与实际演唱普遍存在零点几秒的固定偏差，逐歌手动校准用。 */
+function loadLyricOffset(): number {
+  const raw = Number(localStorage.getItem(LYRIC_OFFSET_KEY))
+  return Number.isFinite(raw) ? Math.min(3, Math.max(-3, raw)) : 0
+}
+
 /**
  * 主题设置：跟随系统 / 深色 / 浅色，切换即时生效并持久化。
  * 注：第 2 阶段 IndexedDB 就绪后仍保留 localStorage——主题需要在
@@ -34,6 +42,7 @@ function loadLyricFs(): LyricFontSize {
 export const useSettingsStore = defineStore('settings', () => {
   const themeMode = ref<ThemeMode>(loadMode())
   const lyricFontSize = ref<LyricFontSize>(loadLyricFs())
+  const lyricOffset = ref(loadLyricOffset())
 
   // 实际生效的主题（system 模式下随系统实时变化）
   const resolvedTheme = ref<'dark' | 'light'>(media.matches ? 'dark' : 'light')
@@ -79,6 +88,16 @@ export const useSettingsStore = defineStore('settings', () => {
     setLyricFontSize(LYRIC_FS_STEPS[(idx + 1) % LYRIC_FS_STEPS.length].id)
   }
 
+  function setLyricOffset(v: number) {
+    const clamped = Math.min(3, Math.max(-3, Math.round(v * 10) / 10))
+    lyricOffset.value = clamped
+    localStorage.setItem(LYRIC_OFFSET_KEY, String(clamped))
+  }
+
+  function nudgeLyricOffset(delta: number) {
+    setLyricOffset(lyricOffset.value + delta)
+  }
+
   function cycleTheme() {
     themeMode.value =
       themeMode.value === 'dark'
@@ -97,5 +116,8 @@ export const useSettingsStore = defineStore('settings', () => {
     lyricFontPx,
     setLyricFontSize,
     cycleLyricFontSize,
+    lyricOffset,
+    setLyricOffset,
+    nudgeLyricOffset,
   }
 })
