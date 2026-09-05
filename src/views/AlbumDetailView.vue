@@ -8,6 +8,8 @@ import { playAlbumEnter, playAlbumExit } from '@/services/pageTransition'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
+import { useFavoritesStore } from '@/stores/favorites'
+import { useSongActions } from '@/composables/useSongActions'
 import { formatDuration, formatTotalDuration, formatFileSize, formatSampleRate } from '@/utils/format'
 import type { SongRecord } from '@/types'
 
@@ -27,6 +29,8 @@ const props = defineProps<{ albumKey: string }>()
 const library = useLibraryStore()
 const player = usePlayerStore()
 const ui = useUiStore()
+const favorites = useFavoritesStore()
+const { openSongMenu } = useSongActions()
 
 /* 相机推进过渡：进入由编排器接管，返回对称反向 */
 const rootEl = ref<HTMLElement | null>(null)
@@ -120,6 +124,11 @@ function playAll(shuffle = false) {
 function playSong(song: SongRecord) {
   if (!album.value) return
   void player.playSong(song, album.value.songs)
+}
+
+function onRowMenu(song: SongRecord, e: MouseEvent) {
+  if (!album.value) return
+  openSongMenu(e, song, { context: album.value.songs })
 }
 
 /* 信息面板：全部来自扫描已有的字段，缺数据的行自动隐藏 */
@@ -230,6 +239,7 @@ const metaRows = computed<MetaRow[]>(() => {
         class="track-row"
         :class="{ playing: row.song.path === player.currentPath }"
         @click="playSong(row.song)"
+        @contextmenu.prevent="onRowMenu(row.song, $event)"
       >
         <span class="track-no">{{ row.no }}</span>
         <span class="track-main">
@@ -245,6 +255,19 @@ const metaRows = computed<MetaRow[]>(() => {
           <span class="track-artist">{{ row.song.artist }}</span>
         </span>
         <span class="track-duration">
+          <span class="row-actions" @click.stop>
+            <button
+              class="row-act"
+              :class="{ active: favorites.has(row.song.path) }"
+              :title="favorites.has(row.song.path) ? '取消收藏' : '收藏'"
+              @click="favorites.toggle(row.song.path)"
+            >
+              <AppIcon name="heart" :size="15" :class="{ filled: favorites.has(row.song.path) }" />
+            </button>
+            <button class="row-act" title="更多操作" @click="onRowMenu(row.song, $event)">
+              <AppIcon name="more" :size="15" />
+            </button>
+          </span>
           <AppIcon v-if="row.song.path === player.currentPath" name="check" :size="14" class="playing-check" />
           {{ formatDuration(row.song.durationSec) }}
         </span>
@@ -533,12 +556,56 @@ const metaRows = computed<MetaRow[]>(() => {
 }
 
 .track-duration {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+}
+
+/* 悬停快捷操作（与 SongList 同款）：盖住时长浮出 */
+.row-actions {
+  position: absolute;
+  right: 0;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding-left: 28px;
+  background: linear-gradient(to right, transparent, var(--bg-base) 38%);
+}
+
+.track-row:hover .row-actions {
+  display: flex;
+}
+
+.track-row.playing:hover .row-actions {
+  background: linear-gradient(to right, transparent, var(--bg-active) 38%);
+}
+
+.row-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.row-act:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.row-act.active {
+  color: var(--accent);
+}
+
+.row-act :deep(svg.filled) {
+  fill: currentColor;
 }
 
 .playing-check {

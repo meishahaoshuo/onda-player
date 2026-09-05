@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
+import CollageCover from '@/components/CollageCover.vue'
 import SongList from '@/components/SongList.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import FrostedPanel from '@/components/FrostedPanel.vue'
@@ -8,6 +9,8 @@ import { capturePageTransition, playPageTransition } from '@/services/legacyFlip
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { usePlaylistStore } from '@/stores/playlist'
+import { useFavoritesStore } from '@/stores/favorites'
+import { useSongActions } from '@/composables/useSongActions'
 import { useUiStore } from '@/stores/ui'
 import type { SongRecord } from '@/types'
 
@@ -17,26 +20,30 @@ import type { SongRecord } from '@/types'
 const library = useLibraryStore()
 const player = usePlayerStore()
 const playlistStore = usePlaylistStore()
+const favorites = useFavoritesStore()
+const { openSongMenu } = useSongActions()
 const ui = useUiStore()
 
 onMounted(() => {
   if (!playlistStore.loaded) playlistStore.load()
-  if (ui.playlistCreateRequested) {
-    ui.playlistCreateRequested = false
-    showCreate.value = true
-  }
+  consumeCreateRequest()
 })
 
 // 侧边栏在其他页面点击「新建歌单」时也会置位请求标记
 watch(
   () => ui.playlistCreateRequested,
-  (requested) => {
-    if (requested) {
-      ui.playlistCreateRequested = false
-      showCreate.value = true
-    }
+  () => {
+    consumeCreateRequest()
   },
 )
+
+function consumeCreateRequest() {
+  if (ui.playlistCreateRequested) {
+    ui.playlistCreateRequested = false
+    newName.value = ''
+    showCreate.value = true
+  }
+}
 
 const current = computed(() => playlistStore.playlists.find((p) => p.id === ui.detailKey))
 
@@ -48,7 +55,18 @@ const currentSongs = computed<SongRecord[]>(() => {
     .filter((s): s is SongRecord => s !== undefined)
 })
 
-const coverId = computed(() => currentSongs.value.find((s) => s.coverId)?.coverId ?? null)
+/** 歌单内歌曲的封面 id 列表（拼贴封面用） */
+const currentCoverIds = computed(() => currentSongs.value.map((s) => s.coverId))
+
+/** 歌单列表页：id → 封面 id 列表（一次建索引，避免逐卡片全库扫描） */
+const cardCoverIds = computed(() => {
+  const byPath = new Map(library.songs.map((s) => [s.path, s.coverId]))
+  const map = new Map<string, (string | null)[]>()
+  for (const p of playlistStore.playlists) {
+    map.set(p.id, p.songPaths.map((path) => byPath.get(path) ?? null))
+  }
+  return map
+})
 
 /* 共享元素过渡 + 内容错峰浮现 + 返回轻淡出 */
 const plRevealed = ref(false)
@@ -88,7 +106,9 @@ const showCreate = ref(false)
 const newName = ref('')
 
 function confirmCreate() {
-  const p = playlistStore.create(newName.value)
+  // 右键「新建歌单并加入」会带种子歌曲
+  const p = playlistStore.create(newName.value, ui.playlistCreateSeedPaths)
+  ui.playlistCreateSeedPaths = []
   newName.value = ''
   showCreate.value = false
   ui.openDetail(p.id)
@@ -104,6 +124,14 @@ function confirmRename() {
 
 const showAdd = ref(false)
 const addFilter = ref('')
+/** 多选批量添加的选中集 */
+const addSelected = ref<Set<string>>(new Set())
+
+function openAdd() {
+  addSelected.value = new Set()
+  addFilter.value = ''
+  showAdd.value = true
+}
 
 const addCandidates = computed(() =>
   addFilter.value
@@ -115,6 +143,26 @@ const addCandidates = computed(() =>
 
 function inPlaylist(path: string) {
   return current.value?.songPaths.includes(path) ?? false
+}
+
+function toggleAddSelect(path: string) {
+  const next = new Set(addSelected.value)
+  if (next.has(path)) next.delete(path)
+  else next.add(path)
+  addSelected.value = next
+}
+
+function confirmAddSelected() {
+  if (!current.value || addSelected.value.size === 0) return
+  playlistStore.addSongs(current.value.id, [...addSelected.value])
+  addSelected.value = new Set()
+}
+
+/* ---------- 右键菜单 ---------- */
+
+function onRowMenu(song: SongRecord, e: MouseEvent) {
+  if (!current.value) return
+  openSongMenu(e, song, { playlistId: current.value.id, context: currentSongs.value })
 }
 
 /* ---------- 播放 ---------- */
@@ -203,7 +251,7 @@ function confirmRemove() {
     </button>
 
     <header class="pl-header">
-      <CoverImage :cover-id="coverId" :size="120" class="header-cover" />
+      <CollageCover :cover-ids="currentCoverIds" :size="120" class="header-cover" />
       <div class="pl-info">
         <h1 class="pl-name">{{ current.name }}</h1>
         <div class="pl-sub">{{ currentSongs.length }} 首歌曲</div>
@@ -214,7 +262,7 @@ function confirmRemove() {
           <button class="action-btn" :disabled="currentSongs.length === 0" @click="playAll(true)">
             <AppIcon name="shuffle" :size="15" /> 随机
           </button>
-          <button class="action-btn" @click="showAdd = true">
+          <button class="action-btn" @click="openAdd">
             <AppIcon name="plus" :size="15" /> 添加歌曲
           </button>
           <button
@@ -249,13 +297,27 @@ function confirmRemove() {
         @drop="onDrop(i, $event)"
         @dragend="onDragEnd"
         @click="onPlay(song)"
+        @contextmenu.prevent="onRowMenu(song, $event)"
       >
         <span class="drag-handle">⋮⋮</span>
         <CoverImage :cover-id="song.coverId" :size="36" />
         <span class="drag-title">{{ song.title }}</span>
         <span class="drag-artist">{{ song.artist }}</span>
-        <span class="drag-remove" title="从歌单移除" @click.stop="playlistStore.removeSong(current!.id, song.path)">
-          <AppIcon name="close" :size="13" />
+        <span class="row-actions" @click.stop>
+          <button
+            class="row-act"
+            :class="{ active: favorites.has(song.path) }"
+            :title="favorites.has(song.path) ? '取消收藏' : '收藏'"
+            @click="favorites.toggle(song.path)"
+          >
+            <AppIcon name="heart" :size="14" :class="{ filled: favorites.has(song.path) }" />
+          </button>
+          <button class="row-act" title="更多操作" @click="onRowMenu(song, $event)">
+            <AppIcon name="more" :size="14" />
+          </button>
+          <button class="row-act" title="从歌单移除" @click="playlistStore.removeSong(current!.id, song.path)">
+            <AppIcon name="close" :size="14" />
+          </button>
         </span>
       </div>
     </div>
@@ -274,28 +336,36 @@ function confirmRemove() {
       </div></Transition>
     </teleport>
 
-    <!-- 添加歌曲弹层 -->
+    <!-- 添加歌曲弹层（多选批量添加） -->
     <teleport to="body">
       <Transition name="modal"><div v-if="showAdd" class="modal-mask" @click.self="showAdd = false">
         <FrostedPanel class="modal wide" radius="12px">
           <h3 class="modal-title">添加歌曲到「{{ current.name }}」</h3>
           <input v-model="addFilter" class="text-input" type="text" placeholder="搜索标题 / 艺术家 / 专辑" />
           <div class="add-list">
-            <div v-for="song in addCandidates" :key="song.path" class="add-row">
+            <label
+              v-for="song in addCandidates"
+              :key="song.path"
+              class="add-row"
+              :class="{ added: inPlaylist(song.path) }"
+            >
+              <input
+                type="checkbox"
+                class="add-check"
+                :checked="addSelected.has(song.path)"
+                :disabled="inPlaylist(song.path)"
+                @change="toggleAddSelect(song.path)"
+              />
               <span class="drag-title">{{ song.title }}</span>
               <span class="drag-artist">{{ song.artist }}</span>
-              <button
-                class="add-btn"
-                :class="{ added: inPlaylist(song.path) }"
-                :disabled="inPlaylist(song.path)"
-                @click="playlistStore.addSongs(current!.id, [song.path])"
-              >
-                {{ inPlaylist(song.path) ? '已添加' : '添加' }}
-              </button>
-            </div>
+              <span class="add-state">{{ inPlaylist(song.path) ? '已在歌单' : '' }}</span>
+            </label>
           </div>
           <div class="modal-actions">
-            <button class="action-btn primary" @click="showAdd = false">完成</button>
+            <button class="action-btn" @click="showAdd = false">取消</button>
+            <button class="action-btn primary" :disabled="addSelected.size === 0" @click="confirmAddSelected(); showAdd = false">
+              添加{{ addSelected.size > 0 ? ` ${addSelected.size} 首` : '' }}
+            </button>
           </div>
         </FrostedPanel>
       </div></Transition>
@@ -318,14 +388,7 @@ function confirmRemove() {
         class="pl-card"
         @click="openPlaylist(p, $event)"
       >
-        <CoverImage
-          :cover-id="
-            p.songPaths
-              .map((path) => library.songs.find((s) => s.path === path)?.coverId ?? null)
-              .find(Boolean) ?? null
-          "
-          :size="120"
-        />
+        <CollageCover :cover-ids="cardCoverIds.get(p.id) ?? []" :size="120" />
         <div class="pl-card-name" :title="p.name">{{ p.name }}</div>
         <div class="pl-card-sub">{{ p.songPaths.length }} 首</div>
       </button>
@@ -520,7 +583,8 @@ function confirmRemove() {
   text-overflow: ellipsis;
 }
 
-.drag-remove {
+.drag-remove,
+.row-act {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -533,6 +597,43 @@ function confirmRemove() {
 .drag-remove:hover {
   background: var(--bg-hover);
   color: var(--danger);
+}
+
+/* 悬停快捷操作：盖住行尾浮出（收藏/更多/移除） */
+.row-actions {
+  position: absolute;
+  right: 8px;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding-left: 28px;
+  background: linear-gradient(to right, transparent, var(--bg-base) 38%);
+}
+
+.drag-row:hover .row-actions {
+  display: flex;
+}
+
+.drag-row.playing:hover .row-actions {
+  background: linear-gradient(to right, transparent, var(--bg-active) 38%);
+}
+
+.row-act {
+  color: var(--text-secondary);
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.row-act:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.row-act.active {
+  color: var(--accent);
+}
+
+.row-act :deep(svg.filled) {
+  fill: currentColor;
 }
 
 /* 歌单列表 */
@@ -686,30 +787,34 @@ function confirmRemove() {
 
 .add-row {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 20px 1fr 1fr auto;
   gap: 12px;
   align-items: center;
   height: 40px;
   padding: 0 8px;
   border-radius: 6px;
+  cursor: pointer;
 }
 
 .add-row:hover {
   background: var(--bg-hover);
 }
 
-.add-btn {
-  padding: 4px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  background: var(--accent);
-  color: var(--accent-text);
+.add-row.added {
+  opacity: 0.55;
+  cursor: default;
 }
 
-.add-btn.added {
-  background: var(--bg-hover);
+.add-check {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.add-state {
+  font-size: 12px;
   color: var(--text-tertiary);
-  cursor: default;
 }
 
 /* 共享元素过渡落定后的错峰浮现 + 返回轻淡出 */

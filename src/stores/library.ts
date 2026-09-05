@@ -192,6 +192,23 @@ export const useLibraryStore = defineStore('library', () => {
     songs.value = songs.value.filter((s) => s.rootId !== rootId)
   }
 
+  /** 从资料库移除指定歌曲（不删磁盘文件；重新扫描会恢复） */
+  async function removeSongs(paths: string[]) {
+    const doomed = new Set(paths)
+    songs.value = songs.value.filter((s) => !doomed.has(s.path))
+    await db.deleteSongs(paths)
+  }
+
+  /** 歌曲所属专辑的详情 key（与 albums computed 的 key 规则一致） */
+  function albumKeyOf(song: SongRecord): string {
+    return song.album ? `album:${song.album}` : `meta:${song.albumArtist}`
+  }
+
+  /** 歌曲主艺术家（与 artists computed 的拆分规则一致） */
+  function artistNameOf(song: SongRecord): string {
+    return song.artist.split(' / ')[0]?.trim() || song.artist
+  }
+
   /** 全量重扫所有根目录（增量：未变化的文件只跳过） */
   async function rescan() {
     if (scanning.value) return
@@ -308,6 +325,9 @@ export const useLibraryStore = defineStore('library', () => {
     registerRoot,
     restorePermission,
     removeFolderById,
+    removeSongs,
+    albumKeyOf,
+    artistNameOf,
     rescan,
     cancelScan,
     coverUrl,

@@ -2,7 +2,10 @@
 import VirtualList from '@/components/VirtualList.vue'
 import CoverImage from '@/components/CoverImage.vue'
 import QualityBadge from '@/components/QualityBadge.vue'
+import AppIcon from '@/components/AppIcon.vue'
 import { formatDuration } from '@/utils/format'
+import { useSongActions } from '@/composables/useSongActions'
+import { useFavoritesStore } from '@/stores/favorites'
 import type { SongRecord } from '@/types'
 
 const props = defineProps<{ songs: SongRecord[]; currentPath?: string | null; persistKey?: string }>()
@@ -10,8 +13,15 @@ const emit = defineEmits<{ play: [song: SongRecord] }>()
 
 const ROW_HEIGHT = 56
 
+const { openSongMenu } = useSongActions()
+const favorites = useFavoritesStore()
+
 function onRowClick(song: SongRecord) {
   emit('play', song)
+}
+
+function onRowMenu(song: SongRecord, e: MouseEvent) {
+  openSongMenu(e, song, { context: props.songs })
 }
 </script>
 
@@ -34,6 +44,7 @@ function onRowClick(song: SongRecord) {
             :class="{ playing: item.path === props.currentPath }"
             :style="{ height: `${ROW_HEIGHT}px` }"
             @click="onRowClick(item)"
+            @contextmenu.prevent="onRowMenu(item, $event)"
           >
             <span class="col-cover">
               <CoverImage :cover-id="item.coverId" :size="40" />
@@ -53,7 +64,22 @@ function onRowClick(song: SongRecord) {
             <span class="col-artist" :title="item.artist">{{ item.artist }}</span>
             <span class="col-album" :title="item.album">{{ item.album }}</span>
             <span class="col-duration">
-              {{ formatDuration(item.durationSec) }}
+              <span class="duration-text">
+                {{ formatDuration(item.durationSec) }}
+              </span>
+              <span class="row-actions" @click.stop>
+                <button
+                  class="row-act"
+                  :class="{ active: favorites.has(item.path) }"
+                  :title="favorites.has(item.path) ? '取消收藏' : '收藏'"
+                  @click="favorites.toggle(item.path)"
+                >
+                  <AppIcon name="heart" :size="15" :class="{ filled: favorites.has(item.path) }" />
+                </button>
+                <button class="row-act" title="更多操作" @click="onRowMenu(item, $event)">
+                  <AppIcon name="more" :size="15" />
+                </button>
+              </span>
             </span>
           </div>
         </template>
@@ -90,6 +116,7 @@ function onRowClick(song: SongRecord) {
 }
 
 .song-row {
+  position: relative;
   display: grid;
   grid-template-columns: 56px minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.2fr) 72px;
   gap: 12px;
@@ -169,6 +196,7 @@ function onRowClick(song: SongRecord) {
 }
 
 .col-duration {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -176,5 +204,48 @@ function onRowClick(song: SongRecord) {
   font-size: 12px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+}
+
+/* 悬停快捷操作：盖住时长位浮出（爱心/更多），带渐变底衬盖住时长文字 */
+.row-actions {
+  position: absolute;
+  right: 0;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding-left: 28px;
+  background: linear-gradient(to right, transparent, var(--bg-base) 38%);
+}
+
+.song-row:hover .row-actions {
+  display: flex;
+}
+
+.song-row.playing:hover .row-actions {
+  background: linear-gradient(to right, transparent, var(--bg-active) 38%);
+}
+
+.row-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.row-act:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.row-act.active {
+  color: var(--accent);
+}
+
+.row-act :deep(svg.filled) {
+  fill: currentColor;
 }
 </style>

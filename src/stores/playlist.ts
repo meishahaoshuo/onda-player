@@ -13,11 +13,11 @@ export const usePlaylistStore = defineStore('playlists', () => {
     loaded.value = true
   }
 
-  function create(name: string): PlaylistRecord {
+  function create(name: string, seedPaths: string[] = []): PlaylistRecord {
     const playlist: PlaylistRecord = {
       id: `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       name: name.trim() || '新建歌单',
-      songPaths: [],
+      songPaths: [...seedPaths],
       createdAt: Date.now(),
     }
     playlists.value = [...playlists.value, playlist]

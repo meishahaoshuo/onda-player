@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import Sidebar from '@/components/Sidebar.vue'
 import PlayerBar from '@/components/PlayerBar.vue'
+import SongContextMenu from '@/components/SongContextMenu.vue'
 import SongsView from '@/views/SongsView.vue'
 import FoldersView from '@/views/FoldersView.vue'
 import AlbumsView from '@/views/AlbumsView.vue'
@@ -157,6 +158,7 @@ watch(
       </main>
     </div>
     <PlayerBar />
+    <SongContextMenu />
     <LyricsFullView v-if="ui.lyricsOpen" />
   </div>
 </template>

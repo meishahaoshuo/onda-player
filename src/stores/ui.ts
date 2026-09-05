@@ -11,6 +11,8 @@ export const useUiStore = defineStore('ui', () => {
   const detailKey = ref<string | null>(null)
   /** 侧边栏「新建歌单」请求标记，由 PlaylistsView 消费 */
   const playlistCreateRequested = ref(false)
+  /** 请求新建歌单时预置加入的歌曲（右键「新建歌单并加入」用） */
+  const playlistCreateSeedPaths = ref<string[]>([])
   /** 全屏歌词页开关 */
   const lyricsOpen = ref(false)
   /** 专辑过渡编排状态：idle 空闲 / enter 推进中 / exit 返回中（同时用作连点闸门） */
@@ -36,9 +38,10 @@ export const useUiStore = defineStore('ui', () => {
     dolly.value = 'idle'
   }
 
-  function requestPlaylistCreate() {
+  function requestPlaylistCreate(seedPaths: string[] = []) {
     activeView.value = 'playlists'
     detailKey.value = null
+    playlistCreateSeedPaths.value = seedPaths
     playlistCreateRequested.value = true
   }
 
@@ -68,6 +71,7 @@ export const useUiStore = defineStore('ui', () => {
     activeView,
     detailKey,
     playlistCreateRequested,
+    playlistCreateSeedPaths,
     lyricsOpen,
     dolly,
     rememberScroll,

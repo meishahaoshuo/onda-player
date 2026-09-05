@@ -1,20 +1,30 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import CoverImage from './CoverImage.vue'
 import ProgressSlider from './ProgressSlider.vue'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
-import { useSettingsStore } from '@/stores/settings'
+import { useFavoritesStore } from '@/stores/favorites'
+import { useSongActions } from '@/composables/useSongActions'
 import { useUiStore } from '@/stores/ui'
 import { formatDuration } from '@/utils/format'
-import type { PlayMode } from '@/types'
+import type { PlayMode, SongRecord } from '@/types'
 
 /** 底部播放条：液态玻璃 + 拖拽进度 + 队列面板；点封面打开全屏歌词 */
 const player = usePlayerStore()
-const settings = useSettingsStore()
 const ui = useUiStore()
 const library = useLibraryStore()
+const favorites = useFavoritesStore()
+const { openSongMenu } = useSongActions()
+
+const currentFavorited = computed(
+  () => !!player.currentPath && favorites.has(player.currentPath),
+)
+
+function toggleCurrentFav() {
+  if (player.currentPath) favorites.toggle(player.currentPath)
+}
 
 /**
  * 切歌时预热当前曲目的高清封面缓存。
@@ -55,6 +65,65 @@ const queueOpen = ref(false)
 function jumpTo(path: string) {
   const song = player.queue.find((s) => s.path === path)
   if (song) void player.playSong(song)
+}
+
+/* ---------- 队列面板：拖拽排序 / 清空 / 定位当前行 ---------- */
+
+const dragIndex = ref<number | null>(null)
+const dragOverIndex = ref<number | null>(null)
+const dropAfter = ref(false)
+const queueListEl = ref<HTMLElement | null>(null)
+
+/** 打开面板时把当前播放行滚到可见区 */
+watch(queueOpen, async (open) => {
+  if (!open) return
+  await nextTick()
+  const el = queueListEl.value?.querySelector('.queue-row.playing')
+  el?.scrollIntoView({ block: 'center' })
+})
+
+function onDragStart(i: number, e: DragEvent) {
+  dragIndex.value = i
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(i))
+  }
+}
+
+function onDragOver(i: number, e: DragEvent) {
+  if (dragIndex.value === null) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  const row = e.currentTarget as HTMLElement
+  const rect = row.getBoundingClientRect()
+  dropAfter.value = e.clientY - rect.top > rect.height / 2
+  dragOverIndex.value = i
+}
+
+function onDrop(i: number, e: DragEvent) {
+  e.preventDefault()
+  const from = dragIndex.value
+  if (from !== null && from !== i) {
+    const target = dropAfter.value ? i + 1 : i
+    const adjusted = from < target ? target - 1 : target
+    player.moveInQueue(from, adjusted)
+  }
+  resetDrag()
+}
+
+/** dragend 在"松手但没落在有效放置区"时也会触发，缺少它行会卡在拖拽态 */
+function onDragEnd() {
+  resetDrag()
+}
+
+function resetDrag() {
+  dragIndex.value = null
+  dragOverIndex.value = null
+  dropAfter.value = false
+}
+
+function onRowMenu(e: MouseEvent, song: SongRecord, i: number) {
+  openSongMenu(e, song, { queueIndex: i, context: player.queue })
 }
 </script>
 
@@ -112,6 +181,15 @@ function jumpTo(path: string) {
 
     <!-- 右：辅助区 -->
     <div class="aux">
+      <button
+        class="icon-btn"
+        :class="{ 'fav-active': currentFavorited }"
+        :title="currentFavorited ? '取消收藏' : '收藏'"
+        :disabled="!player.currentPath"
+        @click="toggleCurrentFav"
+      >
+        <AppIcon name="heart" :class="{ filled: currentFavorited }" />
+      </button>
       <button class="icon-btn" title="全屏歌词" @click="ui.lyricsOpen = true">
         <AppIcon name="expand" />
       </button>
@@ -125,12 +203,6 @@ function jumpTo(path: string) {
         :style="{ '--vol': `${player.volume}%` }"
         @input="onVolumeInput"
       />
-      <button
-        class="icon-btn"
-        :title="`主题：${settings.themeMode === 'system' ? '跟随系统' : settings.themeMode === 'dark' ? '深色' : '浅色'}`"
-      >
-        <AppIcon name="more" />
-      </button>
     </div>
 
     <!-- 播放队列面板 -->
@@ -138,21 +210,57 @@ function jumpTo(path: string) {
       <div v-if="queueOpen" class="queue-panel">
         <div class="queue-head">
           <span>播放队列</span>
-          <span class="queue-count">{{ player.queue.length }} 首</span>
+          <span class="queue-head-right">
+            <span class="queue-count">{{ player.queue.length }} 首</span>
+            <button
+              v-if="player.queue.length > 0"
+              class="queue-clear"
+              @click="player.clearQueue(); queueOpen = false"
+            >
+              清空
+            </button>
+          </span>
         </div>
-        <div class="queue-list">
-          <button
-            v-for="song in player.queue"
+        <div ref="queueListEl" class="queue-list">
+          <div
+            v-for="(song, i) in player.queue"
             :key="song.path"
             class="queue-row"
-            :class="{ playing: song.path === player.currentPath }"
+            :class="{
+              playing: song.path === player.currentPath,
+              dragging: dragIndex === i,
+              'drop-before': dragOverIndex === i && !dropAfter && dragIndex !== i,
+              'drop-after': dragOverIndex === i && dropAfter && dragIndex !== i,
+            }"
+            draggable="true"
+            @dragstart="onDragStart(i, $event)"
+            @dragover="onDragOver(i, $event)"
+            @drop="onDrop(i, $event)"
+            @dragend="onDragEnd"
             @click="jumpTo(song.path)"
+            @contextmenu.prevent="onRowMenu($event, song, i)"
           >
             <CoverImage :cover-id="song.coverId" :size="32" />
             <span class="queue-title">{{ song.title }}</span>
             <span class="queue-artist">{{ song.artist }}</span>
             <span class="queue-duration">{{ formatDuration(song.durationSec) }}</span>
-          </button>
+            <span class="row-actions" @click.stop>
+              <button
+                class="row-act"
+                :class="{ active: favorites.has(song.path) }"
+                :title="favorites.has(song.path) ? '取消收藏' : '收藏'"
+                @click="favorites.toggle(song.path)"
+              >
+                <AppIcon name="heart" :size="14" :class="{ filled: favorites.has(song.path) }" />
+              </button>
+              <button class="row-act" title="更多操作" @click="onRowMenu($event, song, i)">
+                <AppIcon name="more" :size="14" />
+              </button>
+              <button class="row-act" title="从队列移除" @click="player.removeAt(i)">
+                <AppIcon name="close" :size="14" />
+              </button>
+            </span>
+          </div>
           <div v-if="player.queue.length === 0" class="queue-empty">队列是空的</div>
         </div>
       </div>
@@ -273,6 +381,14 @@ function jumpTo(path: string) {
   color: var(--text-secondary);
 }
 
+.icon-btn.fav-active {
+  color: var(--accent);
+}
+
+.icon-btn :deep(svg.filled) {
+  fill: currentColor;
+}
+
 .volume {
   width: 88px;
   height: 4px;
@@ -327,10 +443,29 @@ function jumpTo(path: string) {
   font-weight: 600;
 }
 
+.queue-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .queue-count {
   color: var(--text-secondary);
   font-weight: 400;
   font-size: 12px;
+}
+
+.queue-clear {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  border-radius: 6px;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.queue-clear:hover {
+  background: var(--bg-hover);
+  color: var(--danger);
 }
 
 .queue-list {
@@ -342,6 +477,7 @@ function jumpTo(path: string) {
 }
 
 .queue-row {
+  position: relative;
   display: grid;
   grid-template-columns: 32px 1fr auto auto;
   gap: 10px;
@@ -349,7 +485,36 @@ function jumpTo(path: string) {
   padding: 6px 10px;
   border-radius: var(--radius-item);
   text-align: left;
+  cursor: grab;
   transition: background var(--dur-fast) var(--ease-out);
+}
+
+.queue-row:active {
+  cursor: grabbing;
+}
+
+.queue-row.dragging {
+  opacity: 0.4;
+}
+
+.queue-row.drop-before::before,
+.queue-row.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.queue-row.drop-before::before {
+  top: -1px;
+}
+
+.queue-row.drop-after::after {
+  bottom: -1px;
 }
 
 .queue-row:hover {
@@ -391,5 +556,48 @@ function jumpTo(path: string) {
   text-align: center;
   color: var(--text-tertiary);
   font-size: 13px;
+}
+
+/* 队列行悬停快捷操作（收藏/更多/移除） */
+.row-actions {
+  position: absolute;
+  right: 6px;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding-left: 28px;
+  background: linear-gradient(to right, transparent, var(--bg-base) 38%);
+}
+
+.queue-row:hover .row-actions {
+  display: flex;
+}
+
+.queue-row.playing:hover .row-actions {
+  background: linear-gradient(to right, transparent, var(--bg-active) 38%);
+}
+
+.row-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.row-act:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.row-act.active {
+  color: var(--accent);
+}
+
+.row-act :deep(svg.filled) {
+  fill: currentColor;
 }
 </style>
