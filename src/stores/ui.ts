@@ -15,8 +15,20 @@ export const useUiStore = defineStore('ui', () => {
   const lyricsOpen = ref(false)
   /** 专辑过渡编排状态：idle 空闲 / enter 推进中 / exit 返回中（同时用作连点闸门） */
   const dolly = ref<'idle' | 'enter' | 'exit'>('idle')
-  /** 专辑网格的浏览位置（切视图卸载前捕获，回来时恢复） */
-  const albumsScrollTop = ref(0)
+
+  /* ---------- 滚动位置记忆（全应用） ----------
+     key 约定：
+     - `view:<视图id>|<detailKey>`：外层 .view-body 滚动位置（App.vue 统一捕获/恢复）
+     - `list:<来源>:<id>`：SongList/VirtualList 内部滚动位置（组件自存自取） */
+  const scrollMemory = new Map<string, number>()
+
+  function rememberScroll(key: string, top: number) {
+    scrollMemory.set(key, top)
+  }
+
+  function recallScroll(key: string): number {
+    return scrollMemory.get(key) ?? 0
+  }
 
   function navigate(view: ViewId) {
     activeView.value = view
@@ -58,7 +70,8 @@ export const useUiStore = defineStore('ui', () => {
     playlistCreateRequested,
     lyricsOpen,
     dolly,
-    albumsScrollTop,
+    rememberScroll,
+    recallScroll,
     navigate,
     requestPlaylistCreate,
     openDetail,

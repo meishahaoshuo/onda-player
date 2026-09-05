@@ -64,6 +64,7 @@ function onPlay(song: SongRecord) {
         v-if="selectedRootId && rootSongs.length > 0"
         :songs="rootSongs"
         :current-path="player.currentPath"
+        :persist-key="`list:folder:${selectedRootId}`"
         @play="onPlay"
         class="list"
       />

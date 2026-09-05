@@ -83,6 +83,7 @@ const scanPct = computed(() =>
         v-if="library.sortedSongs.length > 0"
         :songs="library.sortedSongs"
         :current-path="player.currentPath"
+        persist-key="list:songs"
         @play="onPlay"
         class="list"
       />

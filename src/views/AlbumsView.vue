@@ -128,18 +128,11 @@ function clearMagnet() {
   magnetActive.clear()
 }
 
-/* ---------- 浏览位置记忆：切视图卸载前捕获，回来时恢复 ---------- */
-function restoreScroll() {
-  const el = scrollEl
-  if (!el || ui.albumsScrollTop <= 0) return
-  el.scrollTop = ui.albumsScrollTop
-  requestAnimationFrame(refreshRects)
-}
-
+/* 浏览位置记忆已上收到 App.vue 的统一机制（key = view:albums|<detailKey>） */
 watch(
   () => sortedAlbums.value.length,
   (n) => {
-    if (n > 0) restoreScroll()
+    if (n > 0) refreshRects()
   },
   { flush: 'post' },
 )
@@ -156,7 +149,6 @@ onMounted(() => {
   scrollEl = (gridEl.value?.closest('.view-body') as HTMLElement | null) ?? null
   scrollEl?.addEventListener('scroll', onScroll, { passive: true })
   window.addEventListener('resize', onScroll, { passive: true })
-  restoreScroll()
   const ric = (window as Window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback
   const idle = () => onSettled()
   if (ric) ric(idle)
@@ -164,7 +156,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  ui.albumsScrollTop = scrollEl?.scrollTop ?? 0
   scrollEl?.removeEventListener('scroll', onScroll)
   window.removeEventListener('resize', onScroll)
   window.clearTimeout(scrollTimer)

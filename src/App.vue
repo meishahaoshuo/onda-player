@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import Sidebar from '@/components/Sidebar.vue'
 import PlayerBar from '@/components/PlayerBar.vue'
 import SongsView from '@/views/SongsView.vue'
@@ -38,6 +38,35 @@ const viewTitles: Record<ViewId, string> = {
 
 const title = computed(() => viewTitles[ui.activeView])
 const selectedRootId = ref<string | null>(null)
+const sectionEl = ref<HTMLElement | null>(null)
+
+/* ---------- 全应用滚动位置记忆 ----------
+   切视图 / 钻取详情前把旧容器的 scrollTop 记入 ui store，
+   回来时（Transition enter 或同视图钻取返回）恢复。
+   key：`view:<视图>|<detailKey>`；SongList/VirtualList 的内部滚动由组件自己记（list:*）。 */
+const scrollKey = (view: string, detail: string | null) => `view:${view}|${detail ?? ''}`
+const INLINE_DETAIL_VIEWS = new Set<string>(['artists', 'genres', 'playlists'])
+
+watch(
+  [() => ui.activeView, () => ui.detailKey] as const,
+  ([view, detail], [oldView, oldDetail]) => {
+    // pre-flush：此刻 DOM 还是旧视图的，正好捕获它的滚动位置
+    if (sectionEl.value) {
+      ui.rememberScroll(scrollKey(oldView, oldDetail), sectionEl.value.scrollTop)
+    }
+    // 同视图内钻取/返回（详情内联在视图里，DOM 会重建）：更新后恢复目标状态的位置。
+    // 专辑详情是覆盖层、网格 DOM 不重建，绝不能在这里动它的 scrollTop。
+    if (view === oldView && detail !== oldDetail && INLINE_DETAIL_VIEWS.has(view)) {
+      nextTick(() => {
+        if (sectionEl.value) sectionEl.value.scrollTop = ui.recallScroll(scrollKey(view, detail))
+      })
+    }
+  },
+)
+
+function onViewEnter(el: Element) {
+  ;(el as HTMLElement).scrollTop = ui.recallScroll(scrollKey(ui.activeView, ui.detailKey))
+}
 
 function addFolder() {
   library.addFolder()
@@ -65,8 +94,8 @@ watch(
         <header class="view-header">
           <h1>{{ title }}</h1>
         </header>
-        <Transition name="view" mode="out-in">
-          <section :key="ui.activeView" class="view-body">
+        <Transition name="view" mode="out-in" @enter="onViewEnter">
+          <section ref="sectionEl" :key="ui.activeView" class="view-body">
             <!-- 注意：这条 v-if / v-else-if 链必须从 SongsView 一路连通到 PlaceholderView。
                  曾经 template v-if 与 SongsView 的 v-if 断开成两条链，
                  songs 视图下兜底的 PlaceholderView 也会渲染，view-body 被撑出

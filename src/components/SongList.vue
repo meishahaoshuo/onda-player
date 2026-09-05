@@ -5,7 +5,7 @@ import QualityBadge from '@/components/QualityBadge.vue'
 import { formatDuration } from '@/utils/format'
 import type { SongRecord } from '@/types'
 
-const props = defineProps<{ songs: SongRecord[]; currentPath?: string | null }>()
+const props = defineProps<{ songs: SongRecord[]; currentPath?: string | null; persistKey?: string }>()
 const emit = defineEmits<{ play: [song: SongRecord] }>()
 
 const ROW_HEIGHT = 56
@@ -27,7 +27,7 @@ function onRowClick(song: SongRecord) {
     </div>
 
     <div class="list-body">
-      <VirtualList :items="props.songs" :item-height="ROW_HEIGHT">
+      <VirtualList :items="props.songs" :item-height="ROW_HEIGHT" :persist-key="props.persistKey">
         <template #default="{ item }">
           <div
             class="song-row"

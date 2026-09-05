@@ -1,21 +1,32 @@
 <script setup lang="ts" generic="T">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useUiStore } from '@/stores/ui'
 
 /**
  * 通用虚拟滚动列表：只渲染可视区 ± overscan 行，支撑万级条目。
  * 行高固定 itemHeight，行内容通过默认作用域插槽传入。
+ * persistKey：传入后滚动位置会记入 ui store 并在挂载/数据就绪时恢复。
  */
 const props = withDefaults(
-  defineProps<{ items: T[]; itemHeight: number; overscan?: number }>(),
+  defineProps<{ items: T[]; itemHeight: number; overscan?: number; persistKey?: string }>(),
   { overscan: 6 },
 )
 
+const ui = useUiStore()
 const container = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const viewportH = ref(600)
 
 function onScroll() {
-  if (container.value) scrollTop.value = container.value.scrollTop
+  if (!container.value) return
+  scrollTop.value = container.value.scrollTop
+  if (props.persistKey) ui.rememberScroll(props.persistKey, scrollTop.value)
+}
+
+function restoreScroll() {
+  if (!props.persistKey || !container.value) return
+  const top = ui.recallScroll(props.persistKey)
+  if (top > 0) container.value.scrollTop = top
 }
 
 onMounted(() => {
@@ -24,7 +35,16 @@ onMounted(() => {
   new ResizeObserver(() => {
     if (container.value) viewportH.value = container.value.clientHeight
   }).observe(container.value)
+  restoreScroll()
 })
+
+// 数据晚于挂载到达（曲库异步加载）时补一次恢复，否则 spacer 还没高度、scrollTop 会被钳到 0
+watch(
+  () => props.items.length,
+  (n, o) => {
+    if (n > 0 && o === 0) nextTick(restoreScroll)
+  },
+)
 
 const start = computed(() =>
   Math.max(0, Math.floor(scrollTop.value / props.itemHeight) - props.overscan),

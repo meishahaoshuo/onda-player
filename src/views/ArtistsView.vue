@@ -72,7 +72,7 @@ function isPlayingArtist(artist: { name: string }) {
         <div class="artist-sub">{{ currentArtist.songs.length }} 首歌曲</div>
       </div>
     </header>
-    <SongList class="list" :songs="currentArtist.songs" :current-path="player.currentPath" @play="onPlay" />
+    <SongList class="list" :songs="currentArtist.songs" :current-path="player.currentPath" :persist-key="`list:artist:${currentArtist.name}`" @play="onPlay" />
   </div>
 
   <div v-else class="artist-grid">

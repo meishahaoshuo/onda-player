@@ -27,7 +27,7 @@ function onPlay(song: SongRecord) {
       <AppIcon name="close" :size="14" /> 返回曲风列表
     </button>
     <h1 class="genre-name">{{ currentGenre.name }}</h1>
-    <SongList class="list" :songs="currentGenre.songs" :current-path="player.currentPath" @play="onPlay" />
+    <SongList class="list" :songs="currentGenre.songs" :current-path="player.currentPath" :persist-key="`list:genre:${currentGenre.name}`" @play="onPlay" />
   </div>
 
   <div v-else class="genre-list">
