@@ -608,15 +608,12 @@ function waitForLyrics(timeout: number): Promise<void> {
   })
 }
 
-/** 落地后的收尾：恢复真实封面、清掉飞行层、补上歌词定位 */
-function settleFly(flying: HTMLElement | null, dstEl: HTMLElement | null) {
+/** 落地后的收尾：恢复封面样式、清掉 flyActive、补上歌词定位 */
+function settleFly(dstEl: HTMLElement | null) {
   if (dstEl) {
     dstEl.style.transition = 'none'
     dstEl.style.opacity = '1'
   }
-  // 单帧硬切换，零重叠：克隆与真实封面此刻逐像素一致（同图源/同圆角/同投影/同位置），
-  // 同帧互换视觉零变化；任何重叠淡出都会让两份投影叠成「黑色光晕」再消退（顿挫感来源）
-  flying?.remove()
   requestAnimationFrame(() => {
     if (dstEl) dstEl.style.transition = ''
     flyActive.value = false
@@ -632,9 +629,12 @@ function flyIn() {
     // 280ms 透明度淡入与飞行 (560ms) 并行，落地时背景已基本可见。
     if (ambientUrl.value) revealAmbient()
 
+    // 等待期间先藏起封面：否则会先看到落位的封面、再跳回起点飞入
+    document.querySelector<HTMLElement>('.cover-main')?.style.setProperty('opacity', '0')
+
     // 1) 等歌词加载完成（布局稳定），否则取到的目标坐标是歌词为空时的旧位置，
     //    飞过去后会再被布局推到真实位置 → 卡顿。有歌词/无歌词都靠 lyricsSettled。
-    // 2) 同时给高清封面留一点时间：飞行途中显示的就是最终那张图，落地不跳清晰度。
+    // 2) 同时给高清封面留一点时间：飞行显示的就是最终那张图，落地不跳清晰度。
     const coverId = player.current?.coverId ?? null
     const [hiRes] = await Promise.all([
       coverId
@@ -651,18 +651,15 @@ function flyIn() {
     const srcEl = document.querySelector<HTMLElement>('.player-bar .track .cover')
     const dstEl = document.querySelector<HTMLElement>('.cover-main')
     if (!srcEl || !dstEl) {
-      settleFly(null, dstEl)
+      settleFly(dstEl)
       return
     }
-
-    // 克隆「目标封面」而不是播放条小图：与落地后显示的是同一张（含高清图），
-    // 交接瞬间不会有任何内容或清晰度的跳变。
-    const dstInner = dstEl.matches('img') ? dstEl : dstEl.querySelector('img, .cover-fallback')
+    const dstInner = dstEl.matches('img') ? dstEl : dstEl.querySelector<HTMLElement>('img, .cover-fallback')
     if (!dstInner) {
-      settleFly(null, dstEl)
+      settleFly(dstEl)
       return
     }
-    // 落地前先把目标封面切到高清图并预载，克隆与落地后是同一张 → 无清晰度跳变
+    // 落地前先把目标封面切到高清图并预载，飞行显示的就是最终那张图 → 无清晰度跳变
     if (
       typeof hiRes === 'string' &&
       dstInner.tagName === 'IMG' &&
@@ -671,61 +668,47 @@ function flyIn() {
       await preloadImage(hiRes)
       dstInner.setAttribute('src', hiRes)
     }
-    // 克隆外观与真实封面逐项对齐（圆角/投影），交接瞬间无样式突变
-    const dstStyle = getComputedStyle(dstInner)
-    const flying = dstInner.cloneNode(true) as HTMLElement
-
     const s = srcEl.getBoundingClientRect()
     const d = dstEl.getBoundingClientRect()
     if (s.width < 1 || d.width < 1) {
-      settleFly(null, dstEl)
+      settleFly(dstEl)
       return
     }
 
-    // FLIP：元素按「终点」尺寸和位置铺好，用 transform 反向缩回起点，再动回单位矩阵。
-    // 全程只动 transform —— 走合成器，不触发布局，也不会让全屏 blur 背景重新栅格化。
+    // FLIP：直接飞「本体」，不克隆、无换层——克隆与本体是两个合成层，
+    // 交接帧的光栅化必有差异（闪烁/光晕的根源）；本体飞完即落位，
+    // 结束动作只有 cancel 一帧，且末帧 transform 与 CSS 静止态逐字一致，视觉零变化。
     const scale = s.width / d.width
     const dx = s.left + s.width / 2 - (d.left + d.width / 2)
     const dy = s.top + s.height / 2 - (d.top + d.height / 2)
+    const restTransform =
+      dstInner.tagName === 'IMG' ? 'perspective(900px) rotateX(0deg) rotateY(0deg)' : 'none'
 
-    flying.style.position = 'fixed'
-    flying.style.margin = '0'
-    flying.style.left = `${d.left}px`
-    flying.style.top = `${d.top}px`
-    flying.style.width = `${d.width}px`
-    flying.style.height = `${d.height}px`
-    flying.style.borderRadius = dstStyle.borderRadius
-    flying.style.boxShadow = dstStyle.boxShadow
-    flying.style.zIndex = '60'
-    flying.style.pointerEvents = 'none'
-    flying.style.willChange = 'transform'
-    flying.style.transformOrigin = 'center center'
-    flying.style.objectFit = 'cover'
-    flying.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`
-
-    // 飞行期间隐藏目标封面，避免重叠
-    dstEl.style.opacity = '0'
-    document.body.appendChild(flying)
+    const target = dstInner
+    target.style.zIndex = '60' // transform 已创建堆叠上下文，飞行途中盖过右栏歌词
+    target.style.willChange = 'transform'
+    dstEl.style.transition = 'none'
+    dstEl.style.opacity = '1' // 藏→显与动画首帧同一帧生效，封面直接出现在起点
+    const anim = target.animate(
+      [
+        { transform: `translate(${dx}px, ${dy}px) scale(${scale})` },
+        { transform: restTransform },
+      ],
+      { duration: FLY_DURATION, easing: FLY_EASING, fill: 'both' },
+    )
 
     let finished = false
     const finish = () => {
       if (finished) return
       finished = true
-      settleFly(flying, dstEl)
+      anim.cancel()
+      target.style.zIndex = ''
+      target.style.willChange = ''
+      settleFly(dstEl)
     }
-
-    requestAnimationFrame(() => {
-      const anim = flying.animate(
-        [
-          { transform: `translate(${dx}px, ${dy}px) scale(${scale})` },
-          { transform: 'translate(0px, 0px) scale(1)' },
-        ],
-        { duration: FLY_DURATION, easing: FLY_EASING, fill: 'both' },
-      )
-      anim.onfinish = finish
-      // 兜底：即使 onfinish 未触发（如页面切换），也在动画结束附近清理，避免残留
-      window.setTimeout(finish, FLY_DURATION + 240)
-    })
+    anim.onfinish = finish
+    // 兜底：即使 onfinish 未触发（如页面切换），也在动画结束附近清理
+    window.setTimeout(finish, FLY_DURATION + 240)
   })()
 }
 

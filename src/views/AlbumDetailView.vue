@@ -8,8 +8,16 @@ import { playAlbumEnter, playAlbumExit } from '@/services/pageTransition'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
-import { formatDuration, formatTotalDuration } from '@/utils/format'
+import { formatDuration, formatTotalDuration, formatFileSize, formatSampleRate } from '@/utils/format'
 import type { SongRecord } from '@/types'
+
+/** 信息面板音质行的代表曲目 */
+interface MetaRow {
+  key: string
+  label: string
+  value: string
+  qualityOf?: SongRecord
+}
 
 /**
  * 专辑详情页（对照截图 3）：大封面头部 + 取色环境光晕 + 统计 + 播放/随机 + 碟片分组曲目
@@ -113,6 +121,51 @@ function playSong(song: SongRecord) {
   if (!album.value) return
   void player.playSong(song, album.value.songs)
 }
+
+/* 信息面板：全部来自扫描已有的字段，缺数据的行自动隐藏 */
+const metaRows = computed<MetaRow[]>(() => {
+  const a = album.value
+  if (!a) return []
+  const songs = a.songs
+  const rows: MetaRow[] = []
+
+  const genres = [...new Set(songs.map((s) => s.genre).filter(Boolean))]
+  if (genres.length > 0) rows.push({ key: 'genre', label: '流派', value: genres.join(' / ') })
+
+  const best = [...songs].sort(
+    (x, y) =>
+      (y.sampleRateHz ?? 0) - (x.sampleRateHz ?? 0) ||
+      (y.bitsPerSample ?? 0) - (x.bitsPerSample ?? 0),
+  )[0]
+  if (best && (best.sampleRateHz || best.bitsPerSample)) {
+    const parts: string[] = []
+    if (best.bitsPerSample) parts.push(`${best.bitsPerSample}bit`)
+    const rate = best.sampleRateHz ? formatSampleRate(best.sampleRateHz) : ''
+    if (rate) parts.push(rate)
+    rows.push({ key: 'quality', label: '音质', value: parts.join(' / '), qualityOf: best })
+  }
+
+  const counts = new Map<string, number>()
+  for (const s of songs) {
+    const c = (s.container || '未知').toUpperCase()
+    counts.set(c, (counts.get(c) ?? 0) + 1)
+  }
+  const fmt = [...counts.entries()].sort((x, y) => y[1] - x[1]).map(([c, n]) => `${c} × ${n}`).join(' · ')
+  if (fmt) rows.push({ key: 'format', label: '格式', value: fmt })
+
+  const discs = new Set(songs.map((s) => s.discNo ?? 1)).size
+  if (discs > 1) rows.push({ key: 'discs', label: '碟片', value: `${discs} 张` })
+
+  const size = songs.reduce((n, s) => n + (s.fileSize || 0), 0)
+  if (size > 0) rows.push({ key: 'size', label: '总大小', value: formatFileSize(size) })
+
+  const rates = songs.map((s) => s.bitrateKbps).filter((x): x is number => x != null && x > 0)
+  if (rates.length > 0) {
+    rows.push({ key: 'bitrate', label: '平均码率', value: `≈ ${Math.round(rates.reduce((a, b) => a + b, 0) / rates.length)} kbps` })
+  }
+
+  return rows
+})
 </script>
 
 <template>
@@ -150,6 +203,23 @@ function playSong(song: SongRecord) {
           </button>
         </div>
       </div>
+      <aside v-if="metaRows.length > 0" class="album-meta glass" aria-label="专辑信息">
+        <div v-for="row in metaRows" :key="row.key" class="meta-row">
+          <span class="meta-k">{{ row.label }}</span>
+          <span class="meta-v">
+            <template v-if="row.qualityOf">
+              {{ row.value }}
+              <QualityBadge
+                :container="row.qualityOf.container"
+                :sample-rate-hz="row.qualityOf.sampleRateHz"
+                :bits-per-sample="row.qualityOf.bitsPerSample"
+                :bitrate-kbps="row.qualityOf.bitrateKbps"
+              />
+            </template>
+            <template v-else>{{ row.value }}</template>
+          </span>
+        </div>
+      </aside>
     </header>
 
     <section v-for="g in discGroups" :key="g.disc" class="disc-group">
@@ -346,6 +416,55 @@ function playSong(song: SongRecord) {
   color: var(--accent-text);
 }
 
+/* 信息面板：玻璃材质（.glass 全局类）透出头部呼吸光斑，细行分隔 + 右对齐数值 */
+.album-meta {
+  position: relative;
+  z-index: 2;
+  margin-left: auto;
+  align-self: center;
+  flex-shrink: 0;
+  max-width: 340px;
+  padding: 4px 20px;
+  border-radius: 14px;
+}
+
+.meta-row {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 20px;
+  align-items: baseline;
+  padding: 9px 0;
+}
+
+.meta-row + .meta-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.meta-k {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+
+.meta-v {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 中等宽度以下头部放不下第三列，整体隐藏不换行 */
+@media (max-width: 1100px) {
+  .album-meta {
+    display: none;
+  }
+}
+
 .disc-group {
   display: flex;
   flex-direction: column;
@@ -435,6 +554,7 @@ function playSong(song: SongRecord) {
    不再写死 index × 常数；编排器失效时 .revealed 兜底直接显示）。 */
 .album-detail .back-btn,
 .album-detail .header-info,
+.album-detail .album-meta,
 .album-detail .disc-title,
 .album-detail .track-row {
   opacity: 0;
@@ -442,6 +562,7 @@ function playSong(song: SongRecord) {
 
 .album-detail.revealed .back-btn,
 .album-detail.revealed .header-info,
+.album-detail.revealed .album-meta,
 .album-detail.revealed .disc-title,
 .album-detail.revealed .track-row {
   opacity: 1;
@@ -464,6 +585,7 @@ function playSong(song: SongRecord) {
 @media (prefers-reduced-motion: reduce) {
   .album-detail .back-btn,
   .album-detail .header-info,
+  .album-detail .album-meta,
   .album-detail .disc-title,
   .album-detail .track-row {
     opacity: 1;

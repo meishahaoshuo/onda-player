@@ -19,3 +19,20 @@ export function formatTotalDuration(sec: number): string {
   if (m > 0) return `${m} 分钟`
   return `${total} 秒`
 }
+
+/** 文件大小：GB 一位小数，MB/KB 取整 */
+export function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`
+  if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${Math.round(bytes)} B`
+}
+
+/** 采样率：44100 → "44.1 kHz"，96000 → "96 kHz" */
+export function formatSampleRate(hz: number): string {
+  if (!Number.isFinite(hz) || hz <= 0) return ''
+  const khz = hz / 1000
+  const v = Number.isInteger(khz) ? khz.toFixed(0) : khz.toFixed(1)
+  return `${v} kHz`
+}
