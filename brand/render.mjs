@@ -1,4 +1,4 @@
-import sharp from 'file:///C:/Users/12837/.workbuddy/binaries/node/workspace/node_modules/sharp/lib/index.js';
+import sharp from 'file:///C:/Users/12837/.workbuddy/binaries/node/workspace/node_modules/sharp/dist/index.mjs';
 
 const root = 'D:/项目/音乐播放器/brand/';
 const items = [

@@ -88,7 +88,17 @@ const discGroups = computed(() => {
     if (list) list.push(s)
     else groups.set(disc, [s])
   }
-  return [...groups.entries()].sort((a, b) => a[0] - b[0])
+  return [...groups.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([disc, songs]) => {
+    // 音轨号缺失的专辑（常见于网络来源）按显示顺序自动编号，避免整列"–"占位符
+    const anyTrackNo = songs.some((s) => s.trackNo != null)
+    const rows = songs.map((s, i) => ({
+      song: s,
+      no: s.trackNo ?? (anyTrackNo ? '' : i + 1),
+    }))
+    return { disc, rows }
+  })
 })
 
 function playAll(shuffle = false) {
@@ -142,31 +152,31 @@ function playSong(song: SongRecord) {
       </div>
     </header>
 
-    <section v-for="[disc, songs] in discGroups" :key="disc" class="disc-group">
-      <div v-if="discGroups.length > 1" class="disc-title">光盘 {{ disc }}</div>
+    <section v-for="g in discGroups" :key="g.disc" class="disc-group">
+      <div v-if="discGroups.length > 1" class="disc-title">光盘 {{ g.disc }}</div>
       <div
-        v-for="song in songs"
-        :key="song.path"
+        v-for="row in g.rows"
+        :key="row.song.path"
         class="track-row"
-        :class="{ playing: song.path === player.currentPath }"
-        @click="playSong(song)"
+        :class="{ playing: row.song.path === player.currentPath }"
+        @click="playSong(row.song)"
       >
-        <span class="track-no">{{ song.trackNo ?? '–' }}</span>
+        <span class="track-no">{{ row.no }}</span>
         <span class="track-main">
           <span class="track-title-line">
             <QualityBadge
-              :container="song.container"
-              :sample-rate-hz="song.sampleRateHz"
-              :bits-per-sample="song.bitsPerSample"
-              :bitrate-kbps="song.bitrateKbps"
+              :container="row.song.container"
+              :sample-rate-hz="row.song.sampleRateHz"
+              :bits-per-sample="row.song.bitsPerSample"
+              :bitrate-kbps="row.song.bitrateKbps"
             />
-            <span class="track-title">{{ song.title }}</span>
+            <span class="track-title">{{ row.song.title }}</span>
           </span>
-          <span class="track-artist">{{ song.artist }}</span>
+          <span class="track-artist">{{ row.song.artist }}</span>
         </span>
         <span class="track-duration">
-          <AppIcon v-if="song.path === player.currentPath" name="check" :size="14" class="playing-check" />
-          {{ formatDuration(song.durationSec) }}
+          <AppIcon v-if="row.song.path === player.currentPath" name="check" :size="14" class="playing-check" />
+          {{ formatDuration(row.song.durationSec) }}
         </span>
       </div>
     </section>
