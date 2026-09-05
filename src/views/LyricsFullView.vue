@@ -116,10 +116,15 @@ const baseGroups = ref<LyricGroup[]>([])
 /** 应用歌词偏移后的时间轴：偏移 > 0 = 歌词提前显示。
     高亮、逐字加深、点击跳播共用这份平移后的时间，保证三者的语义一致。 */
 const groups = computed<LyricGroup[]>(() =>
-  baseGroups.value.map((g) => ({
-    ...g,
-    time: g.time < 0 ? g.time : Math.max(0, g.time - settings.lyricOffset),
-  })),
+  baseGroups.value.map((g) => {
+    if (g.time < 0) return g
+    const shift = Math.max(0, g.time - settings.lyricOffset) - g.time
+    return {
+      ...g,
+      time: g.time + shift,
+      charTimes: g.charTimes?.map((t) => t + shift),
+    }
+  }),
 )
 const loading = ref(false)
 /** 歌词加载完成标记（有无歌词都置 true），飞入动画据此等布局稳定 */
@@ -219,6 +224,7 @@ const lineEls = ref<(HTMLElement | null)[]>([])
 
 watch(groups, () => {
   lineEls.value = []
+  syncKaraoke() // 歌词重载/偏移调整：字符 span 全部重建，引擎必须换绑新 DOM
 })
 
 function setLineEl(i: number) {
@@ -294,27 +300,107 @@ function lineClass(i: number) {
 
 const hasLyrics = computed(() => groups.value.length > 0)
 
-/* ---------- 逐字加深（卡拉OK）：rAF 采样 audio.currentTime，写入当前行 --p ----------
+/* ---------- 卡拉OK逐字点亮（Apple Music 式）：rAF 采样 audio.currentTime，按字符更新 ----------
    player.currentTime 只有 4Hz（timeupdate），逐字效果必须自己采样音频元素。
-   只写一个 CSS 变量，CSS 侧用 background-clip:text 逐字填色，无 span 开销。 */
-const lineProgress = ref(100)
+   逐字时间来源两级：增强型 LRC 的真实 charTimes → 无则按字符类型加权智能插值。
+   每帧只写当前字符的 --cp（及跨字符瞬间补齐），DOM 直写绕开 Vue 响应式。 */
 let lyricRaf = 0
+let kLine = -1 // kSpans 所属行号（与 activeIdx 对齐才算就绪）
+let kSpans: HTMLElement[] = []
+let kTimes: number[] = [] // 逐字开始时刻，长度 = 字符数 + 1（末位行尾）
+let kIdx = -1 // 当前字符下标
+let kLastT = -1
+
+/** 虚拟逐字时间：按字符类型加权把行时长分配到各字符（CJK 1.0 / 拉丁 0.6 / 空白 0.3 / 其它 0.5，
+    句读标点后附加停顿权重），模拟真实跟唱节奏 */
+function virtualCharTimes(text: string, startT: number, endT: number): number[] {
+  const chars = [...text]
+  const weights = chars.map((ch, i) => {
+    let w: number
+    if (/\s/.test(ch)) w = 0.3
+    else if (/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(ch)) w = 1
+    else if (/[a-zA-Z0-9]/.test(ch)) w = 0.6
+    else w = 0.5
+    // 句读停顿：把停顿时间压到标点自身（权重 0.5）之后的下一字符前
+    if (i > 0 && /[，。！？；、…—,.!?;:]/.test(chars[i - 1])) w += 0.8
+    return w
+  })
+  const total = weights.reduce((s, w) => s + w, 0) || 1
+  const times: number[] = [startT]
+  let acc = startT
+  for (const w of weights) {
+    acc += ((endT - startT) * w) / total
+    times.push(acc)
+  }
+  return times
+}
+
+function karaokeReady(): boolean {
+  return kLine === activeIdx.value && kSpans.length > 0 && kTimes.length === kSpans.length + 1
+}
+
+function rebuildKaraoke() {
+  const i = activeIdx.value
+  kLine = i
+  kSpans = []
+  kTimes = []
+  kIdx = -1
+  kLastT = -1
+  if (i < 0) return
+  const g = groups.value[i]
+  if (!g || g.time < 0 || !g.texts[0]) return
+  const startT = g.time
+  const endT = groups.value[i + 1]?.time ?? startT + 8
+  const chars = [...g.texts[0]].length
+  if (g.charTimes && g.charTimes.length === chars + 1) {
+    kTimes = g.charTimes.slice()
+  } else {
+    kTimes = virtualCharTimes(g.texts[0], startT, Math.max(startT + 0.5, endT))
+  }
+  const host = lineEls.value[i]?.querySelector('.lyric-text.karaoke')
+  if (!host) return
+  kSpans = [...host.querySelectorAll<HTMLElement>('.lyric-char')]
+}
+
+function setCP(span: HTMLElement, v: number) {
+  span.style.setProperty('--cp', `${v.toFixed(1)}%`)
+}
+
+/** 把 t 写入当前行字符填充态；t 倒退（回 seek）或 force 时全行重刷，否则只推进增量 */
+function applyKaraoke(t: number, force = false) {
+  if (!karaokeReady()) return
+  const n = kSpans.length
+  let idx = force ? 0 : Math.max(0, kIdx)
+  while (idx < n - 1 && t >= kTimes[idx + 1]) idx++
+  while (idx > 0 && t < kTimes[idx]) idx--
+  if (force || idx !== kIdx || t < kLastT - 0.05) {
+    for (let c = 0; c < n; c++) setCP(kSpans[c], c < idx ? 100 : 0)
+  }
+  const cs = kTimes[idx]
+  const ce = Math.max(cs + 0.001, kTimes[idx + 1])
+  setCP(kSpans[idx], Math.min(1, Math.max(0, (t - cs) / (ce - cs))) * 100)
+  kIdx = idx
+  kLastT = t
+}
+
+/** 就绪重建 + 全量刷一遍当前填充态（打开页面/换行/歌词重载/暂停 seek 后调用） */
+async function syncKaraoke() {
+  await nextTick()
+  rebuildKaraoke()
+  applyKaraoke(getAudio().currentTime, true)
+}
 
 function tickLyric() {
   const t = getAudio().currentTime
   const i = computeActiveIdx(t)
-  if (i !== activeIdx.value) activeIdx.value = i
-  if (i >= 0) {
-    const startT = groups.value[i].time
-    const endT = groups.value[i + 1]?.time ?? startT + 8
-    const p = (t - startT) / Math.max(0.5, endT - startT)
-    lineProgress.value = Math.min(1, Math.max(0, p)) * 100
-  }
+  if (i !== activeIdx.value) activeIdx.value = i // 触发 watcher 重建逐字 span
+  if (i >= 0) applyKaraoke(t)
   lyricRaf = requestAnimationFrame(tickLyric)
 }
 
 function syncLyricRaf() {
   cancelAnimationFrame(lyricRaf)
+  lyricRaf = 0 // 必须归零：否则暂停后兜底 watcher 的 if (lyricRaf) return 永久短路
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   if (ui.lyricsOpen && player.playing && !reduced) lyricRaf = requestAnimationFrame(tickLyric)
   // 暂停时冻结当前进度（不清零，恢复播放后继续）
@@ -322,15 +408,17 @@ function syncLyricRaf() {
 
 watch([() => player.playing, () => ui.lyricsOpen], syncLyricRaf, { immediate: true })
 watch(activeIdx, () => {
-  lineProgress.value = 0 // 换行：进度归零，避免新行开场即满
+  syncKaraoke() // 换行：重建字符 span 并按当前时刻刷初始填充态
 })
-// 暂停态的兜底：rAF 停转时靠 timeupdate 维持行高亮（拖拽进度/暂停后 seek）
+// 暂停态的兜底：rAF 停转时靠 timeupdate 维持行高亮与逐字态（拖拽进度/暂停后 seek）
 watch(
   () => player.currentTime,
   (t) => {
     if (lyricRaf) return // rAF 运行中以此为准
     const i = computeActiveIdx(t)
     if (i !== activeIdx.value) activeIdx.value = i
+    else if (kLine === i) applyKaraoke(t, t < kLastT - 0.05)
+    else syncKaraoke()
   },
 )
 
@@ -872,9 +960,11 @@ onMounted(() => {
                 :key="j"
                 class="lyric-text"
                 :class="{ sub: j > 0, karaoke: j === 0 && i === activeIdx && g.time >= 0 }"
-                :style="j === 0 && i === activeIdx && g.time >= 0 ? { '--p': lineProgress + '%' } : undefined"
               >
-                {{ text }}
+                <template v-if="j === 0 && i === activeIdx && g.time >= 0">
+                  <span v-for="(ch, ci) in [...text]" :key="ci" class="lyric-char">{{ ch }}</span>
+                </template>
+                <template v-else>{{ text }}</template>
               </div>
             </div>
           </div>
@@ -1528,12 +1618,14 @@ onMounted(() => {
   opacity: 0.9;
 }
 
-/* 逐字加深：当前行按播放进度用 background-clip:text 逐字填色（--p 由 rAF 驱动） */
-.lyric-text.karaoke {
+/* 卡拉OK逐字点亮：字符级 background-clip:text，--cp 为该字符填充度（rAF 逐字直写）。
+   三停渐变带 ~0.12 字宽柔光前沿，不再是硬边界 */
+.lyric-text.karaoke .lyric-char {
   background-image: linear-gradient(
     90deg,
-    var(--lyric-text-active) var(--p, 100%),
-    var(--lyric-text) var(--p, 100%)
+    var(--lyric-text-active) calc(var(--cp, 0%) - 12%),
+    color-mix(in srgb, var(--lyric-text-active) 45%, var(--lyric-text)) var(--cp, 0%),
+    var(--lyric-text) calc(var(--cp, 0%) + 12%)
   );
   -webkit-background-clip: text;
   background-clip: text;
