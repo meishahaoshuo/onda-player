@@ -3,8 +3,9 @@ import { computed, nextTick, ref, watch } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import QualityBadge from '@/components/QualityBadge.vue'
-import { makeAmbientGradient } from '@/services/palette'
-import { playPageTransition } from '@/services/pageTransition'
+import { renderAmbientUrl } from '@/services/palette'
+import { playAlbumEnter, playAlbumExit } from '@/services/pageTransition'
+import { paletteCache } from '@/services/paletteCache'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
@@ -20,51 +21,59 @@ const library = useLibraryStore()
 const player = usePlayerStore()
 const ui = useUiStore()
 
-/* 共享元素过渡 + 内容错峰浮现 + 返回轻淡出 */
+/* 相机推进过渡：进入由编排器接管，返回对称反向 */
+const rootEl = ref<HTMLElement | null>(null)
 const revealed = ref(false)
 const closing = ref(false)
+/** 环境光晕在开场就随推进晕开（不等封面落定） */
+const blooming = ref(false)
 
 watch(
   () => props.albumKey,
   async () => {
     revealed.value = false
     closing.value = false
+    blooming.value = false
     await nextTick()
-    await playPageTransition(document.querySelector<HTMLElement>('.album-detail .header-cover'))
+    blooming.value = true
+    await playAlbumEnter(rootEl.value)
     revealed.value = true
   },
   { immediate: true, flush: 'post' },
 )
 
-function close() {
-  if (closing.value) return
+async function close() {
+  if (closing.value || ui.dolly !== 'idle') return
   closing.value = true
-  window.setTimeout(() => {
-    ui.closeDetail()
-    closing.value = false
-  }, 180)
+  blooming.value = false
+  ui.beginDollyExit()
+  await playAlbumExit(rootEl.value)
+  ui.closeDetail()
+  ui.endDolly()
+  closing.value = false
 }
 
-/* 封面取色环境光晕 */
+/* 封面取色环境光晕：先用列表页预取的主色铺底（开场即用），落定后换成预烘焙多焦点图 */
+const ambientBase = ref<string>('transparent')
 const ambientUrl = ref<string | null>(null)
 const ambientCache = new Map<string, string>()
 
 watch(
   () => props.albumKey,
   async (key) => {
-    ambientUrl.value = ambientCache.get(key) ?? null
     const album = library.albums.find((a) => a.key === key)
-    if (!album?.coverId) return
-    if (ambientCache.has(key)) return
+    ambientBase.value = paletteCache.colorOf(album?.coverId)
+    ambientUrl.value = ambientCache.get(key) ?? null
+    if (!album?.coverId || ambientCache.has(key)) return
     try {
       const url = await library.coverUrl(album.coverId)
       if (!url) return
       const blob = await (await fetch(url)).blob()
-      const gradient = await makeAmbientGradient(blob)
-      ambientCache.set(key, gradient)
-      ambientUrl.value = gradient
+      const baked = await renderAmbientUrl(blob)
+      ambientCache.set(key, baked)
+      if (props.albumKey === key) ambientUrl.value = baked
     } catch {
-      /* 取色失败则无光晕 */
+      /* 取色失败则保留主色铺底 */
     }
   },
   { immediate: true },
@@ -99,7 +108,7 @@ function playSong(song: SongRecord) {
 </script>
 
 <template>
-  <div v-if="album" class="album-detail" :class="{ revealed, closing }">
+  <div v-if="album" ref="rootEl" class="album-detail" :class="{ revealed, blooming }">
     <button class="back-btn" @click="close">
       <AppIcon name="close" :size="14" /> 返回专辑列表
     </button>
@@ -107,9 +116,11 @@ function playSong(song: SongRecord) {
     <header class="album-header" :class="{ ambient: ambientUrl }">
       <!-- 封面取色环境光晕 -->
       <div
-        v-if="ambientUrl"
         class="header-ambient"
-        :style="{ backgroundImage: `url(${ambientUrl})` }"
+        :style="{
+          backgroundColor: ambientBase,
+          backgroundImage: ambientUrl ? `url(${ambientUrl})` : 'none',
+        }"
       />
       <CoverImage :cover-id="album.coverId" :size="192" class="header-cover" hires />
       <div class="header-info">
@@ -198,13 +209,14 @@ function playSong(song: SongRecord) {
   overflow: hidden;
 }
 
+/* 环境光晕：模糊已在 palette.renderAmbientUrl 里烘焙进图内，这里只做 cover 拉伸，
+   不再叠一层全屏 blur(56px) 实时栅格化（多个全屏 blur 图层并行会拖垮过渡帧率）。 */
 .header-ambient {
   position: absolute;
   inset: -40px;
   background-size: cover;
   background-position: center;
-  filter: blur(56px) saturate(1.25);
-  opacity: 0.55;
+  opacity: 0;
 }
 
 .header-cover {
@@ -363,67 +375,39 @@ function playSong(song: SongRecord) {
   padding: 48px 0;
 }
 
-/* 共享元素过渡落定后的错峰浮现 + 返回轻淡出 */
-.album-detail {
-  transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
-}
-
-.album-detail.closing {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
+/* 内容初始隐藏，由 pageTransition 的波前时序逐个接管（延迟按到点击点的距离算，
+   不再写死 index × 常数；编排器失效时 .revealed 兜底直接显示）。 */
 .album-detail .back-btn,
 .album-detail .header-info,
-.album-detail .disc-group {
+.album-detail .disc-title,
+.album-detail .track-row {
   opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 320ms var(--ease-out), transform 320ms var(--ease-out);
-}
-
-.album-detail.revealed .back-btn {
-  transition-delay: 40ms;
-}
-
-.album-detail.revealed .header-info {
-  transition-delay: 80ms;
-}
-
-.album-detail.revealed .disc-group {
-  transition-delay: 120ms;
 }
 
 .album-detail.revealed .back-btn,
 .album-detail.revealed .header-info,
-.album-detail.revealed .disc-group {
+.album-detail.revealed .disc-title,
+.album-detail.revealed .track-row {
   opacity: 1;
-  transform: translateY(0);
 }
 
-/* 头部环境光在飞行后再浮现（把 blur 栅格化延后，避免抢主线程） */
+/* 环境光晕随推进同步晕开（开场即用预取主色，不再等封面落定） */
 .album-detail .header-ambient {
-  opacity: 0;
-  transition: opacity 320ms var(--ease-out);
+  transition: opacity 380ms var(--ease-out);
 }
 
-.album-detail.revealed .header-ambient {
+.album-detail.blooming .header-ambient {
   opacity: 0.55;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .album-detail {
-    transition: none;
-  }
-  .album-detail.closing {
-    transform: none;
-  }
   .album-detail .back-btn,
   .album-detail .header-info,
-  .album-detail .disc-group {
+  .album-detail .disc-title,
+  .album-detail .track-row {
     opacity: 1;
     transform: none;
     transition: none;
-    transition-delay: 0ms;
   }
   .album-detail .header-ambient {
     opacity: 0.55;

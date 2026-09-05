@@ -54,6 +54,9 @@
   /* 队列面板 / 卡片扫光 */
   --queue-bg: linear-gradient(120deg, rgba(28, 28, 30, 0.9), rgba(22, 22, 24, 0.88));
   --sheen: rgba(255, 255, 255, 0.1);
+
+  /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
+  --ambient-fallback: rgba(255, 59, 80, 0.18);
 }
 
 :root[data-theme='light'] {
@@ -96,6 +99,9 @@
 
   --queue-bg: linear-gradient(120deg, rgba(255, 255, 255, 0.94), rgba(248, 248, 250, 0.92));
   --sheen: rgba(255, 255, 255, 0.35);
+
+  /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
+  --ambient-fallback: rgba(250, 35, 59, 0.1);
 }
 
 /* ---------- 动效令牌 ---------- */

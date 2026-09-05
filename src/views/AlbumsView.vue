@@ -1,24 +1,34 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import { useLibraryStore } from '@/stores/library'
 import { useUiStore } from '@/stores/ui'
 import { usePlayerStore } from '@/stores/player'
-import { capturePageTransition } from '@/services/pageTransition'
+import { beginAlbumEnter, clearTransitionState } from '@/services/pageTransition'
+import { paletteCache } from '@/services/paletteCache'
 import { formatTotalDuration } from '@/utils/format'
 
 const library = useLibraryStore()
 const ui = useUiStore()
 const player = usePlayerStore()
 
+const gridEl = ref<HTMLElement | null>(null)
+
 const sortedAlbums = computed(() =>
   [...library.albums].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN')),
 )
 
-function openAlbum(album: { key: string }, e: MouseEvent) {
-  const cover = (e.currentTarget as HTMLElement).querySelector<HTMLElement>('img, .cover-fallback')
-  capturePageTransition(cover, { x: e.clientX, y: e.clientY })
-  ui.openDetail(album.key)
+function openAlbum(album: { key: string; coverId: string | null }, e: MouseEvent) {
+  const cardEl = e.currentTarget as HTMLElement
+  const cover = cardEl.querySelector<HTMLElement>('img, .cover-fallback')
+  if (!cover) return
+  beginAlbumEnter({
+    cardEl,
+    coverEl: cover,
+    click: { x: e.clientX, y: e.clientY },
+    albumKey: album.key,
+    coverId: album.coverId,
+  })
 }
 
 /** 当前播放的曲目是否属于这张专辑（专辑 key = album + \n + albumArtist） */
@@ -26,15 +36,53 @@ function isPlayingAlbum(album: { key: string }) {
   const c = player.current
   return c ? `${c.album}\n${c.albumArtist}` === album.key : false
 }
+
+/* ---------- 封面主色预取 ----------
+   详情页的环境光晕原本是挂载后才异步取色，颜色必然迟到半拍。
+   这里提前把可视区封面的主色算好，点击瞬间过渡就能直接用上。 */
+let scrollEl: HTMLElement | null = null
+let scrollTimer = 0
+
+function primeVisible() {
+  const cards = gridEl.value?.querySelectorAll<HTMLElement>('.album-card')
+  if (cards) paletteCache.prime(cards)
+}
+
+function onScroll() {
+  window.clearTimeout(scrollTimer)
+  scrollTimer = window.setTimeout(primeVisible, 200)
+}
+
+/** hover 视为"用户可能要点"，插队优先取色 */
+function onHover(e: MouseEvent) {
+  const card = (e.target as HTMLElement | null)?.closest<HTMLElement>('.album-card')
+  paletteCache.primeNow(card?.dataset.coverId)
+}
+
+onMounted(() => {
+  scrollEl = (gridEl.value?.closest('.view-body') as HTMLElement | null) ?? null
+  scrollEl?.addEventListener('scroll', onScroll, { passive: true })
+  const ric = (window as Window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback
+  if (ric) ric(() => primeVisible())
+  else window.setTimeout(primeVisible, 300)
+})
+
+onBeforeUnmount(() => {
+  scrollEl?.removeEventListener('scroll', onScroll)
+  window.clearTimeout(scrollTimer)
+  // 网格被卸载（切到别的视图）时清理过渡遗留，避免动画引用已销毁的 DOM
+  if (ui.dolly === 'idle') clearTransitionState()
+})
 </script>
 
 <template>
-  <div class="album-grid">
+  <div ref="gridEl" class="album-grid" @mouseover="onHover">
     <button
       v-for="album in sortedAlbums"
       :key="album.key"
       class="album-card"
       :class="{ playing: isPlayingAlbum(album) }"
+      :data-cover-id="album.coverId ?? ''"
       @click="openAlbum(album, $event)"
     >
       <span class="cover-wrap">

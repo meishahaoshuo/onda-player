@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import Sidebar from '@/components/Sidebar.vue'
 import PlayerBar from '@/components/PlayerBar.vue'
 import SongsView from '@/views/SongsView.vue'
@@ -17,6 +17,7 @@ import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { usePlaylistStore } from '@/stores/playlist'
 import { useSettingsStore } from '@/stores/settings'
+import { clearTransitionState } from '@/services/pageTransition'
 import type { ViewId } from '@/types'
 
 const ui = useUiStore()
@@ -48,6 +49,12 @@ onMounted(async () => {
   await library.init()
   await player.restore()
 })
+
+/** 切换视图时清理过渡残留（网格可能已被卸载，动画引用会指向已销毁的 DOM） */
+watch(
+  () => ui.activeView,
+  () => clearTransitionState(),
+)
 </script>
 
 <template>
@@ -66,10 +73,7 @@ onMounted(async () => {
                  双倍高度 → 外层滚动条出现 + 内层虚拟列表失效。 -->
             <SongsView v-if="ui.activeView === 'songs'" @add-folder="addFolder" />
 
-            <template v-else-if="ui.activeView === 'albums'">
-              <AlbumDetailView v-if="ui.detailKey" :album-key="ui.detailKey" />
-              <AlbumsView v-else />
-            </template>
+            <AlbumsView v-else-if="ui.activeView === 'albums'" />
 
             <ArtistsView v-else-if="ui.activeView === 'artists'" />
             <GenresView v-else-if="ui.activeView === 'genres'" />
@@ -83,6 +87,16 @@ onMounted(async () => {
             <PlaceholderView v-else :key="ui.activeView" :title="title" />
           </section>
         </Transition>
+
+        <!-- 专辑详情：不放在上面的 Transition 里。
+             详情与网格是同 activeView 内的 detailKey 切换，:key 不变 → 外层 Transition 不会触发；
+             而 v-if/v-else 会让网格立刻卸载，网格就没法参与"相机后退"。
+             移到 .content 内的绝对定位覆盖层后，网格始终挂载，滚动位置与卡片 DOM 全部保留。 -->
+        <AlbumDetailView
+          v-if="ui.activeView === 'albums' && ui.detailKey"
+          :album-key="ui.detailKey"
+          class="detail-layer"
+        />
       </main>
     </div>
     <PlayerBar />
@@ -108,6 +122,18 @@ onMounted(async () => {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+/* 专辑详情覆盖层：盖住标题与网格，自带滚动；放在 .content 内天然避开侧栏与播放条 */
+.detail-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px 24px 24px;
+  background: var(--bg-base);
 }
 
 .view-header {

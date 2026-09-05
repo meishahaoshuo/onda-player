@@ -13,10 +13,13 @@ export const useUiStore = defineStore('ui', () => {
   const playlistCreateRequested = ref(false)
   /** 全屏歌词页开关 */
   const lyricsOpen = ref(false)
+  /** 专辑过渡编排状态：idle 空闲 / enter 推进中 / exit 返回中（同时用作连点闸门） */
+  const dolly = ref<'idle' | 'enter' | 'exit'>('idle')
 
   function navigate(view: ViewId) {
     activeView.value = view
     detailKey.value = null
+    dolly.value = 'idle'
   }
 
   function requestPlaylistCreate() {
@@ -32,6 +35,19 @@ export const useUiStore = defineStore('ui', () => {
 
   function closeDetail() {
     detailKey.value = null
+    dolly.value = 'idle'
+  }
+
+  function startDolly() {
+    dolly.value = 'enter'
+  }
+
+  function beginDollyExit() {
+    dolly.value = 'exit'
+  }
+
+  function endDolly() {
+    dolly.value = 'idle'
   }
 
   return {
@@ -39,9 +55,13 @@ export const useUiStore = defineStore('ui', () => {
     detailKey,
     playlistCreateRequested,
     lyricsOpen,
+    dolly,
     navigate,
     requestPlaylistCreate,
     openDetail,
     closeDetail,
+    startDolly,
+    beginDollyExit,
+    endDolly,
   }
 })

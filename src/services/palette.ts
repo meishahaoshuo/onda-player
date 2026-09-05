@@ -144,6 +144,20 @@ export async function makeAmbientGradient(blob: Blob): Promise<string> {
 }
 
 /**
+ * 只取封面主色（base）：给页面过渡开场铺底用。
+ * 比 makeAmbientGradient 便宜得多（不做多焦点渐变合成），可放进预取队列批量跑。
+ */
+export async function coverBaseColor(blob: Blob): Promise<string> {
+  const { W, H, data, bitmap } = await sampleBitmap(blob)
+  try {
+    const { base } = computeAmbient(data, W, H)
+    return `rgb(${base.r},${base.g},${base.b})`
+  } finally {
+    bitmap.close()
+  }
+}
+
+/**
  * 预烘焙成单张柔和模糊图（PNG dataURL）。
  * 把全部焦点 radial + base 画到 ~160×90 小画布，再叠一层 canvas blur 柔化边缘，
  * 导出后供 .bg-ambient 用 background-size:cover 拉伸——无需 CSS filter，单层一次栅格化。
