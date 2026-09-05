@@ -37,35 +37,11 @@ export const useLibraryStore = defineStore('library', () => {
   /* ---------- 聚合视图数据 ---------- */
 
   const albums = computed<AlbumSummary[]>(() => {
-    // 「按封面」分组：先对已算出感知哈希的封面做聚类（64bit 汉明距离 ≤6 视为同一张封面，
-    // 容忍不同文件里同图的重新编码），再以聚类代表作为分组键；
-    // 没有封面/还没算出哈希的回退到 coverId 或 专辑名+专辑艺术家。
-    const phashes = coverPhash.value
-    const reps: { hash: string; id: string }[] = []
-    const repOf = new Map<string, string>()
-    const hamming = (a: string, b: string) => {
-      let d = 0
-      for (let i = 0; i < 16; i++) {
-        let x = parseInt(a[i], 16) ^ parseInt(b[i], 16)
-        while (x) {
-          d += x & 1
-          x >>= 1
-        }
-      }
-      return d
-    }
-    for (const [id, h] of phashes) {
-      const rep = reps.find((r) => hamming(r.hash, h) <= 6)
-      if (rep) repOf.set(id, rep.id)
-      else {
-        reps.push({ hash: h, id })
-        repOf.set(id, id)
-      }
-    }
-
+    // 「按专辑」分组：只看专辑名，完全不看歌手——同一张专辑（即使各曲目
+    // 的专辑艺术家/内嵌封面字节不同）只显示一张卡片。专辑名缺失时按艺术家兜底。
     const map = new Map<string, SongRecord[]>()
     for (const s of songs.value) {
-      const key = s.coverId ? `cover:${repOf.get(s.coverId) ?? s.coverId}` : `meta:${s.album}\n${s.albumArtist}`
+      const key = s.album ? `album:${s.album}` : `meta:${s.albumArtist}`
       const list = map.get(key)
       if (list) list.push(s)
       else map.set(key, [s])
@@ -78,11 +54,13 @@ export const useLibraryStore = defineStore('library', () => {
           a.title.localeCompare(b.title, 'zh-Hans-CN'),
       )
       const withYear = sorted.find((s) => s.year !== null)
-      const albumArtists = [...new Set(sorted.map((s) => s.albumArtist).filter(Boolean))]
+      // 艺术家展示：取专辑艺术家的首位（"周杰伦、林迈可"→周杰伦）；
+      // 首位都不一致（真合辑）才显示"群星"
+      const leads = [...new Set(sorted.map((s) => s.albumArtist.split(/[、/]/)[0].trim()).filter(Boolean))]
       return {
         key,
         name: sorted[0].album,
-        artist: albumArtists.length === 1 ? albumArtists[0] : '群星',
+        artist: leads.length === 1 ? leads[0] : '群星',
         year: withYear?.year ?? null,
         songs: sorted,
         coverId: sorted.find((s) => s.coverId)?.coverId ?? null,
@@ -166,26 +144,19 @@ export const useLibraryStore = defineStore('library', () => {
       return
     }
     let i = 0
-    const hashes = new Map<string, string>()
     const worker = async () => {
       while (i < ids.length) {
         const id = ids[i++]
-        try {
-          const blob = await db.getCover(id)
-          if (!blob) continue
-          if (!coverUrls.value.has(id)) coverUrls.value.set(id, URL.createObjectURL(blob))
-          if (!hashes.has(id)) {
-            const h = await computePhash(blob)
-            if (h) hashes.set(id, h)
+        if (!coverUrls.value.has(id)) {
+          try {
+            await coverUrl(id)
+          } catch {
+            /* 预热失败不阻塞，按需加载兜底 */
           }
-        } catch {
-          /* 预热失败不阻塞，按需加载兜底 */
         }
       }
     }
     await Promise.all([worker(), worker(), worker()])
-    // 一次性提交：避免每算完一张就触发一次全网格重新分组
-    coverPhash.value = hashes
   }
 
   async function addFolder(): Promise<boolean> {
@@ -268,43 +239,6 @@ export const useLibraryStore = defineStore('library', () => {
 
   /* ---------- 封面 URL 缓存 ---------- */
   const coverUrls = ref(new Map<string, string>())
-
-  /** 封面感知哈希（coverId → 64bit 十六进制）：用于「按封面」给专辑分组，
-      让内嵌图片字节不同但画面相同的封面（常见于合辑/feat. 版本）合并为同一张专辑。
-      由预热流程异步计算、一次性提交。 */
-  const coverPhash = ref(new Map<string, string>())
-
-  /** 8×8 灰度均值哈希（aHash）。返回 16 位十六进制；画不出有效像素时返回 null。 */
-  async function computePhash(blob: Blob): Promise<string | null> {
-    try {
-      const bmp = await createImageBitmap(blob)
-      const S = 8
-      const cv = document.createElement('canvas')
-      cv.width = S
-      cv.height = S
-      const ctx = cv.getContext('2d', { willReadFrequently: true })!
-      ctx.drawImage(bmp, 0, 0, S, S)
-      const w = bmp.width
-      bmp.close()
-      if (!w) return null
-      const d = ctx.getImageData(0, 0, S, S).data
-      const grays: number[] = []
-      for (let i = 0; i < S * S; i++) {
-        grays.push(d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114)
-      }
-      if (grays.every((g) => g === 0)) return null // 全黑=没画出来，宁可不聚类也别把所有专辑并成一张
-      const avg = grays.reduce((a, b) => a + b, 0) / grays.length
-      let hex = ''
-      for (let byte = 0; byte < 8; byte++) {
-        let b = 0
-        for (let bit = 0; bit < 8; bit++) b = (b << 1) | (grays[byte * 8 + bit] >= avg ? 1 : 0)
-        hex += b.toString(16).padStart(2, '0')
-      }
-      return hex
-    } catch {
-      return null
-    }
-  }
 
   /** 同步读取已缓存的封面 URL（未命中返回 null）。供组件首帧直接上 src，避免切页回来时封面闪一下。 */
   function peekCoverUrl(coverId: string | null): string | null {

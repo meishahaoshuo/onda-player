@@ -31,12 +31,11 @@ function openAlbum(album: { key: string; coverId: string | null }, e: MouseEvent
   })
 }
 
-/** 当前播放的曲目是否属于这张专辑（有封面按封面比对，无封面回退元数据 key） */
-function isPlayingAlbum(album: { key: string; coverId: string | null }) {
+/** 当前播放的曲目是否属于这张专辑（专辑按专辑名分组，直接按名比对） */
+function isPlayingAlbum(album: { key: string; name: string }) {
   const c = player.current
   if (!c) return false
-  if (album.coverId) return c.coverId === album.coverId
-  return `${c.album}\n${c.albumArtist}` === album.key
+  return c.album ? c.album === album.name : album.key === `meta:${c.albumArtist}`
 }
 
 /* ---------- 封面主色预取 ----------
