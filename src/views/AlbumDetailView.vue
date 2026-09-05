@@ -568,6 +568,22 @@ const metaRows = computed<MetaRow[]>(() => {
   opacity: 1;
 }
 
+/* 信息面板弹出：头部内容落定后带回弹放大弹出（回弹曲线末段过冲再收束） */
+.album-detail.revealed .album-meta {
+  animation: meta-pop 480ms cubic-bezier(0.34, 1.56, 0.64, 1) 140ms backwards;
+}
+
+@keyframes meta-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.86) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* 背景层随推进淡入 */
 .album-detail .blob,
 .album-detail .album-header::after {
@@ -591,6 +607,9 @@ const metaRows = computed<MetaRow[]>(() => {
     opacity: 1;
     transform: none;
     transition: none;
+  }
+  .album-detail.revealed .album-meta {
+    animation: none;
   }
   .album-detail .blob {
     opacity: 0.2;
