@@ -439,6 +439,9 @@ function applyParallax() {
 }
 
 function onPageMouseMove(e: MouseEvent) {
+  // 飞行/关闭过渡期间冻结视差：克隆封面吃不到页面级 --mx/--my，
+  // 若飞行中真实封面被视差挪动，交接瞬间会错位「顿一下」
+  if (flyActive.value || closing.value) return
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
   parallaxEvt = e
   if (!parallaxRaf) parallaxRaf = requestAnimationFrame(applyParallax)
@@ -682,6 +685,8 @@ function flyIn() {
       await preloadImage(hiRes)
       dstInner.setAttribute('src', hiRes)
     }
+    // 克隆外观与真实封面逐项对齐（圆角/投影），交接瞬间无样式突变
+    const dstStyle = getComputedStyle(dstInner)
     const flying = dstInner.cloneNode(true) as HTMLElement
 
     const s = srcEl.getBoundingClientRect()
@@ -703,8 +708,8 @@ function flyIn() {
     flying.style.top = `${d.top}px`
     flying.style.width = `${d.width}px`
     flying.style.height = `${d.height}px`
-    flying.style.borderRadius = '12px'
-    flying.style.boxShadow = 'none'
+    flying.style.borderRadius = dstStyle.borderRadius
+    flying.style.boxShadow = dstStyle.boxShadow
     flying.style.zIndex = '60'
     flying.style.pointerEvents = 'none'
     flying.style.willChange = 'transform'
@@ -1155,10 +1160,12 @@ onMounted(() => {
   opacity: 0.55;
 }
 
-/* 封面飞入期间：封面不参与切歌淡入淡出（与飞行叠加会"顿一下"） */
+/* 封面飞入期间：封面不参与切歌淡入淡出（与飞行叠加会"顿一下"）；
+   视差 translate 同步冻结归零——克隆落点按未偏移位置计算，两边必须一致 */
 .layout.fly-active .cover-main {
   opacity: 1;
   transform: none;
+  translate: none;
   transition: none;
 }
 
