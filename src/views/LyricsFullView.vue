@@ -965,14 +965,15 @@ onMounted(() => {
 
 /* 底部稍压暗，保证迷你条与歌词可读 —— 已在 palette.renderAmbientUrl 烘焙进图内，无需单独压暗层 */
 
-/* ---------- 双栏主体：整组水平居中，两栏间距受控 ---------- */
+/* ---------- 双栏主体：整组水平居中，两栏间距受控 ----------
+   注意：这里不能设 align-items:center —— 两栏必须拉伸到全高，
+   歌词滚动容器依赖高度约束，居中会让它和内容一样高、彻底失去滚动。 */
 .layout {
   position: relative;
   z-index: 1;
   flex: 1;
   min-height: 0;
   display: flex;
-  align-items: center;
   justify-content: center;
   gap: clamp(32px, 5vw, 96px);
   padding: 0 4vw;
