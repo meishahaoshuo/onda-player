@@ -56,7 +56,9 @@ function onPlay(song: SongRecord) {
       <AppIcon name="close" :size="14" /> 返回艺术家列表
     </button>
     <header class="artist-header">
-      <CoverImage :cover-id="artist.coverId" :size="120" class="header-cover" />
+      <div class="header-cover">
+        <CoverImage :cover-id="artist.coverId" :size="120" />
+      </div>
       <div class="header-info">
         <h1 class="artist-name">{{ artist.name }}</h1>
         <div class="artist-sub">
@@ -125,11 +127,22 @@ function onPlay(song: SongRecord) {
   gap: 20px;
 }
 
-/* 艺术家封面圆形（与网格卡片一致），也是封面飞行的落点 */
+/* 艺术家封面圆形（与网格卡片一致），也是封面飞行的落点。
+   注意 .header-cover 是包一层 div——CoverImage 根上直接挂类的话 :deep 选择器打不到 img。 */
+.header-cover {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-1);
+}
+
 .header-cover :deep(img),
 .header-cover :deep(.cover-fallback) {
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
-  box-shadow: var(--shadow-1);
 }
 
 .artist-name {

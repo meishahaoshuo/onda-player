@@ -265,7 +265,9 @@ function flyCover(o: Origin, target: HTMLElement, t: Box): Promise<void> {
   const oY = ((o.click.y - o.rect.top) / o.rect.height) * t.height
   const tx = o.rect.left - t.left - oX * (1 - s)
   const ty = o.rect.top - t.top - oY * (1 - s)
-  const radius = parseFloat(getComputedStyle(target).borderRadius) || 0
+  // 形状（圆↔方）用百分比圆角随飞行平滑形变：百分比相对克隆自身盒，与缩放天然无关
+  const srcPct = `${(((parseFloat(getComputedStyle(o.coverEl).borderRadius) || 0) / o.rect.width) * 100).toFixed(1)}%`
+  const dstPct = `${(((parseFloat(getComputedStyle(target).borderRadius) || 0) / t.width) * 100).toFixed(1)}%`
 
   Object.assign(flying.style, {
     position: 'fixed',
@@ -274,7 +276,7 @@ function flyCover(o: Origin, target: HTMLElement, t: Box): Promise<void> {
     top: `${t.top}px`,
     width: `${t.width}px`,
     height: `${t.height}px`,
-    borderRadius: `${radius}px`,
+    borderRadius: srcPct,
     objectFit: 'cover',
     zIndex: '70',
     pointerEvents: 'none',
@@ -307,11 +309,17 @@ function flyCover(o: Origin, target: HTMLElement, t: Box): Promise<void> {
         resolve()
       }, 130)
     }
-    const anim = flying.animate([{ transform: start }, { transform: 'translate(0, 0) scale(1)' }], {
-      duration: dur(COVER_ENTER),
-      easing: EASE,
-      fill: 'both',
-    })
+    const anim = flying.animate(
+      [
+        { transform: start, borderRadius: srcPct },
+        { transform: 'translate(0, 0) scale(1)', borderRadius: dstPct },
+      ],
+      {
+        duration: dur(COVER_ENTER),
+        easing: EASE,
+        fill: 'both',
+      },
+    )
     anim.onfinish = finish
     window.setTimeout(finish, dur(COVER_ENTER) + 260)
   })
@@ -437,8 +445,9 @@ function flyCoverBack(o: Origin, target: HTMLElement, from: Box, to: Box): Promi
   // 终态必须让克隆外框精确盖住 to：local(0,0) → from.left + oX(1-s) + tx = to.left
   const tx = to.left - from.left - oX * (1 - s)
   const ty = to.top - from.top - oY * (1 - s)
-  // 克隆终态被缩放 s 倍，圆角要预除 s 才能落定后与卡片封面一致
-  const radius = parseFloat(getComputedStyle(o.coverEl).borderRadius) || 0
+  // 形状形变：从头部封面形状平滑过渡回卡片封面形状（百分比圆角，与缩放无关）
+  const srcPct = `${(((parseFloat(getComputedStyle(target).borderRadius) || 0) / from.width) * 100).toFixed(1)}%`
+  const dstPct = `${(((parseFloat(getComputedStyle(o.coverEl).borderRadius) || 0) / to.width) * 100).toFixed(1)}%`
 
   Object.assign(flying.style, {
     position: 'fixed',
@@ -447,7 +456,7 @@ function flyCoverBack(o: Origin, target: HTMLElement, from: Box, to: Box): Promi
     top: `${from.top}px`,
     width: `${from.width}px`,
     height: `${from.height}px`,
-    borderRadius: `${(radius / s).toFixed(1)}px`,
+    borderRadius: srcPct,
     objectFit: 'cover',
     zIndex: '70',
     pointerEvents: 'none',
@@ -473,11 +482,17 @@ function flyCoverBack(o: Origin, target: HTMLElement, from: Box, to: Box): Promi
         resolve()
       }, 130)
     }
-    const anim = flying.animate([{ transform: 'none' }, { transform: `translate(${tx}px, ${ty}px) scale(${s})` }], {
-      duration: dur(COVER_EXIT),
-      easing: EASE,
-      fill: 'forwards',
-    })
+    const anim = flying.animate(
+      [
+        { transform: 'none', borderRadius: srcPct },
+        { transform: `translate(${tx}px, ${ty}px) scale(${s})`, borderRadius: dstPct },
+      ],
+      {
+        duration: dur(COVER_EXIT),
+        easing: EASE,
+        fill: 'forwards',
+      },
+    )
     anim.onfinish = finish
     window.setTimeout(finish, dur(COVER_EXIT) + 260)
   })
