@@ -85,6 +85,16 @@ watch(
   () => ui.activeView,
   () => clearTransitionState(),
 )
+
+/** 详情覆盖层被绕过返回过渡直接关闭时（典型：详情打开时点侧边栏当前视图，
+    navigate 只改 detailKey、activeView 不变，上面那个 watcher 不会触发），
+    必须强制清理 —— 否则网格卡片停留在坍缩终态（opacity:0），表现为大面积空白。 */
+watch(
+  () => ui.detailKey,
+  (detail, old) => {
+    if (detail === null && old !== null) clearTransitionState()
+  },
+)
 </script>
 
 <template>

@@ -67,6 +67,37 @@ let originCardAnim: Animation | null = null
 /** 详情内被波前接管的内容元素（返回时统一收起） */
 let waveEls: { el: HTMLElement; delay: number }[] = []
 
+/**
+ * 代际号：每次开始新过渡 / 强制清理时自增。
+ * 异步续段（await 之后的代码）在恢复执行时核对自己的代际，
+ * 不一致说明已被导航打断或被新过渡接管，必须立即收手 —— 这是连点/侧边栏抢断竞态的总闸。
+ */
+let epoch = 0
+/** 本模块创建过的所有动画登记表：任何清理路径都能把它们一网打尽，
+    避免「gridRecs 被覆盖后旧 fill 动画失去引用、永久挂在卡片上」的孤儿态 */
+const allAnims = new Set<Animation>()
+
+/** 登记动画。注意：finish 的动画可能仍以 fill 持有元素样式（如坍缩终态 opacity:0），
+    所以只在被 cancel 时才从登记表移除，finish 不移除。 */
+function track<T extends Animation>(anim: T): T {
+  allAnims.add(anim)
+  anim.finished.then(
+    () => {},
+    () => allAnims.delete(anim),
+  )
+  return anim
+}
+
+/** 强制复位网格卡片：取消元素上的一切动画（含孤儿 fill）并清掉行内残留。
+    在「开始新过渡」与「强制清理」时调用，保证卡片回到自然态 —— 先量后动永远成立。 */
+function resetGridCards(): void {
+  for (const el of document.querySelectorAll<HTMLElement>('.album-card, .artist-card')) {
+    for (const a of el.getAnimations()) a.cancel()
+    el.style.transform = ''
+    el.style.opacity = ''
+  }
+}
+
 /** lite 档：时长 ×0.7 */
 let lite = (navigator.hardwareConcurrency ?? 8) <= 2
 
@@ -123,6 +154,9 @@ export function beginAlbumEnter(o: {
 }): void {
   const ui = useUiStore()
   if (ui.dolly !== 'idle') return // 过渡进行中：忽略连点
+  epoch++ // 开启新代际：上一段未完成的异步续段（若有）就此作废
+  // 先强制复位所有网格卡片（清掉磁吸残留与任何孤儿动画），再测量 —— 先量后动永远成立
+  resetGridCards()
   const img = (o.coverEl.matches('img') ? o.coverEl : o.coverEl.querySelector('img')) as HTMLImageElement | null
   origin = {
     cardEl: o.cardEl,
@@ -135,19 +169,11 @@ export function beginAlbumEnter(o: {
     src: img ? img.currentSrc || img.getAttribute('src') || '' : '',
   }
   ui.startDolly()
-  clearInlineTransforms(o.cardEl) // 清掉磁吸引力场的行内 transform 残留，避免返回归位后复现
   if (!reduced()) {
     collapseGrid(o.cardEl, o.click)
     hideOriginCard(o.cardEl)
   }
   ui.openDetail(o.albumKey)
-}
-
-/** 清掉网格卡片的行内 transform（磁吸引力场的残留） */
-function clearInlineTransforms(cardEl: HTMLElement) {
-  const grid = cardEl.closest('.album-grid, .artist-grid')
-  if (!grid) return
-  for (const c of grid.querySelectorAll<HTMLElement>('.album-card, .artist-card')) c.style.transform = ''
 }
 
 /** 周边卡片被吸入点击点：越近越先被吞，带一点旋转（被"拽"进去的失控感） */
@@ -173,12 +199,14 @@ function collapseGrid(cardEl: HTMLElement, click: { x: number; y: number }) {
       transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(0.22) rotate(${rot.toFixed(1)}deg)`,
       opacity: 0,
     }
-    const anim = card.animate([{ transform: 'none', opacity: 1 }, to], {
-      duration: dur(SUCK_DUR),
-      delay: dur(delay),
-      easing: EASE,
-      fill: 'forwards',
-    })
+    const anim = track(
+      card.animate([{ transform: 'none', opacity: 1 }, to], {
+        duration: dur(SUCK_DUR),
+        delay: dur(delay),
+        easing: EASE,
+        fill: 'forwards',
+      }),
+    )
     gridRecs.set(card, { anim, delay, to })
   }
 }
@@ -187,11 +215,13 @@ function collapseGrid(cardEl: HTMLElement, click: { x: number; y: number }) {
 function hideOriginCard(cardEl: HTMLElement) {
   originCardAnim?.cancel()
   originCardEl = cardEl
-  originCardAnim = cardEl.animate([{ opacity: 1 }, { opacity: 0 }], {
-    duration: dur(240),
-    easing: EASE,
-    fill: 'forwards',
-  })
+  originCardAnim = track(
+    cardEl.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: dur(240),
+      easing: EASE,
+      fill: 'forwards',
+    }),
+  )
 }
 
 /* ---------- 阶段二：详情页挂载后 ---------- */
@@ -205,6 +235,7 @@ export async function playAlbumEnter(root: HTMLElement | null): Promise<void> {
     return
   }
   probeFps()
+  const my = epoch // 记下代际：await 恢复后若已被打断/接管，立即收手
 
   // 先量后动：此刻详情层与头图都还没有任何变换，量到的才是最终落点
   const layerBox = box(root)
@@ -215,6 +246,7 @@ export async function playAlbumEnter(root: HTMLElement | null): Promise<void> {
   bloomLayerIn(root, layerBox, o.cardRect)
   runWave()
   if (cover && coverBox) await flyCover(o, cover, coverBox)
+  if (epoch !== my) return // 期间发生了清理或新过渡：dolly 的归属已移交，不得再动
   useUiStore().endDolly()
 }
 
@@ -223,12 +255,14 @@ function bloomLayerIn(root: HTMLElement, layerBox: Box, cardBox: Box) {
   const s = Math.max(cardBox.width / layerBox.width, cardBox.height / layerBox.height)
   const tx = cardBox.left - layerBox.left
   const ty = cardBox.top - layerBox.top
-  root.animate(
-    [
-      { transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${s.toFixed(4)})`, transformOrigin: '0 0' },
-      { transform: 'none', transformOrigin: '0 0' },
-    ],
-    { duration: dur(BLOOM_DUR), easing: EASE },
+  track(
+    root.animate(
+      [
+        { transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${s.toFixed(4)})`, transformOrigin: '0 0' },
+        { transform: 'none', transformOrigin: '0 0' },
+      ],
+      { duration: dur(BLOOM_DUR), easing: EASE },
+    ),
   )
 }
 
@@ -254,12 +288,14 @@ function planWave(root: HTMLElement, click: { x: number; y: number }) {
 /** 内容按"到点击点的距离"依次浮现：离坍缩点越近的内容越早出现 */
 function runWave() {
   for (const { el, delay } of waveEls) {
-    el.animate([{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], {
-      duration: dur(REVEAL_DUR),
-      delay: dur(delay),
-      easing: EASE,
-      fill: 'both',
-    })
+    track(
+      el.animate([{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], {
+        duration: dur(REVEAL_DUR),
+        delay: dur(delay),
+        easing: EASE,
+        fill: 'both',
+      }),
+    )
   }
 }
 
@@ -313,11 +349,13 @@ function flyCover(o: Origin, target: HTMLElement, t: Box): Promise<void> {
       flying.remove()
       resolve()
     }
-    const anim = flying.animate([{ transform: start }, { transform: 'translate(0, 0) scale(1)' }], {
-      duration: dur(COVER_ENTER),
-      easing: EASE,
-      fill: 'both',
-    })
+    const anim = track(
+      flying.animate([{ transform: start }, { transform: 'translate(0, 0) scale(1)' }], {
+        duration: dur(COVER_ENTER),
+        easing: EASE,
+        fill: 'both',
+      }),
+    )
     anim.onfinish = finish
     window.setTimeout(finish, dur(COVER_ENTER) + 260)
   })
@@ -326,15 +364,15 @@ function flyCover(o: Origin, target: HTMLElement, t: Box): Promise<void> {
 /* ---------- 阶段三：返回（对称反向） ---------- */
 
 export async function playAlbumExit(root: HTMLElement | null): Promise<void> {
+  const ui = useUiStore()
   const o = origin
-  if (!o || !root) {
+  if (!o || !root || reduced()) {
     clearTransitionState()
+    ui.closeDetail()
+    ui.endDolly()
     return
   }
-  if (reduced()) {
-    clearTransitionState()
-    return
-  }
+  const my = epoch
   // 同样先量后动：此刻层未折叠、源卡片未被变换，两个矩形都可信
   const layerBox = box(root)
   const cover = root.querySelector<HTMLElement>('.header-cover')
@@ -347,22 +385,27 @@ export async function playAlbumExit(root: HTMLElement | null): Promise<void> {
   // 卡片在封面落定前后淡回（与克隆的 130ms 淡出交叉），不能等全部归位后再出现——否则落点处会有一段真空期
   restoreOriginCard(hasFlight ? COVER_EXIT - 100 : 0)
   await Promise.all([restoreGrid(), hasFlight ? flyCoverBack(o, cover as HTMLElement, from as Box, to) : Promise.resolve()])
+  if (epoch !== my) return // 期间被导航/新过渡接管：收尾（closeDetail/endDolly）交给接管者
   clearTransitionState()
+  ui.closeDetail()
+  ui.endDolly()
 }
 
 /** 内容按波前反序收起（远的先消失，波退回坍缩点） */
 function collapseContent(root: HTMLElement) {
   const maxDelay = Math.max(1, ...waveEls.map((w) => w.delay))
   for (const { el, delay } of waveEls) {
-    el.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(6px)' }], {
-      duration: dur(160),
-      delay: dur(((maxDelay - delay) / maxDelay) * 80),
-      easing: EASE,
-      fill: 'forwards',
-    })
+    track(
+      el.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(6px)' }], {
+        duration: dur(160),
+        delay: dur(((maxDelay - delay) / maxDelay) * 80),
+        easing: EASE,
+        fill: 'forwards',
+      }),
+    )
   }
   for (const g of root.querySelectorAll<HTMLElement>('.disc-group')) {
-    g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: dur(160), easing: EASE, fill: 'forwards' })
+    track(g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: dur(160), easing: EASE, fill: 'forwards' }))
   }
 }
 
@@ -371,22 +414,24 @@ function foldLayerOut(root: HTMLElement, layerBox: Box, cardBox: Box) {
   const s = Math.max(cardBox.width / layerBox.width, cardBox.height / layerBox.height)
   const tx = cardBox.left - layerBox.left
   const ty = cardBox.top - layerBox.top
-  root.animate(
-    [
-      { transform: 'none', opacity: 1, transformOrigin: '0 0' },
-      {
-        transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${s.toFixed(4)})`,
-        opacity: 1,
-        offset: 0.55,
-        transformOrigin: '0 0',
-      },
-      {
-        transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${(s * 0.5).toFixed(4)})`,
-        opacity: 0,
-        transformOrigin: '0 0',
-      },
-    ],
-    { duration: dur(FOLD_DUR), easing: EASE, fill: 'forwards' },
+  track(
+    root.animate(
+      [
+        { transform: 'none', opacity: 1, transformOrigin: '0 0' },
+        {
+          transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${s.toFixed(4)})`,
+          opacity: 1,
+          offset: 0.55,
+          transformOrigin: '0 0',
+        },
+        {
+          transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${(s * 0.5).toFixed(4)})`,
+          opacity: 0,
+          transformOrigin: '0 0',
+        },
+      ],
+      { duration: dur(FOLD_DUR), easing: EASE, fill: 'forwards' },
+    ),
   )
 }
 
@@ -395,12 +440,14 @@ function restoreGrid(): Promise<void> {
   const jobs: Promise<unknown>[] = []
   for (const [card, rec] of gridRecs) {
     rec.anim.cancel()
-    const anim = card.animate([rec.to, { transform: 'none', opacity: 1 }], {
-      duration: dur(SUCK_DUR),
-      delay: dur((MAX_WAVE_DELAY - rec.delay) * 0.6),
-      easing: EASE,
-      fill: 'both',
-    })
+    const anim = track(
+      card.animate([rec.to, { transform: 'none', opacity: 1 }], {
+        duration: dur(SUCK_DUR),
+        delay: dur((MAX_WAVE_DELAY - rec.delay) * 0.6),
+        easing: EASE,
+        fill: 'both',
+      }),
+    )
     jobs.push(
       anim.finished.then(
         () => anim.cancel(),
@@ -419,12 +466,14 @@ function restoreOriginCard(delayMs = 0) {
   originCardEl = null
   originCardAnim?.cancel()
   originCardAnim = null
-  const back = el.animate([{ opacity: 0 }, { opacity: 1 }], {
-    duration: dur(200),
-    delay: dur(delayMs),
-    easing: EASE,
-    fill: 'both',
-  })
+  const back = track(
+    el.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration: dur(200),
+      delay: dur(delayMs),
+      easing: EASE,
+      fill: 'both',
+    }),
+  )
   back.finished.then(
     () => back.cancel(),
     () => back.cancel(),
@@ -476,18 +525,22 @@ function flyCoverBack(o: Origin, target: HTMLElement, from: Box, to: Box): Promi
       flying.remove()
       resolve()
     }
-    const anim = flying.animate([{ transform: 'none' }, { transform: `translate(${tx}px, ${ty}px) scale(${s})` }], {
-      duration: dur(COVER_EXIT),
-      easing: EASE,
-      fill: 'forwards',
-    })
+    const anim = track(
+      flying.animate([{ transform: 'none' }, { transform: `translate(${tx}px, ${ty}px) scale(${s})` }], {
+        duration: dur(COVER_EXIT),
+        easing: EASE,
+        fill: 'forwards',
+      }),
+    )
     anim.onfinish = finish
     window.setTimeout(finish, dur(COVER_EXIT) + 260)
   })
 }
 
-/** 清理模块状态：切换视图 / 网格卸载时调用，避免残留动画引用已销毁的 DOM */
+/** 清理模块状态：切换视图 / 详情被外部关闭（如点侧边栏） / 网格卸载时调用。
+    会取消本模块创建的一切动画（含孤儿 fill）并强制复位网格卡片。 */
 export function clearTransitionState(): void {
+  epoch++ // 让仍在飞的异步续段（enter 的 endDolly / exit 的收尾）全部作废
   origin = null
   waveEls = []
   for (const [, rec] of gridRecs) rec.anim.cancel()
@@ -495,5 +548,8 @@ export function clearTransitionState(): void {
   originCardEl = null
   originCardAnim?.cancel()
   originCardAnim = null
+  for (const a of allAnims) a.cancel()
+  allAnims.clear()
   document.querySelectorAll('.page-flight').forEach((n) => n.remove())
+  resetGridCards()
 }

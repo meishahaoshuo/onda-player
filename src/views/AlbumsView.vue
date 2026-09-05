@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import { useLibraryStore } from '@/stores/library'
-import { useUiStore } from '@/stores/ui'
 import { usePlayerStore } from '@/stores/player'
 import { beginAlbumEnter, clearTransitionState } from '@/services/pageTransition'
 import { paletteCache } from '@/services/paletteCache'
@@ -10,7 +9,6 @@ import { useMagneticGrid } from '@/composables/useMagneticGrid'
 import { formatTotalDuration } from '@/utils/format'
 
 const library = useLibraryStore()
-const ui = useUiStore()
 const player = usePlayerStore()
 
 const gridEl = ref<HTMLElement | null>(null)
@@ -91,8 +89,9 @@ onBeforeUnmount(() => {
   scrollEl?.removeEventListener('scroll', onScroll)
   window.removeEventListener('resize', onScroll)
   window.clearTimeout(scrollTimer)
-  // 网格被卸载（切到别的视图）时清理过渡遗留，避免动画引用已销毁的 DOM
-  if (ui.dolly === 'idle') clearTransitionState()
+  // 网格被卸载（切到别的视图）时无条件清理过渡遗留：
+  // 动画引用即将指向已销毁的 DOM，且不能让旧记录污染下一个视图的过渡
+  clearTransitionState()
 })
 </script>
 

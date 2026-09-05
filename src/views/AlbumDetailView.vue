@@ -46,9 +46,9 @@ async function close() {
   closing.value = true
   blooming.value = false
   ui.beginDollyExit()
+  // 收尾（clearTransitionState / closeDetail / endDolly）由编排器完成；
+  // 若期间被导航抢断，编排器会移交收尾权，这里不再碰状态
   await playAlbumExit(rootEl.value)
-  ui.closeDetail()
-  ui.endDolly()
   closing.value = false
 }
 

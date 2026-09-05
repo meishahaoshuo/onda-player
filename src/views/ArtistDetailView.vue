@@ -38,9 +38,8 @@ watch(
 async function close() {
   if (ui.dolly !== 'idle') return
   ui.beginDollyExit()
+  // 收尾（clearTransitionState / closeDetail / endDolly）由编排器完成
   await playAlbumExit(rootEl.value)
-  ui.closeDetail()
-  ui.endDolly()
 }
 
 const artist = computed(() => library.artists.find((a) => a.name === props.artistName))

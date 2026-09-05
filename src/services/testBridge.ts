@@ -1,7 +1,7 @@
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import * as db from './db'
-import type { PlayMode } from '@/types'
+import type { PlayMode, SongRecord } from '@/types'
 
 /**
  * 开发/自动化测试桥（仅 import.meta.env.DEV 下加载，生产构建不含此模块）。
@@ -179,6 +179,44 @@ export function installTestBridge() {
           .filter((s) => s.coverId)
           .map((s) => ({ title: s.title, coverId: s.coverId })),
       }
+    },
+    /** 压力测试：直接注入 n 张合成专辑（各 2 首、无封面），绕过扫描。
+        用于自动化验证专辑网格「引力坍缩」过渡在连点/侧边栏抢断下不留残留。
+        注意：注入只进内存，重扫或清空根目录后即消失。 */
+    async stressAlbums(n = 40) {
+      const library = useLibraryStore()
+      const songs: SongRecord[] = []
+      for (let i = 0; i < n; i++) {
+        const idx = String(i).padStart(2, '0')
+        const album = `Stress Album ${idx}`
+        for (let t = 0; t < 2; t++) {
+          songs.push({
+            path: `stress/${album}/track${t + 1}.mp3`,
+            rootId: 'stress',
+            fileName: `track${t + 1}.mp3`,
+            title: `Track ${t + 1}`,
+            artist: `Artist ${idx}`,
+            album,
+            albumArtist: `Artist ${idx}`,
+            genre: 'Test',
+            year: 2026,
+            trackNo: t + 1,
+            discNo: 1,
+            durationSec: 180,
+            bitrateKbps: 320,
+            sampleRateHz: 44100,
+            bitsPerSample: 16,
+            container: 'mp3',
+            fileSize: 1024 * 1024,
+            mtimeMs: 0,
+            hasCover: false,
+            coverId: null,
+            embeddedLyrics: null,
+          })
+        }
+      }
+      library.songs.push(...songs)
+      return { songs: library.songs.length, albums: library.albums.length }
     },
     /** 当前库状态（根目录数/歌曲数/最近一次扫描进度） */
     status() {
