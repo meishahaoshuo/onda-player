@@ -129,26 +129,6 @@ function clearMagnet() {
   magnetActive.clear()
 }
 
-/* ---------- 入场错峰浮现 ----------
-   进入专辑页时前 24 张卡片按序轻轻浮现（一次性、不循环）；
-   视口外的卡片不做动画（否则延迟会累积到数秒）。
-   从列表中部恢复浏览位置时跳过——对看不见的卡片做动画只会显得像在加载。 */
-let entrancePlayed = false
-
-function playEntrance() {
-  if (reducedMotion()) return
-  if (ui.albumsScrollTop > 10) return
-  const cards = gridEl.value?.querySelectorAll<HTMLElement>('.album-card')
-  if (!cards?.length) return
-  const n = Math.min(cards.length, 24)
-  for (let i = 0; i < n; i++) {
-    cards[i].animate(
-      [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }],
-      { duration: 340, delay: i * 30, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)', fill: 'backwards' },
-    )
-  }
-}
-
 /* ---------- 浏览位置记忆：切视图卸载前捕获，回来时恢复 ---------- */
 function restoreScroll() {
   const el = scrollEl
@@ -159,11 +139,7 @@ function restoreScroll() {
 
 watch(
   () => sortedAlbums.value.length,
-  (n, o) => {
-    if (n > 0 && o === 0 && !entrancePlayed) {
-      entrancePlayed = true
-      playEntrance()
-    }
+  (n) => {
     if (n > 0) restoreScroll()
   },
   { flush: 'post' },
@@ -182,10 +158,6 @@ onMounted(() => {
   scrollEl?.addEventListener('scroll', onScroll, { passive: true })
   window.addEventListener('resize', onScroll, { passive: true })
   restoreScroll()
-  if (sortedAlbums.value.length && !entrancePlayed) {
-    entrancePlayed = true
-    playEntrance()
-  }
   const ric = (window as Window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback
   const idle = () => onSettled()
   if (ric) ric(idle)
