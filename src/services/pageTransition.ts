@@ -276,6 +276,8 @@ function flyCover(o: Origin, target: HTMLElement, t: Box): Promise<void> {
   const ty = o.rect.top - t.top - oY * (1 - s)
   // 克隆形状与源封面一致（圆保持圆、方保持方），不做形状形变动画
   flying.style.borderRadius = cloneRadiusFor(o.coverEl, o.rect.width, t.width)
+  // 投影直接用落点封面的真实投影：交接瞬间阴影零跳变（重投影在淡出时会压出一次亮度跳变）
+  flying.style.boxShadow = getComputedStyle(target).boxShadow || 'none'
 
   Object.assign(flying.style, {
     position: 'fixed',
@@ -289,7 +291,6 @@ function flyCover(o: Origin, target: HTMLElement, t: Box): Promise<void> {
     pointerEvents: 'none',
     willChange: 'transform',
     transformOrigin: `${oX}px ${oY}px`,
-    boxShadow: '0 20px 48px rgba(0, 0, 0, 0.3)',
   } as CSSStyleDeclaration)
   const start = `translate(${tx}px, ${ty}px) scale(${s})`
   flying.style.transform = start
@@ -448,6 +449,8 @@ function flyCoverBack(o: Origin, target: HTMLElement, from: Box, to: Box): Promi
   const ty = to.top - from.top - oY * (1 - s)
   // 克隆形状与落点（详情封面）一致，不做形状形变动画
   flying.style.borderRadius = getComputedStyle(target).borderRadius
+  // 投影用被点卡片封面的真实投影：落回网格时阴影零跳变
+  flying.style.boxShadow = getComputedStyle(o.coverEl).boxShadow || 'none'
 
   Object.assign(flying.style, {
     position: 'fixed',
@@ -461,7 +464,6 @@ function flyCoverBack(o: Origin, target: HTMLElement, from: Box, to: Box): Promi
     pointerEvents: 'none',
     willChange: 'transform',
     transformOrigin: `${oX}px ${oY}px`,
-    boxShadow: '0 20px 48px rgba(0, 0, 0, 0.3)',
   } as CSSStyleDeclaration)
 
   document.querySelectorAll('.page-flight').forEach((n) => n.remove())
