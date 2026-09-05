@@ -3,9 +3,8 @@ import { computed, nextTick, ref, watch } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import QualityBadge from '@/components/QualityBadge.vue'
-import { extractBrightColors } from '@/services/palette'
-import { playAlbumEnter, playAlbumExit } from '@/services/pageTransition'
 import { paletteCache } from '@/services/paletteCache'
+import { playAlbumEnter, playAlbumExit } from '@/services/pageTransition'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
@@ -53,29 +52,14 @@ async function close() {
   closing.value = false
 }
 
-/* 头部背景：浅色处理 —— 一层很淡的封面主色铺底 + 2-3 个明亮饱和色流光圆斑
-   （palette.extractBrightColors，混白提亮），替代原先压暗渐变 0.55 的重色块 */
+/* 头部玻璃面板的色调渲染：取封面主色，低透明度融进磨砂玻璃 */
 const ambientBase = ref<string>('transparent')
-const flowColors = ref<string[]>([])
-const flowCache = new Map<string, string[]>()
 
 watch(
   () => props.albumKey,
-  async (key) => {
+  (key) => {
     const album = library.albums.find((a) => a.key === key)
     ambientBase.value = paletteCache.colorOf(album?.coverId)
-    flowColors.value = flowCache.get(key) ?? []
-    if (!album?.coverId) return
-    try {
-      const url = await library.coverUrl(album.coverId)
-      if (!url) return
-      const blob = await (await fetch(url)).blob()
-      const colors = await extractBrightColors(blob).catch(() => [] as string[])
-      flowCache.set(key, colors)
-      if (props.albumKey === key) flowColors.value = colors
-    } catch {
-      /* 取色失败则保留主色铺底 */
-    }
   },
   { immediate: true },
 )
@@ -115,16 +99,10 @@ function playSong(song: SongRecord) {
     </button>
 
     <header class="album-header">
-      <!-- 封面主色淡铺底 -->
-      <div class="header-ambient" :style="{ backgroundColor: ambientBase }" />
-      <!-- 封面明亮色流光圆斑 -->
-      <div
-        v-for="(c, i) in flowColors"
-        :key="i"
-        class="flow"
-        :class="`af-${i}`"
-        :style="{ '--fc': c }"
-      />
+      <!-- 磨砂玻璃面板：内含封面主色的淡色调渲染 -->
+      <div class="glass" aria-hidden="true" :style="{ '--tint': ambientBase }">
+        <div class="glass-tint"></div>
+      </div>
       <CoverImage :cover-id="album.coverId" :size="192" class="header-cover" hires />
       <div class="header-info">
         <h1 class="album-title">{{ album.name }}</h1>
@@ -219,56 +197,64 @@ function playSong(song: SongRecord) {
   overflow: hidden;
 }
 
-/* 头部背景层 1：封面主色淡铺底（透明度随 blooming 淡入，仅 0.14，不再是重色块） */
-.header-ambient {
+/* 磨砂玻璃面板：白色渐变玻璃 + 封面主色调渲染层 + rim 高光 + hover 扫光。
+   主色融进玻璃而不是糊在底上 —— 有色调但不重。 */
+.glass {
   position: absolute;
-  inset: -40px;
-  opacity: 0;
+  inset: 10px;
+  border-radius: calc(var(--radius-panel) - 6px);
+  z-index: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18));
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.25),
+    0 10px 30px rgba(30, 60, 60, 0.1);
+  overflow: hidden;
+  transition: opacity 380ms var(--ease-out);
 }
 
-/* 头部背景层 2：封面明亮色流光圆斑（radial 柔光、只动 transform） */
-.flow {
+/* 封面主色调渲染层：左低右高的径向淡色 */
+.glass-tint {
   position: absolute;
-  width: clamp(280px, 30vw, 460px);
-  height: clamp(280px, 30vw, 460px);
-  border-radius: 50%;
+  inset: 0;
+  background: radial-gradient(120% 170% at 10% 30%, var(--tint), transparent 62%);
+  opacity: 0.26;
   pointer-events: none;
-  background: radial-gradient(closest-side, var(--fc), transparent 70%);
-  opacity: 0;
-  will-change: transform;
 }
 
-.flow-0 {
-  top: -55%;
-  left: -8%;
-  animation: af-a 36s ease-in-out infinite alternate;
+.glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.5) 48%, transparent 62%);
+  transform: translateX(-60%);
+  transition: transform 0.9s var(--ease-out);
 }
 
-.flow-1 {
-  top: -30%;
-  right: -6%;
-  animation: af-b 44s ease-in-out infinite alternate;
+.album-header:hover .glass::before {
+  transform: translateX(60%);
 }
 
-.flow-2 {
-  bottom: -70%;
-  left: 38%;
-  animation: af-c 52s ease-in-out infinite alternate;
+:root[data-theme='dark'] .glass {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
-@keyframes af-a {
-  from { transform: translate(0, 0) scale(1); }
-  to { transform: translate(4vw, 3vh) scale(1.15); }
+:root[data-theme='dark'] .glass-tint {
+  opacity: 0.2;
 }
 
-@keyframes af-b {
-  from { transform: translate(0, 0) scale(1.06); }
-  to { transform: translate(-4vw, 4vh) scale(0.94); }
-}
-
-@keyframes af-c {
-  from { transform: translate(0, 0) scale(0.95); }
-  to { transform: translate(-5vw, 5vh) scale(1.1); }
+:root[data-theme='dark'] .glass::before {
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.14) 48%, transparent 62%);
 }
 
 .header-cover {
@@ -443,18 +429,13 @@ function playSong(song: SongRecord) {
   opacity: 1;
 }
 
-/* 背景层随推进同步淡入（铺底 0.14 + 流光 0.26，浅色点缀不再重） */
-.album-detail .header-ambient,
-.album-detail .flow {
-  transition: opacity 380ms var(--ease-out);
+/* 玻璃面板随推进淡入 */
+.album-detail .glass {
+  opacity: 0;
 }
 
-.album-detail.blooming .header-ambient {
-  opacity: 0.14;
-}
-
-.album-detail.blooming .flow {
-  opacity: 0.26;
+.album-detail.blooming .glass {
+  opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -466,13 +447,12 @@ function playSong(song: SongRecord) {
     transform: none;
     transition: none;
   }
-  .album-detail .header-ambient {
-    opacity: 0.14;
+  .album-detail .glass {
+    opacity: 1;
     transition: none;
   }
-  .album-detail .flow {
-    opacity: 0.26;
-    animation: none;
+  .album-header:hover .glass::before,
+  .glass::before {
     transition: none;
   }
 }
