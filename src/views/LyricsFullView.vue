@@ -112,6 +112,51 @@ function preloadImage(src: string): Promise<void> {
   })
 }
 
+/* ---------- 切歌「浪涌」：一道新封面主色的色浪横扫全页 ---------- */
+
+const WAVE_OUT_MS = 240 // 出口阶段最短时长（含分块错峰）
+const WAVE_ENTER_MAX_DELAY = 180 // 入场最大错峰延迟
+const WAVE_ENTER_MS = 240 // 单块入场时长
+
+/** 从封面明亮色里挑浪的三段渐变色；不足时用同色递补，完全没有则交由 CSS 兜底 */
+function pickWaveTint(colors: string[]): { c1: string; c2: string; c3: string } | null {
+  const c1 = colors[0]
+  if (!c1) return null
+  return { c1, c2: colors[1] ?? c1, c3: colors[2] ?? c1 }
+}
+
+const waveVars = computed(() => {
+  const c = waveColors.value
+  return c ? { '--w1': c.c1, '--w2': c.c2, '--w3': c.c3 } : undefined
+})
+
+/** 浪的染色：优先复用流光取色缓存，未命中现场提取（不阻塞编排，就绪即更新）。
+    my 为调用方代际号：只有仍是当前代时才更新浪色。 */
+function beginWaveOut(coverId: string | null, my: number) {
+  wavePhase.value = 'out'
+  window.clearTimeout(waveInTimer)
+  window.clearTimeout(waveIdleTimer)
+  if (!coverId) return
+  const cached = flowCache.get(coverId)
+  if (cached?.length) {
+    waveColors.value = pickWaveTint(cached)
+    return
+  }
+  void (async () => {
+    try {
+      const url = await library.coverUrl(coverId)
+      if (!url) return
+      const blob = await urlToBlob(url)
+      const colors = await extractBrightColors(blob).catch(() => [] as string[])
+      flowCache.set(coverId, colors)
+      const tint = pickWaveTint(colors)
+      if (tint && my === waveEpoch && wavePhase.value !== 'idle') waveColors.value = tint
+    } catch {
+      // 取色失败沿用兜底色
+    }
+  })()
+}
+
 const baseGroups = ref<LyricGroup[]>([])
 /** 应用歌词偏移后的时间轴：偏移 > 0 = 歌词提前显示。
     高亮、逐字加深、点击跳播共用这份平移后的时间，保证三者的语义一致。 */
@@ -129,12 +174,18 @@ const groups = computed<LyricGroup[]>(() =>
 const loading = ref(false)
 /** 歌词加载完成标记（有无歌词都置 true），飞入动画据此等布局稳定 */
 const lyricsSettled = ref(false)
-/** 切歌切换动画开关 */
-const switching = ref(false)
+/** 切歌「浪涌」过渡：out=浪头扫过前内容依次沉没，in=浪尾过后依次浮出。
+    epoch 防快速连切串台：只有当前代的定时器能推进相位。 */
+type WavePhase = 'idle' | 'out' | 'in'
+const wavePhase = ref<WavePhase>('idle')
+const waveColors = ref<{ c1: string; c2: string; c3: string } | null>(null)
 /** 歌词滚动容器（须在 watch 前声明，避免 immediate 访问时 TDZ） */
 const scroller = ref<HTMLElement | null>(null)
-/** 切歌淡出起始时刻（须在 watch 前声明） */
+/** 浪涌出口阶段起始时刻（须在 watch 前声明） */
 let switchStart = 0
+let waveEpoch = 0
+let waveInTimer = 0
+let waveIdleTimer = 0
 /** 是否首次挂载：首次打开歌词页由 flyIn 接管入场，不触发「切歌」过场，避免与飞入状态冲突 */
 let currentPathFirstRun = true
 
@@ -144,19 +195,20 @@ watch(
     lyricsSettled.value = false
     const isFirstRun = currentPathFirstRun
     currentPathFirstRun = false
+    const myEpoch = ++waveEpoch
     if (!isFirstRun) {
-      switching.value = true // 切歌：内容淡出淡入
+      beginWaveOut(player.current?.coverId ?? null, myEpoch) // 切歌：浪涌过渡
       switchStart = performance.now()
     }
     baseGroups.value = []
     const song = player.current
     if (!path || !song) {
       lyricsSettled.value = true
-      switching.value = false // 未播放时不应停留在淡出态
+      wavePhase.value = 'idle' // 未播放时不应停留在过场态
       return
     }
     loading.value = true
-    // 关键：不要 scrollTo(0)。歌词此时仍透明（flyIn/switching 控制），
+    // 关键：不要 scrollTo(0)。歌词此时仍透明（flyIn/浪涌控制），
     // 但 scrollTop=0 会导致歌词可见时显示在第一行，与 flyIn 落地后的 scrollToActive
     // 形成「从 0 跳到活动行」的明显跳变。先留默认位置，最后统一处理。
 
@@ -177,11 +229,17 @@ watch(
     scrollToActive(false)
     // 保证入场阶段真正可见（至少 640ms 与封面滑入对齐）再归位，
     // 切歌才有完整过场；少于 640ms 就延后到刚好 640ms
-    if (isFirstRun) return // 首次挂载：不停留在切换态，直接就位
+    if (isFirstRun) return // 首次挂载：由 flyIn 接管入场，不跑浪涌
     const elapsed = performance.now() - switchStart
-    window.setTimeout(() => {
-      switching.value = false
-    }, Math.max(0, 640 - elapsed))
+    window.clearTimeout(waveInTimer)
+    waveInTimer = window.setTimeout(() => {
+      if (myEpoch !== waveEpoch) return
+      wavePhase.value = 'in'
+      window.clearTimeout(waveIdleTimer)
+      waveIdleTimer = window.setTimeout(() => {
+        if (myEpoch === waveEpoch) wavePhase.value = 'idle'
+      }, WAVE_ENTER_MAX_DELAY + WAVE_ENTER_MS + 80)
+    }, Math.max(0, WAVE_OUT_MS - elapsed))
   },
   { immediate: true },
 )
@@ -777,7 +835,7 @@ onMounted(() => {
   <div
     class="lyrics-full"
     ref="pageEl"
-    :class="{ closing, 'fly-active': flyActive, switching }"
+    :class="{ closing, 'fly-active': flyActive, 'wave-out': wavePhase === 'out', 'wave-in': wavePhase === 'in' }"
     :style="lyricVars"
     @mousemove="onPageMouseMove"
   >
@@ -796,6 +854,9 @@ onMounted(() => {
       :class="`flow-${i}`"
       :style="{ '--fc': c }"
     />
+
+    <!-- 切歌浪涌：新封面主色色浪横扫全页（纯 transform/opacity 合成器动画） -->
+    <div v-if="wavePhase !== 'idle'" class="wave-sweep" :style="waveVars" aria-hidden="true" />
 
     <!-- 右上角工具组：歌词设置（字号，后续可扩展） + 退出 -->
     <div class="top-tools">
@@ -836,7 +897,7 @@ onMounted(() => {
     </div>
 
     <!-- 双栏布局：左栏信息+控制，右栏歌词 -->
-    <div class="layout" :class="{ switching, 'fly-active': flyActive }">
+    <div class="layout" :class="{ 'fly-active': flyActive }">
       <aside class="info-col">
         <div class="stack">
         <header class="track-head">
@@ -1002,10 +1063,16 @@ onMounted(() => {
   }
 }
 
-/* 飞入/切歌过场期间暂停背景呼吸，避免呼吸与过场动画叠加抢帧（单层已很轻，此为双保险） */
+/* 飞入/切歌过场期间暂停背景呼吸，避免呼吸与过场动画叠加抢帧（单层已很轻，此为双保险）；
+   浪涌出口阶段环境光同步压暗，给色浪让出注意力 */
 .lyrics-full.fly-active .bg-ambient,
-.lyrics-full.switching .bg-ambient {
+.lyrics-full.wave-out .bg-ambient,
+.lyrics-full.wave-in .bg-ambient {
   animation-play-state: paused;
+}
+
+.lyrics-full.wave-out .bg-ambient {
+  opacity: 0.35;
 }
 
 /* ---------- 封面明亮色流光：radial 柔光圆斑缓慢漂移（只动 transform，无 filter），
@@ -1044,10 +1111,20 @@ onMounted(() => {
   to { transform: translate(-8vw, -6vh) scale(0.92); }
 }
 
-/* 飞入/切歌过场期间暂停背景呼吸与流光漂移，避免动画叠加抢帧 */
+/* 飞入/切歌过场期间暂停背景呼吸与流光漂移，避免动画叠加抢帧；
+   浪涌出口阶段流光压暗，浪头过后恢复（颜色已随新封面切换） */
 .lyrics-full.fly-active .flow,
-.lyrics-full.switching .flow {
+.lyrics-full.wave-out .flow,
+.lyrics-full.wave-in .flow {
   animation-play-state: paused;
+}
+
+.flow {
+  transition: opacity 240ms var(--ease-out);
+}
+
+.lyrics-full.wave-out .flow {
+  opacity: 0.2;
 }
 
 /* 底部稍压暗，保证迷你条与歌词可读 —— 已在 palette.renderAmbientUrl 烘焙进图内，无需单独压暗层 */
@@ -1124,12 +1201,7 @@ onMounted(() => {
   transition: transform 640ms var(--ease-out), opacity 460ms var(--ease-out);
 }
 
-.layout.switching .cover-main {
-  transform: scale(0.96);
-  opacity: 0.55;
-}
-
-/* 封面飞入期间：封面不参与切歌淡入淡出（与飞行叠加会"顿一下"）；
+/* 封面飞入期间：封面不参与切歌浪涌（与飞行动画叠加会互相抢戏）；
    视差 translate 同步冻结归零——克隆落点按未偏移位置计算，两边必须一致 */
 .layout.fly-active .cover-main {
   opacity: 1;
@@ -1531,17 +1603,97 @@ onMounted(() => {
   display: none;
 }
 
-.layout.switching .lyric-scroll,
-.layout.switching .no-lyrics-hint {
-  opacity: 0.55;
-  transform: translateY(22px);
-}
-
 .lyric-inner {
   padding: 42vh 0 50vh;
   display: flex;
   flex-direction: column;
   gap: 34px;
+}
+
+/* ---------- 切歌「浪涌」：新封面主色色浪横扫全页，内容浪前沉没、浪后浮出 ----------
+   全程 transform/opacity 合成器动画。浪层 z-index 高于内容但低于工具；
+   沉没关键帧只写 to（从中断处续动）、浮出只写 from（到中断处续动），
+   快速连切时相位重入不会让半透明内容跳回满透明度。 */
+.wave-sweep {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: linear-gradient(
+    102deg,
+    transparent 6%,
+    var(--w1, var(--ambient-fallback)) 30%,
+    var(--w2, var(--w1, var(--ambient-fallback))) 46%,
+    var(--w3, var(--w2, var(--w1, var(--ambient-fallback)))) 58%,
+    color-mix(in srgb, var(--w3, var(--ambient-fallback)) 30%, #fff) 66%,
+    transparent 92%
+  );
+  animation: wave-sweep 600ms cubic-bezier(0.5, 0.08, 0.34, 0.96) both;
+}
+
+@keyframes wave-sweep {
+  0% {
+    transform: translateX(-118%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.55;
+  }
+  85% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateX(118%);
+    opacity: 0;
+  }
+}
+
+@keyframes wave-sink {
+  to {
+    opacity: 0;
+    transform: translateY(16px) scale(0.99);
+  }
+}
+
+@keyframes wave-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+.wave-out .track-head {
+  animation: wave-sink 200ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+.wave-out .cover-main {
+  animation: wave-sink 200ms cubic-bezier(0.4, 0, 1, 1) 45ms both;
+}
+.wave-out .progress-block {
+  animation: wave-sink 200ms cubic-bezier(0.4, 0, 1, 1) 90ms both;
+}
+.wave-out .controls {
+  animation: wave-sink 200ms cubic-bezier(0.4, 0, 1, 1) 120ms both;
+}
+.wave-out .lyric-scroll,
+.wave-out .no-lyrics-hint {
+  animation: wave-sink 200ms cubic-bezier(0.4, 0, 1, 1) 70ms both;
+}
+
+.wave-in .track-head {
+  animation: wave-rise 240ms var(--ease-out) 30ms both;
+}
+.wave-in .cover-main {
+  animation: wave-rise 240ms var(--ease-out) 80ms both;
+}
+.wave-in .progress-block {
+  animation: wave-rise 240ms var(--ease-out) 120ms both;
+}
+.wave-in .controls {
+  animation: wave-rise 240ms var(--ease-out) 150ms both;
+}
+.wave-in .lyric-scroll,
+.wave-in .no-lyrics-hint {
+  animation: wave-rise 240ms var(--ease-out) 180ms both;
 }
 
 /* 景深：只用 opacity + transform 表达远近，不用 filter: blur()（多行同时过渡会掉帧）。
@@ -1644,6 +1796,14 @@ onMounted(() => {
   .cover-main :deep(.cover-fallback) {
     transform: none;
     transition: none;
+  }
+  /* 浪涌降级：不扫浪、不编排，内容直接切换 */
+  .wave-sweep {
+    display: none;
+  }
+  .wave-out :is(.track-head, .cover-main, .progress-block, .controls, .lyric-scroll, .no-lyrics-hint),
+  .wave-in :is(.track-head, .cover-main, .progress-block, .controls, .lyric-scroll, .no-lyrics-hint) {
+    animation: none;
   }
 }
 </style>
