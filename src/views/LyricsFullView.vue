@@ -156,6 +156,8 @@ watch(
     }
     loading.value = false
     lyricsSettled.value = true
+    // 歌词就位后立即按当前播放位置定位高亮行（打开页面时可能处于暂停态，rAF 不会跑）
+    activeIdx.value = computeActiveIdx(getAudio().currentTime)
     // 歌词已就位但仍透明——先把视口定位到当前行（不渲染过程、无视觉跳变），
     // 等切换动画完成再让用户看到歌词时，已经在正确位置。
     await nextTick()
@@ -183,10 +185,12 @@ function parseEmbeddedLyrics(text: string): LyricGroup[] {
     .map((l) => ({ time: -1, texts: [l] }))
 }
 
-/* 当前行：最后一个 time <= currentTime 的组；无时间轴的静态歌词不高亮 */
-const activeIdx = computed(() => {
+/* 当前行：由 rAF 采样时钟统一驱动（与逐字进度同一时间源，行切换与逐字不会错位）。
+   无时间轴的静态歌词不高亮不递减。 */
+const activeIdx = ref(-1)
+
+function computeActiveIdx(t: number): number {
   if (groups.value.length === 0 || groups.value[0].time < 0) return -1
-  const t = player.currentTime
   let lo = 0
   let hi = groups.value.length - 1
   let ans = -1
@@ -200,7 +204,7 @@ const activeIdx = computed(() => {
     }
   }
   return ans
-})
+}
 
 /* 自动居中滚动（活动行保持在视口上 1/3 处，符合截图观感） */
 const lineEls = ref<(HTMLElement | null)[]>([])
@@ -289,11 +293,13 @@ const lineProgress = ref(100)
 let lyricRaf = 0
 
 function tickLyric() {
-  const i = activeIdx.value
-  if (i >= 0 && groups.value[i]?.time >= 0) {
+  const t = getAudio().currentTime
+  const i = computeActiveIdx(t)
+  if (i !== activeIdx.value) activeIdx.value = i
+  if (i >= 0) {
     const startT = groups.value[i].time
     const endT = groups.value[i + 1]?.time ?? startT + 8
-    const p = (getAudio().currentTime - startT) / Math.max(0.5, endT - startT)
+    const p = (t - startT) / Math.max(0.5, endT - startT)
     lineProgress.value = Math.min(1, Math.max(0, p)) * 100
   }
   lyricRaf = requestAnimationFrame(tickLyric)
@@ -310,6 +316,15 @@ watch([() => player.playing, () => ui.lyricsOpen], syncLyricRaf, { immediate: tr
 watch(activeIdx, () => {
   lineProgress.value = 0 // 换行：进度归零，避免新行开场即满
 })
+// 暂停态的兜底：rAF 停转时靠 timeupdate 维持行高亮（拖拽进度/暂停后 seek）
+watch(
+  () => player.currentTime,
+  (t) => {
+    if (lyricRaf) return // rAF 运行中以此为准
+    const i = computeActiveIdx(t)
+    if (i !== activeIdx.value) activeIdx.value = i
+  },
+)
 
 /* ---------- 鼠标视差 + 封面倾斜（浅色页面的纵深呼吸感） ---------- */
 const pageEl = ref<HTMLElement | null>(null)
@@ -696,12 +711,44 @@ onMounted(() => {
       :style="{ backgroundImage: `url(${ambientUrl})` }"
     />
     <div
-      v-for="(c, i) in flowColors"
+      v-for="(c, i) in flowColors.slice(0, 2)"
       :key="i"
       class="flow"
       :class="`flow-${i}`"
       :style="{ '--fc': c }"
     />
+
+    <!-- 右上角工具组：歌词设置（字号，后续可扩展） + 退出 -->
+    <div class="top-tools">
+      <div class="fs-picker" :class="{ open: fsOpen }">
+        <button
+          class="tool-btn"
+          :class="{ 'is-active': fsOpen }"
+          title="歌词设置"
+          @click="fsOpen = !fsOpen"
+        >
+          <AppIcon name="settings" :size="19" />
+        </button>
+        <Transition name="fs-pop">
+          <div v-if="fsOpen" class="fs-menu">
+            <div class="fs-heading">歌词字号</div>
+            <button
+              v-for="step in LYRIC_FS_STEPS"
+              :key="step.id"
+              class="fs-item"
+              :class="{ current: settings.lyricFontSize === step.id }"
+              @click="pickFontSize(step.id)"
+            >
+              <span class="fs-dot" :style="{ width: `${step.main / 3.2}px`, height: `${step.main / 3.2}px` }" />
+              <span class="fs-label">{{ step.label }}</span>
+            </button>
+          </div>
+        </Transition>
+      </div>
+      <button class="tool-btn" title="退出全屏歌词" @click="closeWithFade">
+        <AppIcon name="close" :size="19" />
+      </button>
+    </div>
 
     <!-- 双栏布局：左栏信息+控制，右栏歌词 -->
     <div class="layout" :class="{ switching, 'fly-active': flyActive }">
@@ -751,6 +798,9 @@ onMounted(() => {
           </div>
 
           <div class="controls">
+            <button class="ctrl-btn ghost" :title="modeMeta.label" @click="cycleMode">
+              <AppIcon :name="modeMeta.icon" :size="20" />
+            </button>
             <button class="ctrl-btn" title="上一曲" @click="player.prev()">
               <AppIcon name="prev" :size="24" />
             </button>
@@ -764,15 +814,9 @@ onMounted(() => {
             <button class="ctrl-btn" title="下一曲" @click="player.next()">
               <AppIcon name="next" :size="24" />
             </button>
-          </div>
-
-          <div class="sub-row">
-            <button class="sub-btn mode" :title="modeMeta.label" @click="cycleMode">
-              <AppIcon :name="modeMeta.icon" :size="17" />
-            </button>
             <div class="volume-wrap">
-              <button class="sub-btn" :title="`音量 ${player.volume}%`" @click="player.toggleMute()">
-                <AppIcon :name="player.volume === 0 ? 'volumeMute' : 'volume'" :size="17" />
+              <button class="ctrl-btn ghost" :title="`音量 ${player.volume}%`" @click="player.toggleMute()">
+                <AppIcon :name="player.volume === 0 ? 'volumeMute' : 'volume'" :size="20" />
               </button>
               <input
                 class="volume-slider"
@@ -785,30 +829,6 @@ onMounted(() => {
                 @input="(e) => player.setVolume(Number((e.target as HTMLInputElement).value))"
               />
             </div>
-            <div class="fs-picker" :class="{ open: fsOpen }">
-              <button
-                class="sub-btn"
-                :class="{ 'is-active': fsOpen }"
-                title="调节歌词字号"
-                @click="fsOpen = !fsOpen"
-              >
-                <span class="aa">Aa</span>
-              </button>
-              <Transition name="fs-pop">
-                <div v-if="fsOpen" class="fs-menu">
-                  <button
-                    v-for="step in LYRIC_FS_STEPS"
-                    :key="step.id"
-                    class="fs-item"
-                    :class="{ current: settings.lyricFontSize === step.id }"
-                    @click="pickFontSize(step.id)"
-                  >
-                    <span class="fs-dot" :style="{ width: `${step.main / 3.2}px`, height: `${step.main / 3.2}px` }" />
-                    <span class="fs-label">{{ step.label }}</span>
-                  </button>
-                </div>
-              </Transition>
-            </div>
           </div>
         </div>
       </aside>
@@ -816,9 +836,6 @@ onMounted(() => {
       <section class="lyric-col">
         <div v-if="hasLyrics" ref="scroller" class="lyric-scroll" @scroll.passive="onLyricScroll">
           <div class="lyric-inner">
-            <div class="lyric-line lyric-head">
-              {{ player.current?.title ?? '' }} - {{ player.current?.artist ?? '' }}
-            </div>
             <div
               v-for="(g, i) in groups"
               :key="i"
@@ -844,11 +861,6 @@ onMounted(() => {
         </div>
       </section>
     </div>
-
-    <!-- 退出：页面右上角 -->
-    <button class="close-btn" title="退出全屏歌词" @click="closeWithFade">
-      <AppIcon name="close" :size="20" />
-    </button>
   </div>
 </template>
 
@@ -913,32 +925,26 @@ onMounted(() => {
    鼠标视差经独立的 translate 属性叠加，二者互不打架 ---------- */
 .flow {
   position: absolute;
-  width: 46vw;
-  height: 46vw;
+  width: 40vw;
+  height: 40vw;
   border-radius: 50%;
   pointer-events: none;
   background: radial-gradient(closest-side, var(--fc), transparent 70%);
-  opacity: 0.32;
+  opacity: 0.16;
   will-change: transform;
   translate: calc(var(--mx, 0) * 12px) calc(var(--my, 0) * 9px);
 }
 
 .flow-0 {
-  top: -12%;
-  left: -10%;
+  top: -14%;
+  left: -12%;
   animation: flow-a 38s ease-in-out infinite alternate;
 }
 
 .flow-1 {
-  bottom: -16%;
-  right: 4%;
+  bottom: -20%;
+  right: -8%;
   animation: flow-b 46s ease-in-out infinite alternate;
-}
-
-.flow-2 {
-  top: 28%;
-  left: 40%;
-  animation: flow-c 52s ease-in-out infinite alternate;
 }
 
 @keyframes flow-a {
@@ -951,11 +957,6 @@ onMounted(() => {
   to { transform: translate(-8vw, -6vh) scale(0.92); }
 }
 
-@keyframes flow-c {
-  from { transform: translate(0, 0) scale(0.95); }
-  to { transform: translate(6vw, -8vh) scale(1.12); }
-}
-
 /* 飞入/切歌过场期间暂停背景呼吸与流光漂移，避免动画叠加抢帧 */
 .lyrics-full.fly-active .flow,
 .lyrics-full.switching .flow {
@@ -964,21 +965,25 @@ onMounted(() => {
 
 /* 底部稍压暗，保证迷你条与歌词可读 —— 已在 palette.renderAmbientUrl 烘焙进图内，无需单独压暗层 */
 
-/* ---------- 双栏主体：左栏信息+控制（约45%），右栏歌词 ---------- */
+/* ---------- 双栏主体：整组水平居中，两栏间距受控 ---------- */
 .layout {
   position: relative;
   z-index: 1;
   flex: 1;
   min-height: 0;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(32px, 5vw, 96px);
+  padding: 0 4vw;
 }
 
 .info-col {
-  --cover-w: min(54vh, 36vw);
+  --cover-w: min(54vh, 34vw);
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  padding: 32px 8px 28px 36px;
+  padding: 32px 0 28px;
 }
 
 /* 内容栈：与封面同宽 —— 歌名/歌手与封面左缘严格对齐；整组在栏内垂直居中聚拢 */
@@ -1155,12 +1160,12 @@ onMounted(() => {
   font-weight: 600;
 }
 
-/* ---------- 大号三键控制（播放键实心圆底，更稳重） ---------- */
+/* ---------- 大号三键控制（播放键实心圆底，更稳重；模式/音量分列左右） ---------- */
 .controls {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 24px;
+  gap: 14px;
   margin-top: 22px;
 }
 
@@ -1174,6 +1179,16 @@ onMounted(() => {
   color: var(--lyric-control);
   transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out),
     transform var(--dur-fast) var(--ease-spring), box-shadow 0.2s var(--ease-out);
+}
+
+.ctrl-btn.ghost {
+  width: 40px;
+  height: 40px;
+}
+
+.volume-wrap {
+  display: flex;
+  align-items: center;
 }
 
 .ctrl-btn:hover {
@@ -1203,47 +1218,7 @@ onMounted(() => {
   transform: scale(0.95);
 }
 
-/* ---------- 左栏小按钮行：播放模式 / 音量 / 字号 ---------- */
-.sub-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 22px;
-  margin-top: 20px;
-}
-
-.sub-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  color: var(--lyric-control);
-  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out),
-    transform var(--dur-fast) var(--ease-spring);
-}
-
-.sub-btn:hover {
-  color: var(--lyric-control-hover);
-  background: var(--lyric-control-bg);
-}
-
-.sub-btn:active {
-  transform: scale(0.9);
-}
-
-.sub-btn.mode:active {
-  transform: scale(0.9) rotate(-14deg);
-}
-
-.sub-btn .aa {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  line-height: 1;
-}
-
+/* 音量滑杆（hover 展开） */
 .volume-wrap {
   display: flex;
   align-items: center;
@@ -1288,18 +1263,55 @@ onMounted(() => {
   transform: scale(1.2);
 }
 
-/* 字号菜单：自底向上弹出 */
+/* ---------- 右上角工具组：歌词设置（字号，可扩展） + 退出 ---------- */
+.top-tools {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--lyric-control);
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+
+.tool-btn:hover {
+  color: var(--lyric-control-hover);
+  background: var(--lyric-control-bg);
+}
+
+.tool-btn:active {
+  transform: scale(0.92);
+}
+
+.tool-btn :deep(svg) {
+  transition: transform var(--dur-med) var(--ease-spring);
+}
+
+.tool-btn:hover :deep(svg) {
+  transform: rotate(90deg);
+}
+
 .fs-picker {
   position: relative;
 }
 
 .fs-menu {
   position: absolute;
-  bottom: calc(100% + 10px);
-  left: 50%;
-  margin-left: -64px;
-  min-width: 128px;
-  padding: 6px;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 148px;
+  padding: 8px 6px 6px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(32px) saturate(1.4);
@@ -1309,7 +1321,14 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  transform-origin: bottom center;
+  transform-origin: top right;
+}
+
+.fs-heading {
+  padding: 2px 10px 6px;
+  font-size: 11px;
+  color: var(--lyric-time);
+  letter-spacing: 0.5px;
 }
 
 .fs-item {
@@ -1359,45 +1378,18 @@ onMounted(() => {
 .fs-pop-enter-from,
 .fs-pop-leave-to {
   opacity: 0;
-  transform: scale(0.92) translateY(4px);
+  transform: scale(0.92) translateY(-4px);
 }
 
-/* 退出按钮：页面右上角 */
-.close-btn {
-  position: absolute;
-  top: 18px;
-  right: 22px;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  color: var(--lyric-control);
-  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out);
-}
-
-.close-btn:hover {
-  color: var(--lyric-control-hover);
-  background: var(--lyric-control-bg);
-}
-
-.close-btn :deep(svg) {
-  transition: transform var(--dur-med) var(--ease-spring);
-}
-
-.close-btn:hover :deep(svg) {
-  transform: rotate(90deg);
-}
+/* 歌词设置/退出：右上角工具组（.top-tools） */
 
 /* ---------- 右栏歌词 ---------- */
 .lyric-col {
-  flex: 1;
+  flex: 0 1 min(44vw, 720px);
   min-width: 0;
   position: relative;
   display: flex;
-  padding: 0 3vw 0 0;
+  padding: 0;
 }
 
 .lyric-scroll {

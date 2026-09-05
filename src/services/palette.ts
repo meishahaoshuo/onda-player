@@ -179,8 +179,8 @@ export async function extractBrightColors(blob: Blob): Promise<string[]> {
         return Math.hypot(Number(m[0]) - c.r, Number(m[1]) - c.g, Number(m[2]) - c.b) < 60
       })
       if (dup) continue
-      // 混白 12% 提亮，让浅色底上的流光更轻盈
-      const lift = (v: number) => Math.round(v + (255 - v) * 0.12)
+      // 混白 25% 提亮：浅色底上的流光要"点缀"而非"色块"
+      const lift = (v: number) => Math.round(v + (255 - v) * 0.25)
       out.push(`rgb(${lift(c.r)},${lift(c.g)},${lift(c.b)})`)
       if (out.length >= 3) break
     }
