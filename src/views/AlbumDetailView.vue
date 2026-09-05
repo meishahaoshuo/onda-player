@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import QualityBadge from '@/components/QualityBadge.vue'
-import { renderAmbientUrl } from '@/services/palette'
+import { extractBrightColors } from '@/services/palette'
 import { playAlbumEnter, playAlbumExit } from '@/services/pageTransition'
 import { paletteCache } from '@/services/paletteCache'
 import { useLibraryStore } from '@/stores/library'
@@ -53,25 +53,26 @@ async function close() {
   closing.value = false
 }
 
-/* 封面取色环境光晕：先用列表页预取的主色铺底（开场即用），落定后换成预烘焙多焦点图 */
+/* 头部背景：浅色处理 —— 一层很淡的封面主色铺底 + 2-3 个明亮饱和色流光圆斑
+   （palette.extractBrightColors，混白提亮），替代原先压暗渐变 0.55 的重色块 */
 const ambientBase = ref<string>('transparent')
-const ambientUrl = ref<string | null>(null)
-const ambientCache = new Map<string, string>()
+const flowColors = ref<string[]>([])
+const flowCache = new Map<string, string[]>()
 
 watch(
   () => props.albumKey,
   async (key) => {
     const album = library.albums.find((a) => a.key === key)
     ambientBase.value = paletteCache.colorOf(album?.coverId)
-    ambientUrl.value = ambientCache.get(key) ?? null
-    if (!album?.coverId || ambientCache.has(key)) return
+    flowColors.value = flowCache.get(key) ?? []
+    if (!album?.coverId) return
     try {
       const url = await library.coverUrl(album.coverId)
       if (!url) return
       const blob = await (await fetch(url)).blob()
-      const baked = await renderAmbientUrl(blob)
-      ambientCache.set(key, baked)
-      if (props.albumKey === key) ambientUrl.value = baked
+      const colors = await extractBrightColors(blob).catch(() => [] as string[])
+      flowCache.set(key, colors)
+      if (props.albumKey === key) flowColors.value = colors
     } catch {
       /* 取色失败则保留主色铺底 */
     }
@@ -113,14 +114,16 @@ function playSong(song: SongRecord) {
       <AppIcon name="close" :size="14" /> 返回专辑列表
     </button>
 
-    <header class="album-header" :class="{ ambient: ambientUrl }">
-      <!-- 封面取色环境光晕 -->
+    <header class="album-header">
+      <!-- 封面主色淡铺底 -->
+      <div class="header-ambient" :style="{ backgroundColor: ambientBase }" />
+      <!-- 封面明亮色流光圆斑 -->
       <div
-        class="header-ambient"
-        :style="{
-          backgroundColor: ambientBase,
-          backgroundImage: ambientUrl ? `url(${ambientUrl})` : 'none',
-        }"
+        v-for="(c, i) in flowColors"
+        :key="i"
+        class="flow"
+        :class="`af-${i}`"
+        :style="{ '--fc': c }"
       />
       <CoverImage :cover-id="album.coverId" :size="192" class="header-cover" hires />
       <div class="header-info">
@@ -216,14 +219,56 @@ function playSong(song: SongRecord) {
   overflow: hidden;
 }
 
-/* 环境光晕：模糊已在 palette.renderAmbientUrl 里烘焙进图内，这里只做 cover 拉伸，
-   不再叠一层全屏 blur(56px) 实时栅格化（多个全屏 blur 图层并行会拖垮过渡帧率）。 */
+/* 头部背景层 1：封面主色淡铺底（透明度随 blooming 淡入，仅 0.14，不再是重色块） */
 .header-ambient {
   position: absolute;
   inset: -40px;
-  background-size: cover;
-  background-position: center;
   opacity: 0;
+}
+
+/* 头部背景层 2：封面明亮色流光圆斑（radial 柔光、只动 transform） */
+.flow {
+  position: absolute;
+  width: clamp(280px, 30vw, 460px);
+  height: clamp(280px, 30vw, 460px);
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, var(--fc), transparent 70%);
+  opacity: 0;
+  will-change: transform;
+}
+
+.flow-0 {
+  top: -55%;
+  left: -8%;
+  animation: af-a 36s ease-in-out infinite alternate;
+}
+
+.flow-1 {
+  top: -30%;
+  right: -6%;
+  animation: af-b 44s ease-in-out infinite alternate;
+}
+
+.flow-2 {
+  bottom: -70%;
+  left: 38%;
+  animation: af-c 52s ease-in-out infinite alternate;
+}
+
+@keyframes af-a {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(4vw, 3vh) scale(1.15); }
+}
+
+@keyframes af-b {
+  from { transform: translate(0, 0) scale(1.06); }
+  to { transform: translate(-4vw, 4vh) scale(0.94); }
+}
+
+@keyframes af-c {
+  from { transform: translate(0, 0) scale(0.95); }
+  to { transform: translate(-5vw, 5vh) scale(1.1); }
 }
 
 .header-cover {
@@ -398,13 +443,18 @@ function playSong(song: SongRecord) {
   opacity: 1;
 }
 
-/* 环境光晕随推进同步晕开（开场即用预取主色，不再等封面落定） */
-.album-detail .header-ambient {
+/* 背景层随推进同步淡入（铺底 0.14 + 流光 0.26，浅色点缀不再重） */
+.album-detail .header-ambient,
+.album-detail .flow {
   transition: opacity 380ms var(--ease-out);
 }
 
 .album-detail.blooming .header-ambient {
-  opacity: 0.55;
+  opacity: 0.14;
+}
+
+.album-detail.blooming .flow {
+  opacity: 0.26;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -417,7 +467,12 @@ function playSong(song: SongRecord) {
     transition: none;
   }
   .album-detail .header-ambient {
-    opacity: 0.55;
+    opacity: 0.14;
+    transition: none;
+  }
+  .album-detail .flow {
+    opacity: 0.26;
+    animation: none;
     transition: none;
   }
 }
