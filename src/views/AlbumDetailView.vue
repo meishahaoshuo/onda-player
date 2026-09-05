@@ -183,6 +183,13 @@ function playSong(song: SongRecord) {
   gap: 20px;
 }
 
+/* 本组件根同时是 App 传入的 .detail-layer 滚动层（纵向 flex + overflow-y:auto）。
+   flex 子项默认 flex-shrink:1，歌曲很多、内容超高时头部会被压缩，
+   再被 .album-header 自己的 overflow:hidden 裁掉封面顶部——必须禁止收缩。 */
+.album-detail > * {
+  flex-shrink: 0;
+}
+
 .back-btn {
   display: inline-flex;
   align-items: center;
