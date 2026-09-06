@@ -60,6 +60,10 @@ interface CollapseRecord {
 }
 
 let origin: Origin | null = null
+/** 本次编排的网格/内容选择器：专辑、艺术家、歌单共用编排器时由 beginAlbumEnter 传入 */
+let activeCardSel = '.album-card, .artist-card'
+let activeGridSel = '.album-grid'
+let waveSel = { info: '.header-info', rows: '.track-row, .disc-title' }
 const gridRecs = new Map<HTMLElement, CollapseRecord>()
 /** 被点击卡片的淡出动画（它的封面已交给飞行克隆，本体让位） */
 let originCardEl: HTMLElement | null = null
@@ -91,7 +95,7 @@ function track<T extends Animation>(anim: T): T {
 /** 强制复位网格卡片：取消元素上的一切动画（含孤儿 fill）并清掉行内残留。
     在「开始新过渡」与「强制清理」时调用，保证卡片回到自然态 —— 先量后动永远成立。 */
 function resetGridCards(): void {
-  for (const el of document.querySelectorAll<HTMLElement>('.album-card, .artist-card')) {
+  for (const el of document.querySelectorAll<HTMLElement>(activeCardSel)) {
     for (const a of el.getAnimations()) a.cancel()
     el.style.transform = ''
     el.style.opacity = ''
@@ -151,9 +155,18 @@ export function beginAlbumEnter(o: {
   click: { x: number; y: number }
   albumKey: string
   coverId: string | null
+  /** 网格容器/卡片选择器（歌单等复用时传入） */
+  gridSel?: string
+  cardSel?: string
+  /** 详情内容波前选择器：信息区与行 */
+  waveInfo?: string
+  waveRows?: string
 }): void {
   const ui = useUiStore()
   if (ui.dolly !== 'idle') return // 过渡进行中：忽略连点
+  activeGridSel = o.gridSel ?? '.album-grid'
+  activeCardSel = o.cardSel ?? '.album-card, .artist-card'
+  waveSel = { info: o.waveInfo ?? '.header-info', rows: o.waveRows ?? '.track-row, .disc-title' }
   epoch++ // 开启新代际：上一段未完成的异步续段（若有）就此作废
   // 先强制复位所有网格卡片（清掉磁吸残留与任何孤儿动画），再测量 —— 先量后动永远成立
   resetGridCards()
@@ -178,12 +191,12 @@ export function beginAlbumEnter(o: {
 
 /** 周边卡片被吸入点击点：越近越先被吞，带一点旋转（被"拽"进去的失控感） */
 function collapseGrid(cardEl: HTMLElement, click: { x: number; y: number }) {
-  const grid = cardEl.closest('.album-grid')
+  const grid = cardEl.closest(activeGridSel)
   if (!grid) return
   const vw = window.innerWidth
   const vh = window.innerHeight
   let n = 0
-  for (const card of grid.querySelectorAll<HTMLElement>('.album-card')) {
+  for (const card of grid.querySelectorAll<HTMLElement>(activeCardSel)) {
     if (card === cardEl) continue // 被点击的卡片交给飞行克隆，不参与坍缩
     const r = card.getBoundingClientRect()
     const visible = r.bottom > -40 && r.top < vh + 40 && r.right > -40 && r.left < vw + 40
@@ -276,8 +289,8 @@ function planWave(root: HTMLElement, click: { x: number; y: number }) {
     }
   }
   pick('.back-btn', BASE_DELAY.back)
-  pick('.header-info', BASE_DELAY.header)
-  const rows = [...root.querySelectorAll<HTMLElement>('.track-row, .disc-title')]
+  pick(waveSel.info, BASE_DELAY.header)
+  const rows = [...root.querySelectorAll<HTMLElement>(waveSel.rows)]
   for (const el of rows.slice(0, MAX_WAVE_ROWS)) {
     waveEls.push({ el, delay: BASE_DELAY.row + Math.min(MAX_WAVE_DELAY, distance(box(el), click) / WAVE_SPEED) })
   }

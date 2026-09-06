@@ -5,7 +5,8 @@ import CollageCover from '@/components/CollageCover.vue'
 import SongList from '@/components/SongList.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import FrostedPanel from '@/components/FrostedPanel.vue'
-import { capturePageTransition, playPageTransition } from '@/services/legacyFlip'
+import { beginAlbumEnter, playAlbumEnter, playAlbumExit } from '@/services/pageTransition'
+import { useDragReorder } from '@/composables/useDragReorder'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { usePlaylistStore } from '@/stores/playlist'
@@ -18,6 +19,7 @@ import type { SongRecord } from '@/types'
 
 /**
  * 歌单页：歌单列表 / 歌单详情（播放、重命名、删除、添加歌曲、拖拽排序）
+ * 详情是覆盖层，列表网格常驻 —— 供「引力坍缩」过渡编排器做对称返回
  */
 const library = useLibraryStore()
 const player = usePlayerStore()
@@ -41,7 +43,10 @@ watch(
   () => plReveal.refresh(),
   { flush: 'post' },
 )
-onBeforeUnmount(() => plReveal.disconnect())
+onBeforeUnmount(() => {
+  plReveal.disconnect()
+  listDrag.dispose()
+})
 
 // 侧边栏在其他页面点击「新建歌单」时也会置位请求标记
 watch(
@@ -129,36 +134,46 @@ const cardCoverIds = computed(() => {
   return map
 })
 
-/* 共享元素过渡 + 内容错峰浮现 + 返回轻淡出 */
-const plRevealed = ref(false)
-const plClosing = ref(false)
+/* 「引力坍缩」过渡：进入由编排器接管（点击卡片时 beginAlbumEnter 记录原点），
+   返回对称反向；内容波前浮现由编排器驱动，不再需要 CSS 错峰 */
+const detailEl = ref<HTMLElement | null>(null)
 
 watch(
   current,
   async (pl) => {
-    plRevealed.value = false
-    plClosing.value = false
     if (!pl) return
     await nextTick()
-    await playPageTransition(document.querySelector<HTMLElement>('.playlist-detail .header-cover'))
-    plRevealed.value = true
+    await playAlbumEnter(detailEl.value)
   },
   { immediate: true, flush: 'post' },
 )
 
-function closePlaylist() {
-  if (plClosing.value || !current.value) return
-  plClosing.value = true
-  window.setTimeout(() => {
-    ui.closeDetail()
-    plClosing.value = false
-  }, 180)
+async function closePlaylist() {
+  if (!current.value || ui.dolly !== 'idle') return
+  // 编排器负责收尾（clearTransitionState / closeDetail / endDolly）；
+  // 无编排原点（如右键直接进入）时编排器内部走轻量路径
+  ui.beginDollyExit()
+  await playAlbumExit(detailEl.value)
 }
 
 function openPlaylist(p: { id: string }, e: MouseEvent) {
-  const cover = (e.currentTarget as HTMLElement).querySelector<HTMLElement>('img, .cover-fallback')
-  capturePageTransition(cover, { x: e.clientX, y: e.clientY })
-  ui.openDetail(p.id)
+  const card = e.currentTarget as HTMLElement
+  const cover = card.querySelector<HTMLElement>('.pl-cover img, .pl-cover .cover-fallback, img')
+  if (!cover) {
+    ui.openDetail(p.id)
+    return
+  }
+  beginAlbumEnter({
+    cardEl: card,
+    coverEl: cover,
+    click: { x: e.clientX, y: e.clientY },
+    albumKey: p.id,
+    coverId: cardCoverOverride.value.get(p.id) ?? null,
+    gridSel: '.pl-grid',
+    cardSel: '.pl-card',
+    waveInfo: '.pl-info',
+    waveRows: '.drag-row',
+  })
 }
 
 /* ---------- 新建 / 重命名 / 添加歌曲 ---------- */
@@ -270,61 +285,12 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
   void player.playSong(song, currentSongs.value)
 }
 
-/* ---------- 拖拽排序 ---------- */
-
-const dragIndex = ref<number | null>(null)
-/** 当前悬停的目标行（用于画插入指示线） */
-const dragOverIndex = ref<number | null>(null)
-/** 插入到目标行的上方还是下方：由指针在行内的纵向位置决定 */
-const dropAfter = ref(false)
-
-function onDragStart(i: number, e: DragEvent) {
-  dragIndex.value = i
-  // 让拖拽影像半透明，并告诉浏览器这是一次"移动"
-  if (e.dataTransfer) {
-    e.dataTransfer.effectAllowed = 'move'
-    // 部分浏览器要求设置了 data 才会触发 drop
-    e.dataTransfer.setData('text/plain', String(i))
-  }
-}
-
-function onDragOver(i: number, e: DragEvent) {
-  if (dragIndex.value === null) return
-  e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-  const row = e.currentTarget as HTMLElement
-  const rect = row.getBoundingClientRect()
-  // 指针过半 → 插到该行下方，否则插到上方
-  dropAfter.value = e.clientY - rect.top > rect.height / 2
-  dragOverIndex.value = i
-}
-
-function onDrop(i: number, e: DragEvent) {
-  e.preventDefault()
-  const from = dragIndex.value
-  if (current.value && from !== null && from !== i) {
-    // 计算真实落点：往上插就是 i，往下插就是 i+1；
-    // moveSong 内部按"先摘除再插入"处理，from < target 时索引要左移一位。
-    const target = dropAfter.value ? i + 1 : i
-    const adjusted = from < target ? target - 1 : target
-    if (adjusted !== from) playlistStore.moveSong(current.value.id, from, adjusted)
-  }
-  resetDrag()
-}
-
-/**
- * 关键：dragend 在"松手但没落在有效放置区"时也会触发，
- * 而 drop 不会。少了它，行会永久卡在半透明的拖拽态。
- */
-function onDragEnd() {
-  resetDrag()
-}
-
-function resetDrag() {
-  dragIndex.value = null
-  dragOverIndex.value = null
-  dropAfter.value = false
-}
+/* ---------- 拖拽排序：长按触发 + FLIP 让位，替代原生 HTML5 DnD ---------- */
+const listDrag = useDragReorder({
+  onReorder: (from, to) => {
+    if (current.value) playlistStore.moveSong(current.value.id, from, to)
+  },
+})
 
 function confirmRemove() {
   if (!current.value) return
@@ -334,8 +300,9 @@ function confirmRemove() {
 </script>
 
 <template>
-  <!-- 歌单详情 -->
-  <div v-if="current" class="playlist-detail" :class="{ revealed: plRevealed, closing: plClosing }">
+  <div class="playlists-root">
+  <!-- 歌单详情：覆盖层，网格常驻其下 -->
+  <div v-if="current" ref="detailEl" class="playlist-detail">
     <button class="back-btn" @click="closePlaylist">
       <AppIcon name="close" :size="14" /> 返回歌单列表
     </button>
@@ -388,15 +355,9 @@ function confirmRemove() {
         class="drag-row"
         :class="{
           playing: song.path === player.currentPath,
-          dragging: dragIndex === i,
-          'drop-before': dragOverIndex === i && !dropAfter && dragIndex !== i,
-          'drop-after': dragOverIndex === i && dropAfter && dragIndex !== i,
+          dragging: listDrag.draggingIndex.value === i,
         }"
-        draggable="true"
-        @dragstart="onDragStart(i, $event)"
-        @dragover="onDragOver(i, $event)"
-        @drop="onDrop(i, $event)"
-        @dragend="onDragEnd"
+        @pointerdown="listDrag.onItemPointerdown(i, $event)"
         @click="onPlay(song, $event)"
         @contextmenu.prevent="onRowMenu(song, $event)"
       >
@@ -404,7 +365,7 @@ function confirmRemove() {
         <CoverImage :cover-id="song.coverId" :size="36" data-flight-cover />
         <span class="drag-title">{{ song.title }}</span>
         <span class="drag-artist">{{ song.artist }}</span>
-        <span class="row-actions" @click.stop>
+        <span class="row-actions" @pointerdown.stop @click.stop>
           <button
             class="row-act"
             :class="{ active: favorites.has(song.path) }"
@@ -533,8 +494,8 @@ function confirmRemove() {
     </teleport>
   </div>
 
-  <!-- 歌单列表 -->
-  <div v-else ref="plHomeEl" class="playlist-home">
+  <!-- 歌单列表：网格常驻（v-show），供过渡编排器对称返回 -->
+  <div v-show="!current" ref="plHomeEl" class="playlist-home">
     <div class="toolbar">
       <button class="primary-btn" @click="showCreate = true">
         <AppIcon name="plus" :size="16" /> 新建歌单
@@ -581,18 +542,34 @@ function confirmRemove() {
       </div></Transition>
     </teleport>
   </div>
+</div>
 </template>
 
 <style scoped>
-.playlist-detail,
+.playlists-root {
+  position: relative;
+  height: 100%;
+}
+
 .playlist-home {
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
+/* 详情覆盖层：盖住常驻的列表网格，自带滚动 */
 .playlist-detail {
-  height: 100%;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg-base);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 24px;
 }
 
 .back-btn {
@@ -794,28 +771,10 @@ function confirmRemove() {
 }
 
 .drag-row.dragging {
-  opacity: 0.4;
-}
-
-/* 插入指示线：2px 品牌红贴在目标行的上/下边缘 */
-.drag-row.drop-before::before,
-.drag-row.drop-after::after {
-  content: '';
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--accent);
-  pointer-events: none;
-}
-
-.drag-row.drop-before::before {
-  top: -1px;
-}
-
-.drag-row.drop-after::after {
-  bottom: -1px;
+  background: var(--bg-hover);
+  box-shadow: var(--shadow-2);
+  cursor: grabbing;
+  z-index: 2;
 }
 
 .drag-handle {
@@ -1202,61 +1161,5 @@ function confirmRemove() {
   padding: 30px 0;
 }
 
-/* 共享元素过渡落定后的错峰浮现 + 返回轻淡出 */
-.playlist-detail {
-  transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
-}
-
-.playlist-detail.closing {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-.playlist-detail .back-btn,
-.playlist-detail .pl-header,
-.playlist-detail .drag-list,
-.playlist-detail .empty-hint {
-  opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 320ms var(--ease-out), transform 320ms var(--ease-out);
-}
-
-.playlist-detail.revealed .back-btn {
-  transition-delay: 40ms;
-}
-
-.playlist-detail.revealed .pl-header {
-  transition-delay: 80ms;
-}
-
-.playlist-detail.revealed .drag-list,
-.playlist-detail.revealed .empty-hint {
-  transition-delay: 120ms;
-}
-
-.playlist-detail.revealed .back-btn,
-.playlist-detail.revealed .pl-header,
-.playlist-detail.revealed .drag-list,
-.playlist-detail.revealed .empty-hint {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .playlist-detail {
-    transition: none;
-  }
-  .playlist-detail.closing {
-    transform: none;
-  }
-  .playlist-detail .back-btn,
-  .playlist-detail .pl-header,
-  .playlist-detail .drag-list,
-  .playlist-detail .empty-hint {
-    opacity: 1;
-    transform: none;
-    transition: none;
-    transition-delay: 0ms;
-  }
-}
+/* 详情内容浮现由「引力坍缩」编排器驱动（波前 WAAPI），无 CSS 初始隐藏 */
 </style>

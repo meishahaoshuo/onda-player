@@ -60,7 +60,8 @@ const sectionEl = ref<HTMLElement | null>(null)
    回来时（Transition enter 或同视图钻取返回）恢复。
    key：`view:<视图>|<detailKey>`；SongList/VirtualList 的内部滚动由组件自己记（list:*）。 */
 const scrollKey = (view: string, detail: string | null) => `view:${view}|${detail ?? ''}`
-const INLINE_DETAIL_VIEWS = new Set<string>(['playlists'])
+// 歌单详情已改为覆盖层（网格常驻），不再使用外层滚动记忆
+const INLINE_DETAIL_VIEWS = new Set<string>([])
 
 watch(
   [() => ui.activeView, () => ui.detailKey] as const,
