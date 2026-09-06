@@ -393,15 +393,15 @@ function confirmRemove() {
   <div class="playlists-root">
   <!-- 歌单详情：覆盖层，网格常驻其下 -->
   <div v-if="current" ref="detailEl" class="playlist-detail">
-    <button class="back-btn" @click="closePlaylist">
-      <AppIcon name="close" :size="14" /> 返回歌单列表
-    </button>
-
     <!-- 歌单间切换的过渡：与顶部板块切换同款动向（key 变化触发 out-in）；
          打开/关闭由外层 v-if 走引力坍缩编排，初始挂载不播 enter，不会双重动画 -->
     <Transition name="view" mode="out-in">
       <div :key="current.id" class="detail-inner">
     <header class="pl-header">
+      <!-- 返回歌单列表：悬停头部浮现 -->
+      <button class="header-close" title="返回歌单列表" aria-label="返回歌单列表" @click="closePlaylist">
+        <AppIcon name="close" :size="15" />
+      </button>
       <!-- 流光呼吸光斑（对齐专辑详情页头部） -->
       <div
         v-for="(c, i) in flowColors.slice(0, 2)"
@@ -719,20 +719,36 @@ function confirmRemove() {
   gap: 16px;
 }
 
-.back-btn {
-  display: inline-flex;
+/* 返回歌单列表：头部卡片右上角的隐藏式关闭钮，悬停/聚焦时浮现 */
+.header-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  align-self: flex-start;
-  font-size: 13px;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
   color: var(--text-secondary);
-  padding: 6px 10px;
-  border-radius: 6px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
 }
 
-.back-btn:hover {
-  background: var(--bg-hover);
+.pl-header:hover .header-close,
+.header-close:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.header-close:hover {
   color: var(--text-primary);
+  background: var(--bg-active);
 }
 
 .pl-header {
