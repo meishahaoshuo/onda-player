@@ -40,11 +40,12 @@ function loadLyricBlur(): boolean {
   return localStorage.getItem(LYRIC_BLUR_KEY) !== '0'
 }
 
-/** 歌词页控制组件风格：default 稳重 / minimal 简约（Apple Music 式小尺寸） */
-export type LyricControlsStyle = 'default' | 'minimal'
+/** 歌词页控制组件风格：default 稳重 / minimal 简约（Apple Music 式小尺寸）/ glass 玻璃拟态（磨砂圆底+品牌色播放键） */
+export type LyricControlsStyle = 'default' | 'minimal' | 'glass'
 
 function loadLyricControls(): LyricControlsStyle {
-  return localStorage.getItem(LYRIC_CTRL_KEY) === 'minimal' ? 'minimal' : 'default'
+  const raw = localStorage.getItem(LYRIC_CTRL_KEY)
+  return raw === 'minimal' || raw === 'glass' ? raw : 'default'
 }
 
 /** 启动时恢复上次队列（关闭则每次冷启动为空队列） */

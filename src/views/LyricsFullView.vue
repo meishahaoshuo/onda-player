@@ -34,55 +34,32 @@ const FLY_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
 /* ---------- 封面环境背景（单层预烘焙模糊图，避免多个全屏 blur 图层在飞入/切歌时并行栅格化） ---------- */
 
-/** 环境背景双层交叉淡化：layer 为当前层，prev 仅在切歌过渡期间保持可见，淡完退役。
-    首层等 revealAmbient（与封面飞入并行淡入）；色彩策略不变（同一套预烘焙/取色管线）。 */
-const ambientLayer = ref<{ url: string; visible: boolean } | null>(null)
-const ambientPrev = ref<{ url: string; visible: boolean } | null>(null)
+const ambientUrl = ref<string | null>(null)
+const ambientShown = ref(false)
 const ambientCache = new Map<string, string>()
-let ambientRetireTimer = 0
-
-function revealAmbient() {
-  requestAnimationFrame(() => {
-    if (ambientLayer.value) ambientLayer.value.visible = true
-  })
-}
-
-function showAmbient(url: string) {
-  const cur = ambientLayer.value
-  if (!cur) {
-    ambientLayer.value = { url, visible: false }
-    return
-  }
-  if (cur.url === url) return
-  ambientPrev.value = { url: cur.url, visible: true }
-  ambientLayer.value = { url, visible: false }
-  window.clearTimeout(ambientRetireTimer)
-  // 双 rAF 确保新层以 opacity 0 完成首次绘制后再淡入，交叉过渡才成立
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      if (ambientLayer.value?.url === url) ambientLayer.value.visible = true
-    })
-  })
-  // 900ms > 淡化时长 600ms，旧层等新层完全显形后再卸载
-  ambientRetireTimer = window.setTimeout(() => {
-    ambientPrev.value = null
-  }, 900)
-}
-
 /** 流光圆斑颜色：从封面提取的明亮饱和色（浅色底的亮眼点缀） */
 const flowColors = ref<string[]>([])
 const flowCache = new Map<string, string[]>()
+
+function revealAmbient() {
+  requestAnimationFrame(() => {
+    ambientShown.value = true
+  })
+}
 
 watch(
   () => player.current?.coverId ?? null,
   async (coverId) => {
     if (!coverId) {
-      ambientLayer.value = null
-      ambientPrev.value = null
+      ambientUrl.value = null
+      ambientShown.value = false
       flowColors.value = []
       return
     }
-    const apply = showAmbient
+    const apply = (url: string) => {
+      ambientUrl.value = url
+      revealAmbient()
+    }
     const cached = ambientCache.get(coverId)
     if (cached) {
       apply(cached)
@@ -249,6 +226,13 @@ function setLineEl(i: number) {
    420ms 而非 700ms——拖太久会和下一行的切换动画叠在一起，观感黏滞。 */
 const SCROLL_DURATION = 420
 let scrollRaf = 0
+/** 程序化滚动的宽限窗：自身赋值 scrollTop 触发的 scroll 事件是异步派发的，
+   动画结束后才到达，必须凭时间戳豁免，否则会被误判成用户滚动 */
+let programmaticScrollUntil = 0
+
+function markProgrammaticScroll() {
+  programmaticScrollUntil = performance.now() + 120
+}
 
 function smoothScrollTo(container: HTMLElement, target: number) {
   cancelAnimationFrame(scrollRaf)
@@ -256,6 +240,7 @@ function smoothScrollTo(container: HTMLElement, target: number) {
   const delta = target - start
   // 位移很小时不做动画，避免为几像素跑一整段 rAF
   if (Math.abs(delta) < 2) {
+    markProgrammaticScroll()
     container.scrollTop = target
     return
   }
@@ -263,8 +248,10 @@ function smoothScrollTo(container: HTMLElement, target: number) {
   const ease = (t: number) => 1 - Math.pow(1 - t, 4)
   const frame = (now: number) => {
     const p = Math.min(1, (now - t0) / SCROLL_DURATION)
+    markProgrammaticScroll()
     container.scrollTop = start + delta * ease(p)
     if (p < 1) scrollRaf = requestAnimationFrame(frame)
+    else scrollRaf = 0 // 必须归零：陈旧真值会让 scroll 守卫永久失效
   }
   scrollRaf = requestAnimationFrame(frame)
 }
@@ -276,15 +263,19 @@ function scrollToActive(animate: boolean) {
   if (!container || !el) return
   const offset = Math.max(0, el.offsetTop - container.clientHeight / 3)
   if (animate) smoothScrollTo(container, offset)
-  else container.scrollTop = offset
+  else {
+    markProgrammaticScroll()
+    container.scrollTop = offset
+  }
 }
 
-watch(activeIdx, async () => {
+watch(activeIdx, async (idx, old) => {
   await nextTick()
   // 飞行动画期间不滚动：落地后由 flyIn 的收尾逻辑一次性直接定位。
   if (flyActive.value) return
-  // 用户刚手动滚动过 → 让出控制权，别把人拽回去
-  if (userScrolling.value) return
+  // 用户手动滚动后让位 3 秒——但只针对顺次换行（±1 行）；
+  // seek 等大跨度跳变是明确意图，必须立即定位，不被冻结吞掉
+  if (userScrolling.value && Math.abs(idx - old) <= 1) return
   scrollToActive(true)
 })
 
@@ -642,8 +633,8 @@ function flyIn() {
     flyActive.value = true
     await nextTick()
     // 如果已有缓存背景（切歌时的预取或上次浏览），立即 reveal：
-    // 淡入与飞行 (560ms) 并行，落地时背景已基本可见。
-    if (ambientLayer.value) revealAmbient()
+    // 280ms 透明度淡入与飞行 (560ms) 并行，落地时背景已基本可见。
+    if (ambientUrl.value) revealAmbient()
 
     // 等待期间先藏起封面：否则会先看到落位的封面、再跳回起点飞入
     document.querySelector<HTMLElement>('.cover-main')?.style.setProperty('opacity', '0')
@@ -797,18 +788,13 @@ onMounted(() => {
     :style="lyricVars"
     @mousemove="onPageMouseMove"
   >
-    <!-- 背景：浅色暖调渐变 + 环境光双层交叉淡化（切歌时旧背景保持到新背景显形） + 封面明亮色流光圆斑 -->
+    <!-- 背景：浅色暖调渐变 + 单层环境光（切歌直接换图，无过渡动画） + 封面明亮色流光圆斑 -->
     <div class="bg" />
     <div
-      v-if="ambientPrev"
-      class="bg-ambient show"
-      :style="{ backgroundImage: `url(${ambientPrev.url})` }"
-    />
-    <div
-      v-if="ambientLayer"
+      v-if="ambientUrl"
       class="bg-ambient"
-      :class="{ show: ambientLayer.visible }"
-      :style="{ backgroundImage: `url(${ambientLayer.url})` }"
+      :class="{ show: ambientShown }"
+      :style="{ backgroundImage: `url(${ambientUrl})` }"
     />
     <div
       v-for="(c, i) in flowColors.slice(0, 2)"
@@ -900,6 +886,13 @@ onMounted(() => {
               >
                 简约
               </button>
+              <button
+                class="seg-btn"
+                :class="{ on: settings.lyricControls === 'glass' }"
+                @click="settings.setLyricControls('glass')"
+              >
+                玻璃
+              </button>
             </div>
           </div>
         </Transition>
@@ -956,7 +949,13 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="controls" :class="{ minimal: settings.lyricControls === 'minimal' }">
+          <div
+            class="controls"
+            :class="{
+              minimal: settings.lyricControls === 'minimal',
+              glass: settings.lyricControls === 'glass',
+            }"
+          >
             <button class="ctrl-btn ghost" :title="modeMeta.label" @click="cycleMode">
               <AppIcon :name="modeMeta.icon" :size="ctrlIcon.side" />
             </button>
@@ -1049,8 +1048,7 @@ onMounted(() => {
   background: linear-gradient(165deg, #fbf9f4 0%, var(--lyric-bg) 52%, var(--lyric-bg-deep) 100%);
 }
 
-/* 单层环境光：多焦点已烘焙进图内（palette.renderAmbientUrl），低透明度叠在浅底上；
-   600ms 淡化配合双层结构，切歌时新旧背景交叉过渡 */
+/* 单层环境光：多焦点已烘焙进图内（palette.renderAmbientUrl），低透明度叠在浅底上 */
 .bg-ambient {
   position: absolute;
   inset: 0;
@@ -1059,7 +1057,7 @@ onMounted(() => {
   opacity: 0;
   transform-origin: center center;
   animation: ambient-breathe 12s ease-in-out infinite;
-  transition: opacity 600ms var(--ease-out);
+  transition: opacity 280ms var(--ease-out);
   will-change: transform, opacity;
 }
 
@@ -1424,6 +1422,48 @@ onMounted(() => {
 .controls.minimal .volume-slider:focus-visible,
 .controls.minimal .volume-wrap:hover .volume-slider {
   width: 60px;
+}
+
+/* ---------- 玻璃拟态控制条：磨砂玻璃圆底 + 品牌色播放键，对齐全站设计语言 ---------- */
+.controls.glass {
+  gap: 12px;
+}
+
+.controls.glass .ctrl-btn {
+  width: 46px;
+  height: 46px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 4px 14px rgba(70, 58, 34, 0.1);
+}
+
+.controls.glass .ctrl-btn.ghost {
+  width: 42px;
+  height: 42px;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.controls.glass .ctrl-btn:hover {
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--lyric-control-hover);
+}
+
+.controls.glass .ctrl-btn.play {
+  width: 56px;
+  height: 56px;
+  background: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, #fff);
+  color: var(--accent-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 10px 24px color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+.controls.glass .ctrl-btn.play:hover {
+  background: var(--accent-strong);
+  color: var(--accent-text);
+  transform: scale(1.04);
 }
 
 /* 音量滑杆（hover 展开） */

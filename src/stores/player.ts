@@ -172,7 +172,11 @@ export const usePlayerStore = defineStore('player', () => {
 
   function seek(sec: number) {
     const a = getAudio()
-    if (Number.isFinite(sec)) a.currentTime = sec
+    if (Number.isFinite(sec)) {
+      a.currentTime = sec
+      // 同步刷新：不等 timeupdate（最多差几百毫秒），歌词高亮/进度条立即重算
+      currentTime.value = a.currentTime
+    }
   }
 
   function setVolume(v: number) {
