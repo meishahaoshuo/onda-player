@@ -770,8 +770,12 @@ function confirmRemove() {
   background: var(--bg-active);
 }
 
-.drag-row.dragging {
+/* 拖拽中的行：不加底色，避免与正在播放行的高亮（更长的那块）重叠 */
+.drag-row.dragging:not(.playing) {
   background: var(--bg-hover);
+}
+
+.drag-row.dragging {
   cursor: grabbing;
   z-index: 2;
 }

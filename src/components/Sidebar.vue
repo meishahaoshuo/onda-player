@@ -299,10 +299,9 @@ function plClick(id: string) {
   color: var(--accent);
 }
 
-/* 拖拽中的项：仅背景提亮 + 轻微缩放（缩放由 composable 行内样式驱动），不加投影 */
+/* 拖拽中的项：不加底色——避免与点击选中的胶囊背景（更长的那块）重叠突兀，
+   反馈靠 composable 行内驱动的轻微缩放 + 抓取光标 */
 .nav-item.dragging {
-  background: var(--bg-hover);
-  color: var(--text-primary);
   cursor: grabbing;
 }
 
