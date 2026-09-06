@@ -18,8 +18,6 @@ const player = usePlayerStore()
 const rootEl = ref<HTMLElement | null>(null)
 const reveal = useStaggerReveal(() => rootEl.value, '.chart-row')
 
-const MEDAL: Record<number, string> = { 1: 'gold', 2: 'silver', 3: 'bronze' }
-
 /** 次数降序、同次数按标题；rank 从 1 起 */
 const ranked = computed(() => {
   const counts = stats.counts
@@ -76,35 +74,7 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
 <template>
   <div ref="rootEl" class="charts-view">
     <template v-if="ranked.length > 0">
-      <!-- 领奖台 -->
-      <div v-if="podium.length > 0" class="podium" :class="{ in: podiumIn }">
-        <button
-          v-for="p in podium"
-          :key="p.row.song.path"
-          class="podium-card"
-          :class="[`pos-${p.pos}`, { playing: p.row.song.path === player.currentPath }]"
-          :style="{ '--rise-delay': `${(3 - p.pos) * 110}ms` }"
-          @click="onPlay(p.row.song, $event)"
-        >
-          <div class="podium-top" data-flight-cover>
-            <div class="podium-cover">
-              <CoverImage :cover-id="p.row.song.coverId" :size="p.pos === 1 ? 112 : 88" />
-              <span class="podium-medal" :class="MEDAL[p.row.rank]">{{ p.row.rank }}</span>
-            </div>
-            <div class="podium-info">
-              <div class="podium-title" :title="p.row.song.title">{{ p.row.song.title }}</div>
-              <div class="podium-artist" :title="p.row.song.artist">{{ p.row.song.artist }}</div>
-              <div class="podium-count">{{ p.row.count }} 次播放</div>
-            </div>
-          </div>
-          <div class="podium-pillar" :class="MEDAL[p.row.rank]">
-            <span class="pillar-rank">{{ p.row.rank }}</span>
-            <span class="pillar-label">{{ p.pos === 1 ? '冠军' : p.pos === 2 ? '亚军' : '季军' }}</span>
-          </div>
-        </button>
-      </div>
-
-      <div class="list-header" :class="{ 'first-group': podium.length === 0 }">
+      <div class="list-header">
         <span class="col-rank">名次</span>
         <span class="col-title">标题</span>
         <span class="col-artist">艺术家</span>
@@ -113,6 +83,28 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
         <span class="col-duration">时长</span>
       </div>
       <div class="list-body">
+        <!-- 前三强：磨砂玻璃卡，随内容滚动 -->
+        <div v-if="podium.length > 0" class="top3" :class="{ in: podiumIn }">
+          <button
+            v-for="p in podium"
+            :key="p.row.song.path"
+            class="top-card"
+            :class="[`pos-${p.pos}`, { playing: p.row.song.path === player.currentPath }]"
+            :style="{ '--rise-delay': `${(3 - p.pos) * 110}ms` }"
+            @click="onPlay(p.row.song, $event)"
+          >
+            <div class="tc-cover" data-flight-cover>
+              <CoverImage :cover-id="p.row.song.coverId" :size="76" />
+            </div>
+            <div class="tc-info">
+              <div class="tc-title" :title="p.row.song.title">{{ p.row.song.title }}</div>
+              <div class="tc-artist" :title="p.row.song.artist">{{ p.row.song.artist }}</div>
+              <div class="tc-count">{{ p.row.count }} 次播放</div>
+            </div>
+            <span class="tc-rank">{{ p.row.rank }}</span>
+          </button>
+          <div v-if="rest.length === 0" class="list-end-hint">前三名就是全部上榜歌曲</div>
+        </div>
         <div
           v-for="row in rest"
           :key="row.song.path"
@@ -134,7 +126,6 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
           <span class="col-count">{{ row.count }} 次</span>
           <span class="col-duration">{{ formatDuration(row.song.durationSec) }}</span>
         </div>
-        <div v-if="rest.length === 0" class="list-end-hint">前三名就是全部上榜歌曲</div>
       </div>
 
       <button class="clear-btn" title="清空所有播放统计" @click="clearStats">
@@ -159,123 +150,90 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
   overflow-x: hidden;
 }
 
-/* ---------- 领奖台 ---------- */
+/* ---------- 全息光柱领奖台 ---------- */
+/* ---------- 前三强：磨砂玻璃卡 ---------- */
 
-.podium {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 16px;
-  padding: 8px 0 0;
+.top3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 4px 0 16px;
 }
 
-.podium-card {
+.top-card {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  width: 240px;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
   border-radius: var(--radius-panel);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-1);
+  text-align: left;
   opacity: 0;
-  transform: translateY(34px);
-  transition: opacity 480ms var(--ease-out), transform 560ms var(--ease-spring);
+  transform: translateY(18px);
+  transition: opacity 420ms var(--ease-out), transform 480ms var(--ease-spring),
+    border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-med) var(--ease-out);
   transition-delay: var(--rise-delay, 0ms);
 }
 
-/* 冠军的台柱更高，卡片内容整体上抬 */
-.podium-card.pos-1 .podium-pillar {
-  height: 92px;
-}
-
-.podium-card.pos-2 .podium-pillar {
-  height: 60px;
-}
-
-.podium-card.pos-3 .podium-pillar {
-  height: 44px;
-}
-
-.podium.in .podium-card {
+.top3.in .top-card {
   opacity: 1;
   transform: translateY(0);
 }
 
-.podium-card:hover {
-  background: var(--bg-hover);
-}
-
-.podium-card.playing {
-  background: var(--bg-active);
-}
-
-.podium-top {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 16px 12px;
-}
-
-.podium-cover {
-  position: relative;
-  border-radius: 10px;
+.top-card:hover {
   box-shadow: var(--shadow-2);
+}
+
+.top-card:hover :deep(.cover-img),
+.top-card:hover :deep(.cover-fallback) {
+  transform: scale(1.05);
+}
+
+.tc-cover :deep(.cover-img),
+.tc-cover :deep(.cover-fallback) {
   transition: transform var(--dur-med) var(--ease-spring);
 }
 
-.podium-card:hover .podium-cover {
-  transform: scale(1.04) translateY(-2px);
+/* 冠军卡：品牌色描边 + 柔光 */
+.top-card.pos-1 {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 14%, transparent), var(--shadow-1);
 }
 
-.podium-cover :deep(.cover-img),
-.podium-cover :deep(.cover-fallback) {
-  border-radius: 10px;
+.top-card.playing .tc-title {
+  color: var(--accent);
 }
 
-/* 名次徽章：骑在封面上角 */
-.podium-medal {
-  position: absolute;
-  top: -8px;
-  left: -8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  font-size: 13px;
-  font-weight: 700;
-  color: #fff;
-  box-shadow: var(--shadow-1);
+.tc-cover {
+  flex-shrink: 0;
 }
 
-.podium-medal.gold {
-  background: linear-gradient(135deg, #e8b64c, #c9932a);
+.tc-cover :deep(.cover-img),
+.tc-cover :deep(.cover-fallback) {
+  border-radius: 8px;
 }
 
-.podium-medal.silver {
-  background: linear-gradient(135deg, #b8bec9, #8e95a3);
-}
-
-.podium-medal.bronze {
-  background: linear-gradient(135deg, #c99268, #a86e44);
-}
-
-.podium-info {
+.tc-info {
   min-width: 0;
-  width: 100%;
-  text-align: center;
+  flex: 1;
 }
 
-.podium-title {
-  font-size: 14px;
+.tc-title {
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding-right: 22px;
 }
 
-.podium-artist {
+.tc-artist {
   font-size: 12px;
   color: var(--text-secondary);
   margin-top: 2px;
@@ -284,63 +242,38 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
   text-overflow: ellipsis;
 }
 
-.podium-count {
+.tc-count {
   font-size: 11px;
   color: var(--text-tertiary);
-  margin-top: 3px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* 台柱：金属渐变柱身 + 顶部高光 */
-.podium-pillar {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding-top: 8px;
-  border-radius: 10px 10px 0 0;
-  overflow: hidden;
-}
-
-.podium-pillar::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto;
-  height: 40%;
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.22), transparent);
-  pointer-events: none;
-}
-
-.podium-pillar.gold {
-  background: linear-gradient(180deg, #e8b64c, #a87820);
-}
-
-.podium-pillar.silver {
-  background: linear-gradient(180deg, #b8bec9, #7c8494);
-}
-
-.podium-pillar.bronze {
-  background: linear-gradient(180deg, #c99268, #8e5c38);
-}
-
-.pillar-rank {
-  font-size: 22px;
-  font-weight: 800;
-  color: rgba(255, 255, 255, 0.92);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.pillar-label {
-  font-size: 10px;
-  letter-spacing: 0.3em;
-  text-indent: 0.3em;
-  color: rgba(255, 255, 255, 0.75);
   margin-top: 4px;
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---------- 第 4 名起的列表 ---------- */
+/* 名次角标：冠军品牌色，其余中性 */
+.tc-rank {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.top-card.pos-1 .tc-rank {
+  color: var(--accent-text);
+  background: var(--accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
 
 .list-header,
 .chart-row {
@@ -507,25 +440,17 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
   color: var(--text-secondary);
 }
 
-@media (max-width: 860px) {
-  .podium {
-    gap: 8px;
-  }
-
-  .podium-card {
-    width: 200px;
+@media (max-width: 900px) {
+  .top3 {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .podium-card {
+  .top-card {
     opacity: 1;
     transform: none;
     transition: none;
-  }
-
-  .podium-card:hover .podium-cover {
-    transform: none;
   }
 }
 </style>
