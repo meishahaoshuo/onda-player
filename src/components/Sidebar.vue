@@ -18,7 +18,7 @@ const playlistStore = usePlaylistStore()
 const library = useLibraryStore()
 const { open: openPlaylistMenu } = usePlaylistMenu()
 
-/** 导航定义：id 与 ui.navOrder 对应；'playlists' 是歌单板块整体 */
+/** 导航定义：id 与 ui.navOrder 对应（仅主导航项参与拖拽排序，歌单板块固定在分隔线下） */
 const NAV_DEFS: Record<string, { view: ViewId; label: string; icon: IconName }> = {
   songs: { view: 'songs', label: '歌曲', icon: 'music' },
   favorites: { view: 'favorites', label: '我喜欢的音乐', icon: 'heart' },
@@ -27,7 +27,6 @@ const NAV_DEFS: Record<string, { view: ViewId; label: string; icon: IconName }> 
   albums: { view: 'albums', label: '专辑', icon: 'disc' },
   artists: { view: 'artists', label: '艺术家', icon: 'artist' },
   folders: { view: 'folders', label: '文件夹', icon: 'folder' },
-  playlists: { view: 'playlists', label: '歌单', icon: 'playlist' },
 }
 
 const brandLogo = computed(() =>
@@ -129,44 +128,36 @@ function plClick(id: string) {
       />
 
       <div class="nav-group">
-        <template v-for="(id, idx) in ui.navOrder" :key="id">
-          <!-- 歌单板块整体：标题行内含新建入口，可拖拽 -->
-          <div
-            v-if="id === 'playlists'"
-            :ref="setEl('playlists')"
-            class="section-head"
-            :class="{ dragging: navDrag.draggingIndex.value === idx }"
-            @pointerdown="navDrag.onItemPointerdown(idx, $event)"
-          >
-            <button
-              class="nav-item grow"
-              :class="{ active: activeNavId() === 'playlists' }"
-              @click="navClick('playlists')"
-            >
-              <AppIcon name="playlist" />
-              <span>歌单</span>
-            </button>
-            <button class="nav-item add-playlist" title="新建歌单" @pointerdown.stop @click="ui.requestPlaylistCreate()">
-              <AppIcon name="playlistAdd" :size="16" />
-            </button>
-          </div>
-
-          <!-- 普通导航项 -->
-          <button
-            v-else
-            :ref="setEl(id)"
-            class="nav-item"
-            :class="{ active: activeNavId() === id, dragging: navDrag.draggingIndex.value === idx }"
-            @pointerdown="navDrag.onItemPointerdown(idx, $event)"
-            @click="navClick(NAV_DEFS[id].view)"
-          >
-            <AppIcon :name="NAV_DEFS[id].icon" />
-            <span>{{ NAV_DEFS[id].label }}</span>
-          </button>
-        </template>
+        <button
+          v-for="(id, idx) in ui.navOrder"
+          :key="id"
+          :ref="setEl(id)"
+          class="nav-item"
+          :class="{ active: activeNavId() === id, dragging: navDrag.draggingIndex.value === idx }"
+          @pointerdown="navDrag.onItemPointerdown(idx, $event)"
+          @click="navClick(NAV_DEFS[id].view)"
+        >
+          <AppIcon :name="NAV_DEFS[id].icon" />
+          <span>{{ NAV_DEFS[id].label }}</span>
+        </button>
       </div>
 
       <div class="divider" />
+
+      <!-- 歌单板块：固定在分隔线下方，仅子项可拖拽排序 -->
+      <div :ref="setEl('playlists')" class="section-head">
+        <button
+          class="nav-item grow"
+          :class="{ active: activeNavId() === 'playlists' }"
+          @click="navClick('playlists')"
+        >
+          <AppIcon name="playlist" />
+          <span>歌单</span>
+        </button>
+        <button class="nav-item add-playlist" title="新建歌单" @click="ui.requestPlaylistCreate()">
+          <AppIcon name="playlistAdd" :size="16" />
+        </button>
+      </div>
 
       <!-- 歌单子项：长按拖拽排序、右键菜单 -->
       <div v-if="playlistStore.playlists.length > 0" class="pl-group">
@@ -308,12 +299,10 @@ function plClick(id: string) {
   color: var(--accent);
 }
 
-/* 拖拽中的项：跟手浮起 */
-.nav-item.dragging,
-.section-head.dragging .grow {
+/* 拖拽中的项：仅背景提亮 + 轻微缩放（缩放由 composable 行内样式驱动），不加投影 */
+.nav-item.dragging {
   background: var(--bg-hover);
   color: var(--text-primary);
-  box-shadow: var(--shadow-2);
   cursor: grabbing;
 }
 

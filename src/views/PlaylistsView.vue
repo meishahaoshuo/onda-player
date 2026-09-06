@@ -772,7 +772,6 @@ function confirmRemove() {
 
 .drag-row.dragging {
   background: var(--bg-hover);
-  box-shadow: var(--shadow-2);
   cursor: grabbing;
   z-index: 2;
 }
