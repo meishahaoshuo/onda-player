@@ -145,8 +145,13 @@ const closing = ref(false)
 
 watch(
   current,
-  async (pl) => {
+  async (pl, old) => {
     if (!pl) return
+    // 歌单间直接切换：动向由内层 Transition（与板块切换同款）呈现，不跑引力坍缩编排
+    if (old) {
+      detailEl.value?.scrollTo({ top: 0 })
+      return
+    }
     await nextTick()
     await playAlbumEnter(detailEl.value)
   },
@@ -392,6 +397,10 @@ function confirmRemove() {
       <AppIcon name="close" :size="14" /> 返回歌单列表
     </button>
 
+    <!-- 歌单间切换的过渡：与顶部板块切换同款动向（key 变化触发 out-in）；
+         打开/关闭由外层 v-if 走引力坍缩编排，初始挂载不播 enter，不会双重动画 -->
+    <Transition name="view" mode="out-in">
+      <div :key="current.id" class="detail-inner">
     <header class="pl-header">
       <!-- 流光呼吸光斑（对齐专辑详情页头部） -->
       <div
@@ -500,6 +509,8 @@ function confirmRemove() {
       </div>
       </div>
     </template>
+      </div>
+    </Transition>
 
     <!-- 重命名弹层 -->
     <teleport to="body">
@@ -699,6 +710,13 @@ function confirmRemove() {
    （专辑详情页踩过的同一个坑），必须禁止收缩 */
 .playlist-detail > * {
   flex-shrink: 0;
+}
+
+/* 歌单间切换的内层过渡容器：接管原详情的纵向布局 */
+.detail-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .back-btn {
