@@ -223,8 +223,11 @@ function setLineEl(i: number) {
 }
 
 /* 自定义缓动滚动：out-quart。
-   420ms 而非 700ms——拖太久会和下一行的切换动画叠在一起，观感黏滞。 */
-const SCROLL_DURATION = 420
+   时长按距离缩放（140-300ms）——顺次换行要跟手，seek 大跳要干脆。 */
+const SCROLL_DURATION_MIN = 140
+const SCROLL_DURATION_MAX = 300
+/** 超过该距离（约两屏以上，典型是 seek 跨段）直接定位，长距离动画只会显得拖沓 */
+const INSTANT_SCROLL_PX = 2400
 let scrollRaf = 0
 /** 程序化滚动的宽限窗：自身赋值 scrollTop 触发的 scroll 事件是异步派发的，
    动画结束后才到达，必须凭时间戳豁免，否则会被误判成用户滚动 */
@@ -236,18 +239,23 @@ function markProgrammaticScroll() {
 
 function smoothScrollTo(container: HTMLElement, target: number) {
   cancelAnimationFrame(scrollRaf)
+  scrollRaf = 0
   const start = container.scrollTop
   const delta = target - start
-  // 位移很小时不做动画，避免为几像素跑一整段 rAF
-  if (Math.abs(delta) < 2) {
+  // 位移很小不做动画；距离过大（seek 跨页）直接定位
+  if (Math.abs(delta) < 2 || Math.abs(delta) > INSTANT_SCROLL_PX) {
     markProgrammaticScroll()
     container.scrollTop = target
     return
   }
+  const duration = Math.min(
+    SCROLL_DURATION_MAX,
+    SCROLL_DURATION_MIN + Math.abs(delta) / 12,
+  )
   const t0 = performance.now()
   const ease = (t: number) => 1 - Math.pow(1 - t, 4)
   const frame = (now: number) => {
-    const p = Math.min(1, (now - t0) / SCROLL_DURATION)
+    const p = Math.min(1, (now - t0) / duration)
     markProgrammaticScroll()
     container.scrollTop = start + delta * ease(p)
     if (p < 1) scrollRaf = requestAnimationFrame(frame)
