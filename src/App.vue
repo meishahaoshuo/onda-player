@@ -23,6 +23,7 @@ import { useStatsStore } from '@/stores/stats'
 import { useFavoritesStore } from '@/stores/favorites'
 import { useSettingsStore } from '@/stores/settings'
 import { clearTransitionState } from '@/services/pageTransition'
+import { installTrackSwapWatcher } from '@/services/coverFlight'
 import type { ViewId } from '@/types'
 
 const ui = useUiStore()
@@ -87,6 +88,7 @@ onMounted(async () => {
   void favorites.load()
   await library.init()
   await player.restore()
+  installTrackSwapWatcher()
 })
 
 /** 切换视图时清理过渡残留（网格可能已被卸载，动画引用会指向已销毁的 DOM） */
