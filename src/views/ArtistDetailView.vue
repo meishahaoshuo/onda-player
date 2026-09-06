@@ -51,10 +51,11 @@ function onPlay(song: SongRecord) {
 
 <template>
   <div v-if="artist" ref="rootEl" class="artist-detail" :class="{ revealed }">
-    <button class="back-btn" @click="close">
-      <AppIcon name="close" :size="14" /> 返回艺术家列表
-    </button>
     <header class="artist-header">
+      <!-- 返回艺术家列表：头部右上角的隐藏式关闭钮，悬停浮现 -->
+      <button class="header-close" title="返回艺术家列表" aria-label="返回艺术家列表" @click="close">
+        <AppIcon name="close" :size="15" />
+      </button>
       <div class="header-cover">
         <CoverImage :cover-id="artist.coverId" :size="120" />
       </div>
@@ -88,42 +89,56 @@ function onPlay(song: SongRecord) {
   gap: 16px;
 }
 
-.artist-detail > .back-btn,
 .artist-detail > .artist-header {
   flex-shrink: 0;
 }
 
 /* 内容初始隐藏，由 pageTransition 的波前时序接管；.revealed 兜底直接显示 */
-.artist-detail .back-btn,
 .artist-detail .header-info {
   opacity: 0;
 }
 
-.artist-detail.revealed .back-btn,
 .artist-detail.revealed .header-info {
   opacity: 1;
 }
 
-.back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  align-self: flex-start;
-  font-size: 13px;
-  color: var(--text-secondary);
-  padding: 6px 10px;
-  border-radius: 6px;
-}
-
-.back-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
+/* 返回艺术家列表：头部右上角的隐藏式关闭钮，悬停/聚焦时浮现 */
 .artist-header {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 20px;
+}
+
+.header-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.artist-header:hover .header-close,
+.header-close:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.header-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-active);
 }
 
 /* 艺术家封面圆形（与网格卡片一致），也是封面飞行的落点。
@@ -169,9 +184,13 @@ function onPlay(song: SongRecord) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .artist-detail .back-btn,
   .artist-detail .header-info {
     opacity: 1;
+  }
+
+  /* 关闭钮保持默认隐藏（可发现性设计而非动效），只是浮现不做位移过渡 */
+  .artist-header .header-close {
+    transform: none;
   }
 }
 </style>

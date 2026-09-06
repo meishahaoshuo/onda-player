@@ -182,11 +182,11 @@ const metaRows = computed<MetaRow[]>(() => {
 
 <template>
   <div v-if="album" ref="rootEl" class="album-detail" :class="{ revealed, blooming }">
-    <button class="back-btn" @click="close">
-      <AppIcon name="close" :size="14" /> 返回专辑列表
-    </button>
-
     <header class="album-header">
+      <!-- 返回专辑列表：头部卡片右上角的隐藏式关闭钮，悬停浮现 -->
+      <button class="header-close" title="返回专辑列表" aria-label="返回专辑列表" @click="close">
+        <AppIcon name="close" :size="15" />
+      </button>
       <!-- 流光呼吸光斑 -->
       <div
         v-for="(c, i) in flowColors.slice(0, 2)"
@@ -294,20 +294,36 @@ const metaRows = computed<MetaRow[]>(() => {
   flex-shrink: 0;
 }
 
-.back-btn {
-  display: inline-flex;
+/* 返回专辑列表：头部卡片右上角的隐藏式关闭钮，悬停/聚焦时浮现 */
+.header-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  align-self: flex-start;
-  font-size: 13px;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
   color: var(--text-secondary);
-  padding: 6px 10px;
-  border-radius: 6px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
 }
 
-.back-btn:hover {
-  background: var(--bg-hover);
+.album-header:hover .header-close,
+.header-close:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.header-close:hover {
   color: var(--text-primary);
+  background: var(--bg-active);
 }
 
 .album-header {
@@ -623,8 +639,8 @@ const metaRows = computed<MetaRow[]>(() => {
 }
 
 /* 内容初始隐藏，由 pageTransition 的波前时序逐个接管（延迟按到点击点的距离算，
-   不再写死 index × 常数；编排器失效时 .revealed 兜底直接显示）。 */
-.album-detail .back-btn,
+   不再写死 index × 常数；编排器失效时 .revealed 兜底直接显示）。
+   头部关闭钮不参与波前编排——它有自己的悬停浮现逻辑 */
 .album-detail .header-info,
 .album-detail .album-meta,
 .album-detail .disc-title,
@@ -632,7 +648,6 @@ const metaRows = computed<MetaRow[]>(() => {
   opacity: 0;
 }
 
-.album-detail.revealed .back-btn,
 .album-detail.revealed .header-info,
 .album-detail.revealed .album-meta,
 .album-detail.revealed .disc-title,
@@ -671,7 +686,6 @@ const metaRows = computed<MetaRow[]>(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .album-detail .back-btn,
   .album-detail .header-info,
   .album-detail .album-meta,
   .album-detail .disc-title,
