@@ -694,6 +694,13 @@ function confirmRemove() {
   padding-bottom: 24px;
 }
 
+/* 固定高度的纵向 flex 滚动容器里，子项默认可被压缩；
+   头部带 overflow:hidden 会让 min-height 归零，歌曲一多整个头部被挤成一条
+   （专辑详情页踩过的同一个坑），必须禁止收缩 */
+.playlist-detail > * {
+  flex-shrink: 0;
+}
+
 .back-btn {
   display: inline-flex;
   align-items: center;

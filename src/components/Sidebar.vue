@@ -66,6 +66,11 @@ const playlistCovers = computed(() => {
 const navEl = ref<HTMLElement | null>(null)
 const itemEls = new Map<string, HTMLElement>()
 const pill = ref({ top: 8, height: 40, opacity: 0 })
+/** 大跨度跳转：弹簧过冲会冲出导航区，切回无过冲缓动 */
+const pillFar = ref(false)
+
+/** 超过该跨度（px）视为远跳 */
+const PILL_FAR_PX = 100
 
 function setEl(id: string) {
   return (el: unknown) => {
@@ -86,7 +91,9 @@ async function updatePill() {
   const el = id ? itemEls.get(id) : undefined
   if (el && navEl.value) {
     // offsetTop 相对最近的定位祖先（.nav）
-    pill.value = { top: el.offsetTop, height: el.offsetHeight, opacity: 1 }
+    const top = el.offsetTop
+    pillFar.value = Math.abs(top - pill.value.top) > PILL_FAR_PX
+    pill.value = { top, height: el.offsetHeight, opacity: 1 }
   } else {
     pill.value = { ...pill.value, opacity: 0 }
   }
@@ -124,6 +131,7 @@ function plClick(id: string) {
       <!-- 滑动指示胶囊 -->
       <div
         class="nav-pill"
+        :class="{ far: pillFar }"
         :style="{ top: `${pill.top}px`, height: `${pill.height}px`, opacity: pill.opacity }"
       />
 
@@ -264,8 +272,13 @@ function plClick(id: string) {
   right: 0;
   border-radius: var(--radius-item);
   background: var(--bg-active);
+  /* 近距离移动用弹簧过冲（手感活泼）；大跨度时过冲会冲出导航区边缘，切无过冲缓动 */
   transition: top var(--dur-med) var(--ease-spring), opacity var(--dur-med) var(--ease-out);
   pointer-events: none;
+}
+
+.nav-pill.far {
+  transition: top var(--dur-med) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
 }
 
 .nav-item {
