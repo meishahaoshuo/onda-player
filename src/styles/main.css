@@ -58,10 +58,14 @@
   --ambient-fallback: rgba(92, 124, 224, 0.18);
 
   /* 背景壁纸：深色主题压暗（黑遮罩），保证白色文字可读。
-     遮罩透明度 = base + gain × 浓度（--wallpaper-intensity 由 settings store 写入 0~1） */
+     遮罩透明度 = base + gain × 浓度（--wallpaper-intensity 由 settings store 写入 0~1）。
+     曲线刻意调得很弱：浓度 100% 时壁纸接近原图（黑罩仅 0.20），
+     文字可读性主要由列表行/玻璃底的半透明底承担，追求更稳可调低浓度。 */
   --wallpaper-veil: #000000;
-  --wallpaper-veil-base: 0.12;
-  --wallpaper-veil-gain: 0.38;
+  --wallpaper-veil-base: 0.05;
+  --wallpaper-veil-gain: 0.15;
+  /* 遮罩成品色（透明度随浓度联动）：供详情层背景最上层直接引用 */
+  --wallpaper-veil-cast: color-mix(in srgb, #000000 calc((0.05 + 0.15 * var(--wallpaper-intensity, 1)) * 100%), transparent);
 }
 
 :root[data-theme='light'] {
@@ -107,10 +111,37 @@
   /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
   --ambient-fallback: rgba(23, 37, 84, 0.1);
 
-  /* 背景壁纸：浅色主题提亮（白遮罩），保证黑色文字可读 */
+  /* 背景壁纸：浅色主题提亮（白遮罩），保证黑色文字可读；同上，100% 浓度时白罩仅 0.22 */
   --wallpaper-veil: #ffffff;
-  --wallpaper-veil-base: 0.22;
-  --wallpaper-veil-gain: 0.4;
+  --wallpaper-veil-base: 0.08;
+  --wallpaper-veil-gain: 0.14;
+  /* 遮罩成品色（透明度随浓度联动）：供详情层背景最上层直接引用 */
+  --wallpaper-veil-cast: color-mix(in srgb, #ffffff calc((0.08 + 0.14 * var(--wallpaper-intensity, 1)) * 100%), transparent);
+}
+
+/* ---------- 壁纸模式：二级详情层「透壁纸、不透一级界面、不盖侧栏」 ----------
+   详情覆盖层不再放内部 fixed 垫层（fixed 后代会逃逸 overflow 裁剪，
+   连同层叠上下文一起画到 static 侧栏之上），改为把壁纸画成层自身的多层背景：
+   · attachment:fixed → 背景相对视口定位、cover 也按视口取基准，
+     与最底层主壁纸层像素级对齐；
+   · 背景只绘制在本层盒内 → 侧栏区域完全不受影响；
+   · 层内容滚动时背景保持钉住，观感与主壁纸连续。
+   遮罩为背景最上层纯色渐变，透明度随浓度联动（--wallpaper-veil-cast）。 */
+:root[data-wallpaper] .detail-layer,
+:root[data-wallpaper] .playlist-detail {
+  background:
+    linear-gradient(var(--wallpaper-veil-cast), var(--wallpaper-veil-cast)),
+    var(--wp-url) center / cover fixed no-repeat,
+    var(--bg-base);
+}
+
+/* 歌单详情头部：默认渐变终点是不透明底色，壁纸模式下改半透明让壁纸延续 */
+:root[data-wallpaper] .pl-header {
+  background: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--bg-hover) 60%, transparent) 0%,
+    color-mix(in srgb, var(--bg-base) 30%, transparent) 70%
+  );
 }
 
 /* ---------- 动效令牌 ---------- */

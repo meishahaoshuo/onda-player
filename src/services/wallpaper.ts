@@ -25,6 +25,18 @@ function swapUrl(blob: Blob | null) {
   const next = blob ? URL.createObjectURL(blob) : null
   const prev = wallpaperUrl.value
   wallpaperUrl.value = next
+  // 同步根节点标记与 CSS 变量：
+  // · data-wallpaper 供局部样式按「有无壁纸」切换底色（排行榜吸顶表头等）
+  // · --wp-url 供二级详情覆盖层以 background-attachment:fixed 画出
+  //   与主壁纸层像素级对齐的副本（纯 CSS，天然只画在层盒内、不盖侧栏）
+  const rootStyle = document.documentElement.style
+  if (next) {
+    document.documentElement.dataset.wallpaper = '1'
+    rootStyle.setProperty('--wp-url', `url("${next}")`)
+  } else {
+    delete document.documentElement.dataset.wallpaper
+    rootStyle.removeProperty('--wp-url')
+  }
   if (prev) {
     if (revokeTimer) clearTimeout(revokeTimer)
     revokeTimer = setTimeout(() => URL.revokeObjectURL(prev), 1000)
