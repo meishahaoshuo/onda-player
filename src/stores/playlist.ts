@@ -3,13 +3,20 @@ import { ref } from 'vue'
 import * as db from '@/services/db'
 import type { PlaylistRecord } from '@/types'
 
+const ORDER_KEY = 'playlists.order'
+
 /** 歌单：增删改查 + 内含歌曲的顺序维护，全部即时持久化到 IndexedDB */
 export const usePlaylistStore = defineStore('playlists', () => {
   const playlists = ref<PlaylistRecord[]>([])
   const loaded = ref(false)
 
   async function load() {
-    playlists.value = await db.getAllPlaylists()
+    const rows = await db.getAllPlaylists()
+    // 按 kv 里保存的拖拽顺序排序，未登记的新歌单排在末尾
+    const order = (await db.kvGet<string[]>(ORDER_KEY)) ?? []
+    const idx = new Map(order.map((id, i) => [id, i]))
+    rows.sort((a, b) => (idx.get(a.id) ?? Infinity) - (idx.get(b.id) ?? Infinity))
+    playlists.value = rows
     loaded.value = true
   }
 
@@ -57,6 +64,16 @@ export const usePlaylistStore = defineStore('playlists', () => {
     })
   }
 
+  /** 侧栏歌单子项拖拽排序：重排歌单数组并持久化顺序 */
+  function reorder(from: number, to: number) {
+    const arr = [...playlists.value]
+    const [moved] = arr.splice(from, 1)
+    if (moved === undefined) return
+    arr.splice(to, 0, moved)
+    playlists.value = arr
+    void db.kvSet(ORDER_KEY, arr.map((p) => p.id))
+  }
+
   /** 指定歌单封面来源歌曲；null 恢复自动拼贴 */
   function setCover(id: string, path: string | null) {
     update(id, (p) => {
@@ -77,5 +94,5 @@ export const usePlaylistStore = defineStore('playlists', () => {
     })
   }
 
-  return { playlists, loaded, load, create, rename, remove, addSongs, removeSong, moveSong, setCover }
+  return { playlists, loaded, load, create, rename, remove, addSongs, removeSong, moveSong, reorder, setCover }
 })

@@ -564,20 +564,13 @@ function onRowMenu(e: MouseEvent, song: SongRecord, i: number) {
   font-size: 13px;
 }
 
-/* 队列行悬停快捷操作（收藏/更多/移除）：玻璃小胶囊悬浮在时长左侧，不遮挡时长 */
+/* 队列行悬停快捷操作（收藏/更多/移除）：悬浮在时长左侧，透明底与行背景融为一体 */
 .row-actions {
   position: absolute;
   right: calc(100% + 4px);
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 2px;
-  border-radius: 8px;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-1);
   opacity: 0;
   transform: translateX(6px);
   pointer-events: none;

@@ -568,21 +568,14 @@ const metaRows = computed<MetaRow[]>(() => {
   font-variant-numeric: tabular-nums;
 }
 
-/* 悬停快捷操作（与 SongList 同款玻璃胶囊）：悬浮在标题区与时长之间的空白区，
-   不遮挡时长；opacity + 位移过渡浮现 */
+/* 悬停快捷操作（与 SongList 同款）：悬浮在标题区与时长之间的空白区，
+   透明底与行背景融为一体；opacity + 位移过渡浮现 */
 .row-actions {
   position: absolute;
   right: calc(100% + 8px);
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 2px;
-  border-radius: 8px;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-1);
   opacity: 0;
   transform: translateX(6px);
   pointer-events: none;

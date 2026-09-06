@@ -51,6 +51,17 @@ watch(
   },
 )
 
+// 歌单右键「设置封面」：详情打开后直接弹出封面选择
+watch(
+  () => ui.playlistEditCover,
+  (id) => {
+    if (!id) return
+    ui.playlistEditCover = null
+    if (current.value?.id === id) showCoverPicker.value = true
+  },
+  { flush: 'post' },
+)
+
 function consumeCreateRequest() {
   if (ui.playlistCreateRequested) {
     ui.playlistCreateRequested = false
@@ -782,20 +793,13 @@ function confirmRemove() {
   color: var(--danger);
 }
 
-/* 悬停快捷操作（收藏/更多/移除）：玻璃小胶囊浮出行尾空白区，过渡浮现 */
+/* 悬停快捷操作（收藏/更多/移除）：透明底浮出行尾空白区，过渡浮现 */
 .row-actions {
   position: absolute;
   right: 8px;
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 2px;
-  border-radius: 8px;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-1);
   opacity: 0;
   transform: translateX(6px);
   pointer-events: none;

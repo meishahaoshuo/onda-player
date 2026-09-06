@@ -216,7 +216,7 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
 }
 
 /* 悬停快捷操作：悬浮在专辑列与时长列之间的空白区（右侧让出 72px 时长列 + 12px 间距），
-   玻璃小胶囊不遮挡时长；opacity + 位移过渡浮现 */
+   透明底与行背景融为一体；opacity + 位移过渡浮现 */
 .row-actions {
   position: absolute;
   top: 50%;
@@ -224,13 +224,6 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 2px;
-  border-radius: 8px;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-1);
   opacity: 0;
   transform: translateY(-50%) translateX(6px);
   pointer-events: none;

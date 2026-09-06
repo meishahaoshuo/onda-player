@@ -2,23 +2,26 @@
 import { computed, ref } from 'vue'
 import { useLibraryStore } from '@/stores/library'
 import { useSettingsStore } from '@/stores/settings'
+import { useStatsStore } from '@/stores/stats'
 import type { ThemeMode } from '@/types'
 import AppIcon from '@/components/AppIcon.vue'
 
 /**
  * 设置页：左侧分类导航 + 右侧内容面板。
- * 只保留三类：外观（主题）/ 音乐文件夹 / 关于。
+ * 分类：外观（主题与配色）/ 快捷键 / 音乐文件夹 / 数据 / 关于。
  */
 const library = useLibraryStore()
 const settings = useSettingsStore()
+const stats = useStatsStore()
 
 const emit = defineEmits<{ addFolder: [] }>()
 
-type SectionId = 'appearance' | 'folders' | 'about'
+type SectionId = 'appearance' | 'folders' | 'data' | 'about'
 
-const SECTIONS: { id: SectionId; label: string; icon: 'sun' | 'folder' | 'info'; desc: string }[] = [
+const SECTIONS: { id: SectionId; label: string; icon: 'sun' | 'folder' | 'info' | 'trash'; desc: string }[] = [
   { id: 'appearance', label: '外观', icon: 'sun', desc: '主题与配色' },
   { id: 'folders', label: '音乐文件夹', icon: 'folder', desc: '曲库来源与扫描' },
+  { id: 'data', label: '数据', icon: 'trash', desc: '播放统计管理' },
   { id: 'about', label: '关于', icon: 'info', desc: '版本与说明' },
 ]
 
@@ -41,6 +44,14 @@ const brandLogo = computed(() =>
 )
 
 const songCount = computed(() => library.songs.length)
+
+/* ---------- 数据：清空播放统计 ---------- */
+const confirmClearStats = ref(false)
+
+async function doClearStats() {
+  confirmClearStats.value = false
+  await stats.clear()
+}
 </script>
 
 <template>
@@ -129,6 +140,25 @@ const songCount = computed(() => library.songs.length)
           </div>
         </section>
 
+        <!-- 数据 -->
+        <section v-else-if="active === 'data'" key="data" class="panel-section">
+          <h2 class="panel-title">数据</h2>
+          <p class="panel-sub">播放统计与排行榜数据管理</p>
+          <div class="opt-row">
+            <div class="opt-text">
+              <span class="opt-name">播放统计</span>
+              <span class="opt-desc">全库累计播放 {{ stats.totalPlays }} 次 · 清空后排行榜归零，不可恢复</span>
+            </div>
+            <button
+              class="mini-btn danger"
+              :disabled="stats.totalPlays === 0"
+              @click="confirmClearStats = true"
+            >
+              <AppIcon name="trash" :size="14" /> 清空统计
+            </button>
+          </div>
+        </section>
+
         <!-- 关于 -->
         <section v-else key="about" class="panel-section">
           <h2 class="panel-title">关于</h2>
@@ -154,6 +184,22 @@ const songCount = computed(() => library.songs.length)
         </section>
       </Transition>
     </div>
+
+    <!-- 清空统计确认弹窗 -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="confirmClearStats" class="modal-mask" @click.self="confirmClearStats = false">
+          <div class="confirm-panel">
+            <h3 class="modal-title">清空播放统计</h3>
+            <p class="confirm-desc">排行榜将归零（全库累计 {{ stats.totalPlays }} 次播放），此操作不可恢复。</p>
+            <div class="modal-actions">
+              <button class="mini-btn" @click="confirmClearStats = false">取消</button>
+              <button class="danger-solid-btn" @click="doClearStats">清空统计</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -395,6 +441,118 @@ const songCount = computed(() => library.songs.length)
 
 .mini-btn.danger:hover {
   background: var(--danger-soft);
+}
+
+/* 选项行与确认弹窗 */
+.opt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+}
+
+.opt-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.opt-name {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.opt-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.confirm-panel {
+  width: 380px;
+  max-width: 90vw;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--queue-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-2), var(--glass-highlight);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.confirm-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.danger-solid-btn {
+  padding: 5px 14px;
+  border-radius: 6px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 12px;
+  transition: opacity 0.15s;
+}
+
+.danger-solid-btn:hover {
+  opacity: 0.9;
+}
+
+.modal-enter-active {
+  transition: opacity var(--dur-med) var(--ease-out);
+}
+
+.modal-leave-active {
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.modal-enter-active .confirm-panel {
+  transition: transform var(--dur-med) var(--ease-spring), opacity var(--dur-med) var(--ease-out);
+}
+
+.modal-leave-active .confirm-panel {
+  transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-enter-from .confirm-panel {
+  transform: translateY(14px) scale(0.96);
+  opacity: 0;
+}
+
+.modal-leave-to .confirm-panel {
+  transform: translateY(6px) scale(0.98);
+  opacity: 0;
 }
 
 .scan-status {

@@ -10,27 +10,44 @@ import * as db from '@/services/db'
 export const useStatsStore = defineStore('stats', () => {
   /** path → 播放次数（整体替换赋值保证响应式） */
   const counts = ref<Record<string, number>>({})
+  /** path → 最近一次播放时间戳（「最近在听」用） */
+  const lastPlayed = ref<Record<string, number>>({})
   const loaded = ref(false)
 
   const totalPlays = computed(() => Object.values(counts.value).reduce((a, b) => a + b, 0))
 
   async function load() {
     const rows = await db.getAllStats()
-    const map: Record<string, number> = {}
-    for (const { path, stat } of rows) map[path] = stat.playCount
-    counts.value = map
+    const countsMap: Record<string, number> = {}
+    const lastMap: Record<string, number> = {}
+    for (const { path, stat } of rows) {
+      countsMap[path] = stat.playCount
+      lastMap[path] = stat.lastPlayedAt
+    }
+    counts.value = countsMap
+    lastPlayed.value = lastMap
     loaded.value = true
   }
 
   function recordPlay(path: string) {
+    const now = Date.now()
     counts.value = { ...counts.value, [path]: (counts.value[path] ?? 0) + 1 }
-    void db.putStat(path, { playCount: counts.value[path] ?? 1, lastPlayedAt: Date.now() })
+    lastPlayed.value = { ...lastPlayed.value, [path]: now }
+    void db.putStat(path, { playCount: counts.value[path] ?? 1, lastPlayedAt: now })
   }
+
+  /** 最近在听：按最近播放时间降序的 path 列表 */
+  const recentPaths = computed(() =>
+    Object.entries(lastPlayed.value)
+      .sort((a, b) => b[1] - a[1])
+      .map(([path]) => path),
+  )
 
   async function clear() {
     counts.value = {}
+    lastPlayed.value = {}
     await db.clearStats()
   }
 
-  return { counts, loaded, totalPlays, load, recordPlay, clear }
+  return { counts, lastPlayed, loaded, totalPlays, recentPaths, load, recordPlay, clear }
 })

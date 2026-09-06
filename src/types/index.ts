@@ -5,6 +5,7 @@ export type ThemeMode = 'system' | 'dark' | 'light'
 export type ViewId =
   | 'songs'
   | 'favorites'
+  | 'recent'
   | 'charts'
   | 'albums'
   | 'artists'

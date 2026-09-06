@@ -1,27 +1,34 @@
 <script setup lang="ts">
-import { nextTick, watch, ref, computed } from 'vue'
+import { nextTick, onBeforeUnmount, watch, ref, computed } from 'vue'
 import { useUiStore } from '@/stores/ui'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlaylistStore } from '@/stores/playlist'
 import { useLibraryStore } from '@/stores/library'
+import { usePlaylistMenu } from '@/composables/usePlaylistMenu'
+import { useDragReorder } from '@/composables/useDragReorder'
 import type { ViewId } from '@/types'
 import AppIcon from './AppIcon.vue'
 import CoverImage from './CoverImage.vue'
+import PlaylistContextMenu from './PlaylistContextMenu.vue'
 import type { IconName } from './icons'
 
 const ui = useUiStore()
 const settings = useSettingsStore()
 const playlistStore = usePlaylistStore()
 const library = useLibraryStore()
+const { open: openPlaylistMenu } = usePlaylistMenu()
 
-const navItems: { id: ViewId; label: string; icon: IconName }[] = [
-  { id: 'songs', label: '歌曲', icon: 'music' },
-  { id: 'favorites', label: '我喜欢的音乐', icon: 'heart' },
-  { id: 'charts', label: '排行榜', icon: 'chart' },
-  { id: 'albums', label: '专辑', icon: 'disc' },
-  { id: 'artists', label: '艺术家', icon: 'artist' },
-  { id: 'folders', label: '文件夹', icon: 'folder' },
-]
+/** 导航定义：id 与 ui.navOrder 对应；'playlists' 是歌单板块整体 */
+const NAV_DEFS: Record<string, { view: ViewId; label: string; icon: IconName }> = {
+  songs: { view: 'songs', label: '歌曲', icon: 'music' },
+  favorites: { view: 'favorites', label: '我喜欢的音乐', icon: 'heart' },
+  recent: { view: 'recent', label: '最近在听', icon: 'clock' },
+  charts: { view: 'charts', label: '排行榜', icon: 'chart' },
+  albums: { view: 'albums', label: '专辑', icon: 'disc' },
+  artists: { view: 'artists', label: '艺术家', icon: 'artist' },
+  folders: { view: 'folders', label: '文件夹', icon: 'folder' },
+  playlists: { view: 'playlists', label: '歌单', icon: 'playlist' },
+}
 
 const brandLogo = computed(() =>
   settings.resolvedTheme === 'dark' ? '/logo/onda-logo-main.svg' : '/logo/onda-logo-app.svg',
@@ -32,7 +39,15 @@ function openPlaylist(id: string) {
   ui.detailKey = id
 }
 
-/** 歌单项小封面：手动指定的封面优先，否则取歌单内第一首有封面的歌 */
+/* ---------- 拖拽排序：主导航组 / 歌单子项组各自内部排序 ---------- */
+const navDrag = useDragReorder({ onReorder: (from, to) => ui.reorderNav(from, to) })
+const plDrag = useDragReorder({ onReorder: (from, to) => playlistStore.reorder(from, to) })
+onBeforeUnmount(() => {
+  navDrag.dispose()
+  plDrag.dispose()
+})
+
+/* ---------- 歌单项小封面：手动指定的封面优先，否则取歌单内第一首有封面的歌 ---------- */
 const playlistCovers = computed(() => {
   const byPath = new Map(library.songs.map((s) => [s.path, s.coverId]))
   const map = new Map<string, string | null>()
@@ -62,7 +77,7 @@ function setEl(id: string) {
 
 function activeNavId(): string | null {
   if (ui.activeView === 'playlists') return ui.detailKey ?? 'playlists'
-  if (navItems.some((n) => n.id === ui.activeView)) return ui.activeView
+  if (ui.activeView !== 'settings') return ui.activeView
   return null
 }
 
@@ -78,13 +93,26 @@ async function updatePill() {
   }
 }
 
-watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.length], updatePill, {
-  immediate: true,
-})
+watch(
+  [() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.length, () => ui.navOrder],
+  updatePill,
+  { immediate: true, flush: 'post' },
+)
+
+function navClick(view: ViewId) {
+  if (navDrag.isClickSuppressed()) return
+  ui.navigate(view)
+}
+
+function plClick(id: string) {
+  if (plDrag.isClickSuppressed()) return
+  openPlaylist(id)
+}
 </script>
 
 <template>
   <aside class="sidebar">
+    <PlaylistContextMenu />
     <div class="brand">
       <img :src="brandLogo" alt="ONDA" class="brand-logo" :class="{ 'no-shadow': settings.resolvedTheme === 'dark' }" />
       <div class="brand-text">
@@ -100,58 +128,70 @@ watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.le
         :style="{ top: `${pill.top}px`, height: `${pill.height}px`, opacity: pill.opacity }"
       />
 
-      <button
-        v-for="item in navItems"
-        :key="item.id"
-        :ref="setEl(item.id)"
-        class="nav-item"
-        :class="{ active: activeNavId() === item.id }"
-        @click="ui.navigate(item.id)"
-      >
-        <AppIcon :name="item.icon" />
-        <span>{{ item.label }}</span>
-      </button>
+      <div class="nav-group">
+        <template v-for="(id, idx) in ui.navOrder" :key="id">
+          <!-- 歌单板块整体：标题行内含新建入口，可拖拽 -->
+          <div
+            v-if="id === 'playlists'"
+            :ref="setEl('playlists')"
+            class="section-head"
+            :class="{ dragging: navDrag.draggingIndex.value === idx }"
+            @pointerdown="navDrag.onItemPointerdown(idx, $event)"
+          >
+            <button
+              class="nav-item grow"
+              :class="{ active: activeNavId() === 'playlists' }"
+              @click="navClick('playlists')"
+            >
+              <AppIcon name="playlist" />
+              <span>歌单</span>
+            </button>
+            <button class="nav-item add-playlist" title="新建歌单" @pointerdown.stop @click="ui.requestPlaylistCreate()">
+              <AppIcon name="playlistAdd" :size="16" />
+            </button>
+          </div>
+
+          <!-- 普通导航项 -->
+          <button
+            v-else
+            :ref="setEl(id)"
+            class="nav-item"
+            :class="{ active: activeNavId() === id, dragging: navDrag.draggingIndex.value === idx }"
+            @pointerdown="navDrag.onItemPointerdown(idx, $event)"
+            @click="navClick(NAV_DEFS[id].view)"
+          >
+            <AppIcon :name="NAV_DEFS[id].icon" />
+            <span>{{ NAV_DEFS[id].label }}</span>
+          </button>
+        </template>
+      </div>
 
       <div class="divider" />
 
-      <!-- 歌单板块：标题行内含新建入口，列表收在下方 -->
-      <div class="section-head">
+      <!-- 歌单子项：长按拖拽排序、右键菜单 -->
+      <div v-if="playlistStore.playlists.length > 0" class="pl-group">
         <button
-          :ref="setEl('playlists')"
-          class="nav-item grow"
-          :class="{ active: activeNavId() === 'playlists' }"
-          @click="ui.navigate('playlists')"
-        >
-          <AppIcon name="playlist" />
-          <span>歌单</span>
-        </button>
-        <button class="nav-item add-playlist" title="新建歌单" @click="ui.requestPlaylistCreate()">
-          <AppIcon name="playlistAdd" :size="16" />
-        </button>
-      </div>
-
-      <template v-if="playlistStore.playlists.length > 0">
-        <div class="divider" />
-        <button
-          v-for="p in playlistStore.playlists"
+          v-for="(p, i) in playlistStore.playlists"
           :key="p.id"
           :ref="setEl(p.id)"
           class="nav-item playlist-item"
-          :class="{ active: ui.activeView === 'playlists' && ui.detailKey === p.id }"
+          :class="{ active: ui.activeView === 'playlists' && ui.detailKey === p.id, dragging: plDrag.draggingIndex.value === i }"
           :title="p.name"
-          @click="openPlaylist(p.id)"
+          @pointerdown="plDrag.onItemPointerdown(i, $event)"
+          @click="plClick(p.id)"
+          @contextmenu.prevent="openPlaylistMenu(p.id, $event)"
         >
-          <CoverImage :cover-id="playlistCovers.get(p.id) ?? null" :size="22" class="playlist-cover" />
+          <CoverImage :cover-id="playlistCovers.get(p.id) ?? null" :size="28" class="playlist-cover" />
           <span class="playlist-name">{{ p.name }}</span>
         </button>
-      </template>
+      </div>
     </nav>
 
     <div class="bottom">
       <button
         class="nav-item"
         :class="{ active: ui.activeView === 'settings' }"
-        @click="ui.navigate('settings')"
+        @click="navClick('settings')"
       >
         <AppIcon name="settings" />
         <span>设置</span>
@@ -222,6 +262,9 @@ watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.le
   flex-direction: column;
   gap: 2px;
   flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
 }
 
 .nav-pill {
@@ -234,17 +277,6 @@ watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.le
   pointer-events: none;
 }
 
-.nav-pill::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--accent);
-}
-
 .nav-item {
   position: relative;
   display: flex;
@@ -255,7 +287,7 @@ watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.le
   border-radius: var(--radius-item);
   color: var(--text-secondary);
   transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out),
-    transform var(--dur-fast) var(--ease-out);
+    transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
   text-align: left;
 }
 
@@ -276,10 +308,20 @@ watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.le
   color: var(--accent);
 }
 
+/* 拖拽中的项：跟手浮起 */
+.nav-item.dragging,
+.section-head.dragging .grow {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-2);
+  cursor: grabbing;
+}
+
 .divider {
   height: 1px;
   margin: 8px 12px;
   background: var(--border-subtle);
+  flex-shrink: 0;
 }
 
 /* 歌单板块标题行：歌单项 + 右侧悬浮的新建按钮。
@@ -327,6 +369,7 @@ watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.le
 
 .playlist-cover {
   border-radius: 6px;
+  flex-shrink: 0;
 }
 
 .bottom {

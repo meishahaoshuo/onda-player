@@ -61,10 +61,6 @@ onBeforeUnmount(() => {
   window.clearTimeout(podiumTimer)
 })
 
-async function clearStats() {
-  await stats.clear()
-}
-
 function onPlay(song: SongRecord, e?: MouseEvent) {
   if (e) flyToPlayerFromRow(e)
   player.playSong(song, ranked.value.map((r) => r.song))
@@ -127,10 +123,6 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
           <span class="col-duration">{{ formatDuration(row.song.durationSec) }}</span>
         </div>
       </div>
-
-      <button class="clear-btn" title="清空所有播放统计" @click="clearStats">
-        <AppIcon name="trash" :size="13" /> 清空统计
-      </button>
     </template>
     <div v-else class="empty">
       <AppIcon name="chart" :size="48" class="empty-icon" />
@@ -392,29 +384,6 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
   text-align: right;
-}
-
-/* 清空统计：角落小按钮 */
-.clear-btn {
-  position: absolute;
-  top: 4px;
-  right: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-  color: var(--text-tertiary);
-  opacity: 0.7;
-  transition: opacity var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
-    background var(--dur-fast) var(--ease-out);
-}
-
-.clear-btn:hover {
-  opacity: 1;
-  background: var(--bg-hover);
-  color: var(--danger);
 }
 
 .empty {

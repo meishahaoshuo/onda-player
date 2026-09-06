@@ -11,6 +11,7 @@ import ArtistDetailView from '@/views/ArtistDetailView.vue'
 import ArtistsView from '@/views/ArtistsView.vue'
 import FavoritesView from '@/views/FavoritesView.vue'
 import ChartsView from '@/views/ChartsView.vue'
+import RecentView from '@/views/RecentView.vue'
 import PlaylistsView from '@/views/PlaylistsView.vue'
 import LyricsFullView from '@/views/LyricsFullView.vue'
 import SettingsView from '@/views/SettingsView.vue'
@@ -37,6 +38,7 @@ const settings = useSettingsStore()
 const viewTitles: Record<ViewId, string> = {
   songs: '歌曲',
   favorites: '我喜欢的音乐',
+  recent: '最近在听',
   charts: '排行榜',
   albums: '专辑',
   artists: '艺术家',
@@ -125,6 +127,8 @@ watch(
             <SongsView v-if="ui.activeView === 'songs'" />
 
             <FavoritesView v-else-if="ui.activeView === 'favorites'" />
+
+            <RecentView v-else-if="ui.activeView === 'recent'" />
 
             <ChartsView v-else-if="ui.activeView === 'charts'" />
 
