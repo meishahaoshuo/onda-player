@@ -56,6 +56,14 @@
 
   /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
   --ambient-fallback: rgba(92, 124, 224, 0.18);
+
+  /* 背景壁纸：深色主题压暗（黑遮罩），保证白色文字可读。
+     遮罩透明度 = base + gain × 浓度（--wallpaper-intensity 由 settings store 写入 0~1） */
+  --wallpaper-veil: #000000;
+  --wallpaper-veil-base: 0.12;
+  --wallpaper-veil-gain: 0.38;
+  /* 详情覆盖层在壁纸上的不透明度占比（两主题同值；无壁纸时与纯色底视觉一致） */
+  --wallpaper-bg-alpha: 0.86;
 }
 
 :root[data-theme='light'] {
@@ -100,6 +108,12 @@
 
   /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
   --ambient-fallback: rgba(23, 37, 84, 0.1);
+
+  /* 背景壁纸：浅色主题提亮（白遮罩），保证黑色文字可读 */
+  --wallpaper-veil: #ffffff;
+  --wallpaper-veil-base: 0.22;
+  --wallpaper-veil-gain: 0.4;
+  --wallpaper-bg-alpha: 0.86;
 }
 
 /* ---------- 动效令牌 ---------- */

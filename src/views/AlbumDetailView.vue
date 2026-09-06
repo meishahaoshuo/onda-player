@@ -338,7 +338,7 @@ const metaRows = computed<MetaRow[]>(() => {
 
 /* 头部背景：中性浅色渐变（主题自适应），光斑与噪点提供质感 */
 .album-header {
-  background: linear-gradient(120deg, var(--bg-hover) 0%, var(--bg-base) 70%);
+  background: linear-gradient(120deg, var(--bg-hover) 0%, color-mix(in srgb, var(--bg-base) calc(var(--wallpaper-bg-alpha) * 100%), transparent) 70%);
 }
 
 /* 呼吸光斑：缩放与透明度同步起伏，周期 10-12s 交错 */

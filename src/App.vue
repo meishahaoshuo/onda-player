@@ -29,6 +29,7 @@ import { clearTransitionState } from '@/services/pageTransition'
 import { useSearchScope } from '@/composables/useSearchScope'
 import { installTrackSwapWatcher } from '@/services/coverFlight'
 import { installHotkeys } from '@/services/hotkeys'
+import { initWallpaper, wallpaperUrl } from '@/services/wallpaper'
 import { extractBrightColors } from '@/services/palette'
 import type { ViewId } from '@/types'
 
@@ -101,6 +102,7 @@ onMounted(async () => {
   playlistStore.load()
   void stats.load()
   void favorites.load()
+  void initWallpaper()
   await library.init()
   await player.restore()
   installTrackSwapWatcher()
@@ -160,6 +162,14 @@ watch(
 
 <template>
   <div class="app-shell">
+    <!-- 自定义背景壁纸：挂在最底层（负 z-index 画在 body 纯色底之上、一切内容之下），
+         侧栏与播放条的磨砂玻璃 backdrop-filter 采样到的就是壁纸。 -->
+    <Transition name="wp">
+      <div v-if="wallpaperUrl" class="wallpaper-layer" aria-hidden="true">
+        <div class="wallpaper-img" :style="{ backgroundImage: `url(${wallpaperUrl})` }" />
+        <div class="wallpaper-veil" />
+      </div>
+    </Transition>
     <div class="body-row">
       <Sidebar />
       <main class="content">
@@ -246,6 +256,44 @@ watch(
   height: 100vh;
 }
 
+/* 自定义背景壁纸层。
+   ⚠ 依赖 .app-shell 及其祖先保持「非层叠上下文」（不得加 transform / filter / opacity）：
+   负 z-index 使壁纸画在 body 画布背景之上、包括 static 侧栏在内的全部内容之下。 */
+.wallpaper-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* 浓度 = 壁纸不透明度（settings.wallpaperIntensity / 100，由 store 写入 :root） */
+.wallpaper-img {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: var(--wallpaper-intensity, 1);
+  transition: opacity var(--dur-med) var(--ease-out);
+}
+
+/* 可读性遮罩：深色压暗 / 浅色提亮，强度随浓度联动（base + gain × 浓度） */
+.wallpaper-veil {
+  position: absolute;
+  inset: 0;
+  background: var(--wallpaper-veil);
+  opacity: calc(var(--wallpaper-veil-base) + var(--wallpaper-veil-gain) * var(--wallpaper-intensity, 1));
+}
+
+/* 壁纸异步加载完成后淡入，避免突兀出现 */
+.wp-enter-active {
+  transition: opacity 0.5s var(--ease-out);
+}
+
+.wp-enter-from {
+  opacity: 0;
+}
+
 .body-row {
   display: flex;
   flex: 1;
@@ -319,7 +367,9 @@ watch(
   z-index: 1;
 }
 
-/* 专辑详情覆盖层：盖住标题与网格，自带滚动；放在 .content 内天然避开侧栏与播放条 */
+/* 专辑详情覆盖层：盖住标题与网格，自带滚动；放在 .content 内天然避开侧栏与播放条。
+   底色按 --wallpaper-bg-alpha 半透明：无壁纸时与纯色底视觉一致，有壁纸时隐约透出。
+   不加 backdrop-filter——滚动容器的实时 blur 重采样有全屏卡顿前科。 */
 .detail-layer {
   position: absolute;
   inset: 0;
@@ -327,7 +377,7 @@ watch(
   overflow-y: auto;
   overflow-x: hidden;
   padding: 20px 24px 24px;
-  background: var(--bg-base);
+  background: color-mix(in srgb, var(--bg-base) calc(var(--wallpaper-bg-alpha) * 100%), transparent);
 }
 
 .view-header {
