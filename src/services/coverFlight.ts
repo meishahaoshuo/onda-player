@@ -1,18 +1,21 @@
 import { useUiStore } from '@/stores/ui'
 
 /**
- * 歌曲封面飞入底部播放栏 ——「黑胶落盘」编排：
- * 1. 起飞（0–22%）：方形封面翘起放大，微微抬升；
- * 2. 变身（22–50%）：遮罩渐变为圆形黑胶（浮现唱纹与中心唱片标），沿弧线旋向播放栏，转速渐快；
- * 3. 落盘（50–72%）：垂直下落嵌入播放栏封面位，播放栏整体下沉回弹（承受唱片重量），封面 squash；
- * 4. 定格（72–100%）：唱片转满一圈收住，交接给真实封面 pop。
+ * 歌曲封面飞入底部播放栏 ——「卡带 · 滑门入仓」编排。
+ * 封面全程保持方形（卡带本来就是方的），不做圆形变形：
+ * 1. 拿起（0–16%）：封面轻轻浮起放大，带一点预旋；
+ * 2. 变形（16–42%）：四周浮现卡带外壳框，左右两个卷带轮淡入并开始转动，
+ *    封面成为卡带的"标签"，整体沿弧线滑向播放栏；
+ * 3. 入仓（42–66%）：播放栏封面位出现玻璃"仓门"向两侧滑开，卡带顺着仓口滑入，播放栏微沉；
+ * 4. 启动（66–100%）：仓门合拢把卡带"吞"进去，卷轮转完大半圈收住，仓门淡出交出真实封面 pop。
  *
  * 与页面切换编排器（pageTransition）互斥：编排期间跳过飞行，只做落点弹跳。
  */
 
-const FLIGHT_MS = 820
-/** 落盘时刻（占总时长比例）：弹跳与播放栏下沉在此对齐 */
-const LAND_AT = 0.72
+const FLIGHT_MS = 900
+/** 卡带滑入仓位的时刻（占比）：仓门/下沉/弹跳都与此对齐 */
+const LAND_AT = 0.66
+const EASE_OUT = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
 function reduced(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -22,7 +25,7 @@ function playerCoverEl(): HTMLElement | null {
   return document.querySelector<HTMLElement>('.player-bar .cover')
 }
 
-/** 播放栏封面弹跳：接住唱片——放大、歪头、回正 */
+/** 播放栏封面弹跳：接住卡带——放大、歪头、回正 */
 export function popPlayerCover(): void {
   const target = playerCoverEl()
   if (!target) return
@@ -37,7 +40,7 @@ export function popPlayerCover(): void {
   )
 }
 
-/** 播放栏整体下沉回弹：像唱片机承受了唱片的重量 */
+/** 播放栏整体下沉回弹：像卡带机承受了入仓的重量 */
 function dipPlayerBar(delayMs: number): void {
   const bar = document.querySelector<HTMLElement>('.player-bar')
   if (!bar) return
@@ -51,38 +54,79 @@ function dipPlayerBar(delayMs: number): void {
   )
 }
 
-/** 黑胶唱纹叠层：picture-disc 式的同心环高光，叠在专辑图上 */
-function makeGrooves(): HTMLElement {
+/** 卡带外壳框：套在封面四周的深色边框，让方形封面读作"卡带" */
+function makeShell(): HTMLElement {
   const el = document.createElement('div')
   Object.assign(el.style, {
     position: 'absolute',
-    inset: '0',
-    borderRadius: '50%',
-    background:
-      'repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,0.10) 0 1px, rgba(0,0,0,0.05) 1px 2px, transparent 2px 5px)',
+    inset: '-10% -13%',
+    borderRadius: '12px',
+    background: 'var(--bg-panel)',
+    border: '1px solid var(--glass-border)',
+    boxShadow: 'var(--shadow-1)',
     opacity: '0',
     pointerEvents: 'none',
   } as CSSStyleDeclaration)
   return el
 }
 
-/** 中心唱片标：唱机标签的小圆盘 */
-function makeLabel(): HTMLElement {
+/** 卷带轮：卡带窗里的两个小转轮（带轮齿高光的圆盘，旋转可见） */
+function makeReel(): HTMLElement {
   const el = document.createElement('div')
   Object.assign(el.style, {
     position: 'absolute',
-    left: '50%',
     top: '50%',
-    width: '34%',
-    height: '34%',
-    transform: 'translate(-50%, -50%)',
+    width: '26%',
+    aspectRatio: '1',
     borderRadius: '50%',
-    background: 'radial-gradient(circle, var(--accent) 0%, var(--accent-strong) 78%)',
-    boxShadow: '0 0 0 2px rgba(0,0,0,0.18)',
+    transform: 'translate(-50%, -50%)',
+    background:
+      'radial-gradient(circle, rgba(0,0,0,0.42) 0 34%, transparent 35%), conic-gradient(rgba(255,255,255,0.95) 0 34deg, rgba(255,255,255,0.28) 34deg 360deg)',
+    border: '2px solid rgba(255,255,255,0.85)',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
     opacity: '0',
     pointerEvents: 'none',
   } as CSSStyleDeclaration)
   return el
+}
+
+/**
+ * 仓门：盖在播放栏封面位上的两片玻璃板，滑开迎接卡带、合拢后再淡出。
+ * 开合用单个动画的 offset 关键帧表达，避免同属性双动画的 fill 竞争。
+ */
+function makeDoor(to: DOMRect): { root: HTMLElement; left: HTMLElement; right: HTMLElement } {
+  const root = document.createElement('div')
+  root.className = 'player-door'
+  Object.assign(root.style, {
+    position: 'fixed',
+    left: `${to.left - 5}px`,
+    top: `${to.top - 5}px`,
+    width: `${to.width + 10}px`,
+    height: `${to.height + 10}px`,
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    zIndex: '71',
+    pointerEvents: 'none',
+    opacity: '0',
+  } as CSSStyleDeclaration)
+  const mk = (side: 'l' | 'r') => {
+    const el = document.createElement('div')
+    Object.assign(el.style, {
+      background: 'var(--queue-bg)',
+      backdropFilter: 'var(--glass-blur)',
+      WebkitBackdropFilter: 'var(--glass-blur)',
+      borderTop: '1px solid var(--glass-border)',
+      borderBottom: '1px solid var(--glass-border)',
+      borderRadius: side === 'l' ? '9px 2px 2px 9px' : '2px 9px 9px 2px',
+      borderLeft: side === 'l' ? '1px solid var(--glass-border)' : 'none',
+      borderRight: side === 'r' ? '1px solid var(--glass-border)' : 'none',
+    } as unknown as CSSStyleDeclaration)
+    return el
+  }
+  const left = mk('l')
+  const right = mk('r')
+  root.append(left, right)
+  return { root, left, right }
 }
 
 /**
@@ -116,17 +160,14 @@ export function flyToPlayer(fromEl: Element | null): void {
   // transform-origin 用中心：缩放围绕中心，平移到目标中心即可对齐
   const tx = to.left + to.width / 2 - (from.left + from.width / 2)
   const ty = to.top + to.height / 2 - (from.top + from.height / 2)
-  // 弧线拱高随距离变化；悬停点在目标正上方，落下段近似垂直
+  // 弧线拱高随距离变化；滑入段从拱顶顺下来近似切向入仓
   const arc = Math.min(96, Math.max(40, Math.hypot(tx, ty) * 0.2))
-  const hoverX = tx * 0.92
-  const hoverY = ty - arc
-  // 朝飞行方向顺转，一整圈收住
+  // 姿态朝向飞行方向，优雅小角度，不做整圈旋转
   const dir = tx >= 0 ? 1 : -1
-  const spin = 360 * dir
 
   const startRadius = getComputedStyle(img).borderRadius
 
-  // 克隆外壳（方形→圆形的形变载体）+ 内嵌图 + 唱纹 + 中心标
+  /* ---------- 飞行载体：外壳框 + 封面 + 两卷轮 ---------- */
   const flying = document.createElement('div')
   flying.className = 'cover-flight'
   Object.assign(flying.style, {
@@ -140,7 +181,6 @@ export function flyToPlayer(fromEl: Element | null): void {
     pointerEvents: 'none',
     willChange: 'transform',
     borderRadius: startRadius,
-    overflow: 'hidden',
     boxShadow: 'var(--shadow-2)',
   } as CSSStyleDeclaration)
   const cloneImg = document.createElement('img')
@@ -150,81 +190,128 @@ export function flyToPlayer(fromEl: Element | null): void {
     height: '100%',
     objectFit: 'cover',
     display: 'block',
+    borderRadius: startRadius,
   } as CSSStyleDeclaration)
-  const grooves = makeGrooves()
-  const label = makeLabel()
-  flying.append(cloneImg, grooves, label)
+  const shell = makeShell()
+  const reelL = makeReel()
+  const reelR = makeReel()
+  reelL.style.left = '27%'
+  reelR.style.left = '73%'
+  flying.append(shell, cloneImg, reelL, reelR)
+  // 外壳在封面后面，卷轮在封面前面（卡带窗的感觉）
+  shell.style.zIndex = '-1'
 
-  document.querySelectorAll('.cover-flight').forEach((n) => n.remove())
-  document.body.appendChild(flying)
+  /* ---------- 仓门 ---------- */
+  const door = makeDoor(to)
 
-  // 主编排：四段关键帧（easing 写在上一帧，控制下一段的节奏）
+  document.querySelectorAll('.cover-flight, .player-door').forEach((n) => n.remove())
+  document.body.append(flying, door.root)
+
+  /* ---------- 主编排（900ms，offset 驱动四阶段） ---------- */
   const anim = flying.animate(
     [
-      // 起飞：原位
+      // 拿起：原位
       {
-        transform: 'translate(0, 0) scale(1) rotate(0deg)',
-        borderRadius: startRadius,
+        transform: 'translate(0px, 0px) scale(1) rotate(0deg)',
         offset: 0,
         easing: 'ease-out',
       },
-      // 翘起完成，即将变身
+      // 浮起完成
       {
-        transform: `translate(${(tx * 0.06).toFixed(1)}px, ${(ty * 0.06 - 16).toFixed(1)}px) scale(1.14) rotate(${(14 * dir).toFixed(1)}deg)`,
-        borderRadius: startRadius,
-        offset: 0.22,
-        easing: 'cubic-bezier(0.45, 0, 0.55, 1)',
+        transform: `translate(${(tx * 0.05).toFixed(1)}px, ${(ty * 0.05 - 14).toFixed(1)}px) scale(1.1) rotate(${(4 * dir).toFixed(1)}deg)`,
+        offset: 0.16,
+        easing: 'ease-in-out',
       },
-      // 变身黑胶、飞抵播放栏正上方悬停（转速最快的瞬间）
+      // 变形完成、滑行过拱顶（姿态朝向目标）
       {
-        transform: `translate(${hoverX.toFixed(1)}px, ${hoverY.toFixed(1)}px) scale(${(s * 1.25).toFixed(3)}) rotate(${(300 * dir).toFixed(1)}deg)`,
-        borderRadius: '50%',
-        offset: 0.5,
-        easing: 'cubic-bezier(0.55, 0, 0.85, 0.36)',
+        transform: `translate(${(tx * 0.55).toFixed(1)}px, ${(ty * 0.45 - arc).toFixed(1)}px) scale(1.16) rotate(${(7 * dir).toFixed(1)}deg)`,
+        offset: 0.42,
+        easing: 'cubic-bezier(0.3, 0, 0.35, 1)',
       },
-      // 落盘：垂直下落 + squash（压扁回弹的重量感）
+      // 顺着仓口滑入到位
       {
-        transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${(s * 1.1).toFixed(3)}, ${(s * 0.88).toFixed(3)}) rotate(${(350 * dir).toFixed(1)}deg)`,
-        borderRadius: '50%',
+        transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${(s * 1.06).toFixed(3)}) rotate(0deg)`,
         offset: LAND_AT,
-        easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+        easing: 'ease-out',
       },
-      // 收住定格
+      // 嵌入仓位
+      { transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${s.toFixed(3)}) rotate(0deg)`, offset: 0.8 },
+      // 交给真实封面
       {
-        transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${s.toFixed(3)}) rotate(${spin}deg)`,
-        borderRadius: '50%',
-        opacity: 1,
-        offset: 0.9,
-      },
-      {
-        transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${s.toFixed(3)}) rotate(${spin}deg)`,
-        borderRadius: '50%',
+        transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${s.toFixed(3)}) rotate(0deg)`,
         opacity: 0,
+        offset: 1,
       },
     ],
     { duration: FLIGHT_MS, fill: 'both' },
   )
 
-  // 唱纹与中心标在「变身」段浮现
-  const revealMs = FLIGHT_MS * 0.28
-  const revealDelay = FLIGHT_MS * 0.22
-  for (const el of [grooves, label]) {
-    el.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: revealMs,
-      delay: revealDelay,
-      fill: 'both',
-      easing: 'ease-out',
-    })
+  /* ---------- 卡带部件的节奏 ---------- */
+  const envelope = (delay: number, peak: number, out: number) => [
+    { opacity: 0, offset: 0 },
+    { opacity: 1, offset: peak },
+    { opacity: 1, offset: out },
+    { opacity: 0, offset: 0.97 },
+  ]
+  // 外壳与卷轮在「变形」段浮现，入仓后随整体淡出
+  for (const el of [shell, reelL, reelR]) {
+    el.animate(envelope(0, 0.24, 0.78), { duration: FLIGHT_MS, fill: 'both', easing: 'ease-out' })
   }
+  // 卷轮持续转动：变形段起步 → 落仓后转完大半圈"上带"
+  for (const reel of [reelL, reelR]) {
+    reel.animate(
+      [
+        { transform: 'translate(-50%, -50%) rotate(0deg)', offset: 0 },
+        { transform: 'translate(-50%, -50%) rotate(28deg)', offset: 0.24 },
+        { transform: `translate(-50%, -50%) rotate(${180 + 28 * dir}deg)`, offset: 0.86 },
+        { transform: `translate(-50%, -50%) rotate(${168 + 28 * dir}deg)`, offset: 1 },
+      ],
+      { duration: FLIGHT_MS, fill: 'both', easing: 'linear' },
+    )
+  }
+  // 封面标签圆角收平（卡带标签是直角贴纸的感觉）
+  cloneImg.animate(
+    [
+      { borderRadius: startRadius, offset: 0 },
+      { borderRadius: '7px', offset: 0.26 },
+      { borderRadius: '7px', offset: 1 },
+    ],
+    { duration: FLIGHT_MS, fill: 'both', easing: 'ease-out' },
+  )
 
-  // 落盘时刻的对齐表演：播放栏下沉 + 封面弹跳
-  const landDelay = Math.round(FLIGHT_MS * LAND_AT - 40)
+  /* ---------- 仓门的开合节奏 ---------- */
+  door.root.animate(
+    [
+      { opacity: 0, offset: 0 },
+      { opacity: 1, offset: 0.38 },
+      { opacity: 1, offset: 0.9 },
+      { opacity: 0, offset: 1 },
+    ],
+    { duration: FLIGHT_MS, fill: 'both', easing: 'ease-out' },
+  )
+  const doorSlide = (side: 'l' | 'r') => {
+    const open = side === 'l' ? 'translateX(-104%)' : 'translateX(104%)'
+    return [
+      { transform: 'translateX(0)', offset: 0, easing: 'ease-in-out' },
+      { transform: open, offset: 0.61, easing: 'ease-in-out' },
+      { transform: open, offset: 0.71, easing: 'ease-in-out' },
+      { transform: 'translateX(0)', offset: 0.88 },
+    ]
+  }
+  door.left.animate(doorSlide('l'), { duration: FLIGHT_MS, fill: 'both' })
+  door.right.animate(doorSlide('r'), { duration: FLIGHT_MS, fill: 'both' })
+
+  /* ---------- 落仓时刻的对齐表演 ---------- */
+  const landDelay = Math.round(FLIGHT_MS * LAND_AT) - 30
   dipPlayerBar(landDelay)
-  window.setTimeout(() => popPlayerCover(), landDelay)
+  window.setTimeout(() => popPlayerCover(), Math.round(FLIGHT_MS * 0.86))
 
-  const cleanup = () => flying.remove()
+  const cleanup = () => {
+    flying.remove()
+    door.root.remove()
+  }
   anim.finished.then(cleanup, cleanup)
-  window.setTimeout(cleanup, FLIGHT_MS + 300)
+  window.setTimeout(cleanup, FLIGHT_MS + 400)
 }
 
 /**
