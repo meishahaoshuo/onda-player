@@ -243,22 +243,24 @@ function onRowMenu(e: MouseEvent, song: SongRecord, i: number) {
             <CoverImage :cover-id="song.coverId" :size="32" />
             <span class="queue-title">{{ song.title }}</span>
             <span class="queue-artist">{{ song.artist }}</span>
-            <span class="queue-duration">{{ formatDuration(song.durationSec) }}</span>
-            <span class="row-actions" @click.stop>
-              <button
-                class="row-act"
-                :class="{ active: favorites.has(song.path) }"
-                :title="favorites.has(song.path) ? '取消收藏' : '收藏'"
-                @click="favorites.toggle(song.path)"
-              >
-                <AppIcon name="heart" :size="14" :class="{ filled: favorites.has(song.path) }" />
-              </button>
-              <button class="row-act" title="更多操作" @click="onRowMenu($event, song, i)">
-                <AppIcon name="more" :size="14" />
-              </button>
-              <button class="row-act" title="从队列移除" @click="player.removeAt(i)">
-                <AppIcon name="close" :size="14" />
-              </button>
+            <span class="queue-duration">
+              <span class="row-actions" @click.stop>
+                <button
+                  class="row-act"
+                  :class="{ active: favorites.has(song.path) }"
+                  :title="favorites.has(song.path) ? '取消收藏' : '收藏'"
+                  @click="favorites.toggle(song.path)"
+                >
+                  <AppIcon name="heart" :size="14" :class="{ filled: favorites.has(song.path) }" />
+                </button>
+                <button class="row-act" title="更多操作" @click="onRowMenu($event, song, i)">
+                  <AppIcon name="more" :size="14" />
+                </button>
+                <button class="row-act" title="从队列移除" @click="player.removeAt(i)">
+                  <AppIcon name="close" :size="14" />
+                </button>
+              </span>
+              {{ formatDuration(song.durationSec) }}
             </span>
           </div>
           <div v-if="player.queue.length === 0" class="queue-empty">队列是空的</div>
@@ -271,6 +273,9 @@ function onRowMenu(e: MouseEvent, song: SongRecord, i: number) {
 <style scoped>
 .player-bar {
   position: relative;
+  /* 高于 .detail-layer(5)：进度条悬浮时间气泡会冒出播放栏顶部，不能被详情覆盖层盖住；
+     低于歌词全屏页(50)与菜单/弹窗(100) */
+  z-index: 6;
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(320px, 2fr) minmax(180px, 1fr);
   align-items: center;
@@ -546,6 +551,7 @@ function onRowMenu(e: MouseEvent, song: SongRecord, i: number) {
 }
 
 .queue-duration {
+  position: relative;
   font-size: 12px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
@@ -558,23 +564,31 @@ function onRowMenu(e: MouseEvent, song: SongRecord, i: number) {
   font-size: 13px;
 }
 
-/* 队列行悬停快捷操作（收藏/更多/移除） */
+/* 队列行悬停快捷操作（收藏/更多/移除）：玻璃小胶囊悬浮在时长左侧，不遮挡时长 */
 .row-actions {
   position: absolute;
-  right: 6px;
-  display: none;
+  right: calc(100% + 4px);
+  display: flex;
   align-items: center;
   gap: 2px;
-  padding-left: 28px;
-  background: linear-gradient(to right, transparent, var(--bg-base) 38%);
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-1);
+  opacity: 0;
+  transform: translateX(6px);
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 
-.queue-row:hover .row-actions {
-  display: flex;
-}
-
-.queue-row.playing:hover .row-actions {
-  background: linear-gradient(to right, transparent, var(--bg-active) 38%);
+.queue-row:hover .row-actions,
+.queue-row:focus-within .row-actions {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
 }
 
 .row-act {

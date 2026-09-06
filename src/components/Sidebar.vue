@@ -3,13 +3,16 @@ import { nextTick, watch, ref, computed } from 'vue'
 import { useUiStore } from '@/stores/ui'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlaylistStore } from '@/stores/playlist'
+import { useLibraryStore } from '@/stores/library'
 import type { ViewId } from '@/types'
 import AppIcon from './AppIcon.vue'
+import CoverImage from './CoverImage.vue'
 import type { IconName } from './icons'
 
 const ui = useUiStore()
 const settings = useSettingsStore()
 const playlistStore = usePlaylistStore()
+const library = useLibraryStore()
 
 const navItems: { id: ViewId; label: string; icon: IconName }[] = [
   { id: 'songs', label: '歌曲', icon: 'music' },
@@ -24,12 +27,25 @@ const brandLogo = computed(() =>
   settings.resolvedTheme === 'dark' ? '/logo/onda-logo-main.svg' : '/logo/onda-logo-app.svg',
 )
 
-const themeIcon = { system: 'monitor', dark: 'moon', light: 'sun' } as const
-
 function openPlaylist(id: string) {
   ui.activeView = 'playlists'
   ui.detailKey = id
 }
+
+/** 歌单项小封面：手动指定的封面优先，否则取歌单内第一首有封面的歌 */
+const playlistCovers = computed(() => {
+  const byPath = new Map(library.songs.map((s) => [s.path, s.coverId]))
+  const map = new Map<string, string | null>()
+  for (const p of playlistStore.playlists) {
+    if (p.coverPath && byPath.has(p.coverPath)) {
+      map.set(p.id, byPath.get(p.coverPath) ?? null)
+      continue
+    }
+    const first = p.songPaths.map((x) => byPath.get(x) ?? null).find((c) => c !== null) ?? null
+    map.set(p.id, first)
+  }
+  return map
+})
 
 /* ---------- 滑动指示胶囊：量测激活项位置，平滑滑动 ---------- */
 
@@ -98,19 +114,21 @@ watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.le
 
       <div class="divider" />
 
-      <button class="nav-item" @click="ui.requestPlaylistCreate()">
-        <AppIcon name="playlistAdd" />
-        <span>新建歌单</span>
-      </button>
-      <button
-        :ref="setEl('playlists')"
-        class="nav-item"
-        :class="{ active: activeNavId() === 'playlists' }"
-        @click="ui.navigate('playlists')"
-      >
-        <AppIcon name="playlist" />
-        <span>歌单</span>
-      </button>
+      <!-- 歌单板块：标题行内含新建入口，列表收在下方 -->
+      <div class="section-head">
+        <button
+          :ref="setEl('playlists')"
+          class="nav-item grow"
+          :class="{ active: activeNavId() === 'playlists' }"
+          @click="ui.navigate('playlists')"
+        >
+          <AppIcon name="playlist" />
+          <span>歌单</span>
+        </button>
+        <button class="nav-item add-playlist" title="新建歌单" @click="ui.requestPlaylistCreate()">
+          <AppIcon name="playlistAdd" :size="16" />
+        </button>
+      </div>
 
       <template v-if="playlistStore.playlists.length > 0">
         <div class="divider" />
@@ -123,7 +141,7 @@ watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.le
           :title="p.name"
           @click="openPlaylist(p.id)"
         >
-          <AppIcon name="heart" :size="16" />
+          <CoverImage :cover-id="playlistCovers.get(p.id) ?? null" :size="22" class="playlist-cover" />
           <span class="playlist-name">{{ p.name }}</span>
         </button>
       </template>
@@ -137,14 +155,6 @@ watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.le
       >
         <AppIcon name="settings" />
         <span>设置</span>
-      </button>
-      <button
-        class="nav-item"
-        :title="`主题：${{ system: '跟随系统', dark: '深色', light: '浅色' }[settings.themeMode]}（点击切换）`"
-        @click="settings.cycleTheme()"
-      >
-        <AppIcon :name="themeIcon[settings.themeMode]" />
-        <span>{{ { system: '跟随系统', dark: '深色', light: '浅色' }[settings.themeMode] }}</span>
       </button>
     </div>
   </aside>
@@ -272,11 +282,51 @@ watch([() => ui.activeView, () => ui.detailKey, () => playlistStore.playlists.le
   background: var(--border-subtle);
 }
 
+/* 歌单板块标题行：歌单项 + 右侧悬浮的新建按钮。
+   注意不能加 position:relative —— 滑动胶囊依赖 nav-item 的 offsetTop 以 .nav 为基准 */
+.section-head {
+  display: flex;
+  align-items: center;
+}
+
+.section-head .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.add-playlist {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin-right: 4px;
+  justify-content: center;
+  color: var(--text-tertiary);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.section-head:hover .add-playlist,
+.add-playlist:focus-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.add-playlist:hover {
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
 .playlist-name {
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.playlist-cover {
+  border-radius: 6px;
 }
 
 .bottom {

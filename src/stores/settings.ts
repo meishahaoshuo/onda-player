@@ -46,14 +46,6 @@ function loadAutoResume(): boolean {
   return localStorage.getItem(AUTO_RESUME_KEY) === '1'
 }
 
-/** 排行榜容量 */
-export type ChartsLimit = 'top50' | 'top100' | 'all'
-const CHARTS_LIMIT_KEY = 'settings.chartsLimit'
-function loadChartsLimit(): ChartsLimit {
-  const raw = localStorage.getItem(CHARTS_LIMIT_KEY)
-  return raw === 'top100' || raw === 'all' ? raw : 'top50'
-}
-
 /**
  * 主题设置：跟随系统 / 深色 / 浅色，切换即时生效并持久化。
  * 注：第 2 阶段 IndexedDB 就绪后仍保留 localStorage——主题需要在
@@ -65,7 +57,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const lyricOffset = ref(loadLyricOffset())
   const autoRestoreQueue = ref(loadAutoRestore())
   const autoResume = ref(loadAutoResume())
-  const chartsLimit = ref<ChartsLimit>(loadChartsLimit())
 
   // 实际生效的主题（system 模式下随系统实时变化）
   const resolvedTheme = ref<'dark' | 'light'>(media.matches ? 'dark' : 'light')
@@ -121,15 +112,6 @@ export const useSettingsStore = defineStore('settings', () => {
     setLyricOffset(lyricOffset.value + delta)
   }
 
-  function cycleTheme() {
-    themeMode.value =
-      themeMode.value === 'dark'
-        ? 'light'
-        : themeMode.value === 'light'
-          ? 'system'
-          : 'dark'
-  }
-
   function setAutoRestoreQueue(v: boolean) {
     autoRestoreQueue.value = v
     localStorage.setItem(AUTO_RESTORE_KEY, v ? '1' : '0')
@@ -140,16 +122,10 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(AUTO_RESUME_KEY, v ? '1' : '0')
   }
 
-  function setChartsLimit(v: ChartsLimit) {
-    chartsLimit.value = v
-    localStorage.setItem(CHARTS_LIMIT_KEY, v)
-  }
-
   return {
     themeMode,
     resolvedTheme,
     setThemeMode,
-    cycleTheme,
     lyricFontSize,
     lyricFontPx,
     setLyricFontSize,
@@ -161,7 +137,5 @@ export const useSettingsStore = defineStore('settings', () => {
     setAutoRestoreQueue,
     autoResume,
     setAutoResume,
-    chartsLimit,
-    setChartsLimit,
   }
 })

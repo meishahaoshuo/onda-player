@@ -57,6 +57,15 @@ export const usePlaylistStore = defineStore('playlists', () => {
     })
   }
 
+  /** 指定歌单封面来源歌曲；null 恢复自动拼贴 */
+  function setCover(id: string, path: string | null) {
+    update(id, (p) => {
+      const next = { ...p, coverPath: path ?? undefined }
+      if (path === null) delete next.coverPath
+      return next
+    })
+  }
+
   function update(id: string, fn: (p: PlaylistRecord) => PlaylistRecord) {
     playlists.value = playlists.value.map((p) => {
       if (p.id !== id) return p
@@ -68,5 +77,5 @@ export const usePlaylistStore = defineStore('playlists', () => {
     })
   }
 
-  return { playlists, loaded, load, create, rename, remove, addSongs, removeSong, moveSong }
+  return { playlists, loaded, load, create, rename, remove, addSongs, removeSong, moveSong, setCover }
 })

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount, ref } from 'vue'
 import VirtualList from '@/components/VirtualList.vue'
 import CoverImage from '@/components/CoverImage.vue'
 import QualityBadge from '@/components/QualityBadge.vue'
@@ -6,6 +7,7 @@ import AppIcon from '@/components/AppIcon.vue'
 import { formatDuration } from '@/utils/format'
 import { useSongActions } from '@/composables/useSongActions'
 import { useFavoritesStore } from '@/stores/favorites'
+import { flyToPlayerFromRow } from '@/services/coverFlight'
 import type { SongRecord } from '@/types'
 
 const props = defineProps<{ songs: SongRecord[]; currentPath?: string | null; persistKey?: string }>()
@@ -16,7 +18,16 @@ const ROW_HEIGHT = 56
 const { openSongMenu } = useSongActions()
 const favorites = useFavoritesStore()
 
-function onRowClick(song: SongRecord) {
+/** 首屏错峰浮现：只对挂载初期渲染的行生效。
+    虚拟列表滚动时会持续回收/重建行，一旦窗口期结束，行直接显示，滚动不闪动。 */
+const REVEAL_WINDOW_MS = 900
+const MAX_REVEAL_ROWS = 14
+const booting = ref(true)
+const bootTimer = window.setTimeout(() => (booting.value = false), REVEAL_WINDOW_MS)
+onBeforeUnmount(() => window.clearTimeout(bootTimer))
+
+function onRowClick(song: SongRecord, e: MouseEvent) {
+  flyToPlayerFromRow(e)
   emit('play', song)
 }
 
@@ -38,15 +49,18 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
 
     <div class="list-body">
       <VirtualList :items="props.songs" :item-height="ROW_HEIGHT" :persist-key="props.persistKey">
-        <template #default="{ item }">
+        <template #default="{ item, index }">
           <div
             class="song-row"
-            :class="{ playing: item.path === props.currentPath }"
-            :style="{ height: `${ROW_HEIGHT}px` }"
-            @click="onRowClick(item)"
+            :class="{
+              playing: item.path === props.currentPath,
+              'stagger-row': booting && index < MAX_REVEAL_ROWS,
+            }"
+            :style="{ height: `${ROW_HEIGHT}px`, '--reveal-i': index }"
+            @click="onRowClick(item, $event)"
             @contextmenu.prevent="onRowMenu(item, $event)"
           >
-            <span class="col-cover">
+            <span class="col-cover" data-flight-cover>
               <CoverImage :cover-id="item.coverId" :size="40" />
             </span>
             <span class="col-title">
@@ -63,23 +77,19 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
             </span>
             <span class="col-artist" :title="item.artist">{{ item.artist }}</span>
             <span class="col-album" :title="item.album">{{ item.album }}</span>
-            <span class="col-duration">
-              <span class="duration-text">
-                {{ formatDuration(item.durationSec) }}
-              </span>
-              <span class="row-actions" @click.stop>
-                <button
-                  class="row-act"
-                  :class="{ active: favorites.has(item.path) }"
-                  :title="favorites.has(item.path) ? '取消收藏' : '收藏'"
-                  @click="favorites.toggle(item.path)"
-                >
-                  <AppIcon name="heart" :size="15" :class="{ filled: favorites.has(item.path) }" />
-                </button>
-                <button class="row-act" title="更多操作" @click="onRowMenu(item, $event)">
-                  <AppIcon name="more" :size="15" />
-                </button>
-              </span>
+            <span class="col-duration">{{ formatDuration(item.durationSec) }}</span>
+            <span class="row-actions" @click.stop>
+              <button
+                class="row-act"
+                :class="{ active: favorites.has(item.path) }"
+                :title="favorites.has(item.path) ? '取消收藏' : '收藏'"
+                @click="favorites.toggle(item.path)"
+              >
+                <AppIcon name="heart" :size="15" :class="{ filled: favorites.has(item.path) }" />
+              </button>
+              <button class="row-act" title="更多操作" @click="onRowMenu(item, $event)">
+                <AppIcon name="more" :size="15" />
+              </button>
             </span>
           </div>
         </template>
@@ -196,7 +206,6 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
 }
 
 .col-duration {
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -206,23 +215,33 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
   font-variant-numeric: tabular-nums;
 }
 
-/* 悬停快捷操作：盖住时长位浮出（爱心/更多），带渐变底衬盖住时长文字 */
+/* 悬停快捷操作：悬浮在专辑列与时长列之间的空白区（右侧让出 72px 时长列 + 12px 间距），
+   玻璃小胶囊不遮挡时长；opacity + 位移过渡浮现 */
 .row-actions {
   position: absolute;
-  right: 0;
-  display: none;
+  top: 50%;
+  right: 84px;
+  display: flex;
   align-items: center;
   gap: 2px;
-  padding-left: 28px;
-  background: linear-gradient(to right, transparent, var(--bg-base) 38%);
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-1);
+  opacity: 0;
+  transform: translateY(-50%) translateX(6px);
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 
-.song-row:hover .row-actions {
-  display: flex;
-}
-
-.song-row.playing:hover .row-actions {
-  background: linear-gradient(to right, transparent, var(--bg-active) 38%);
+.song-row:hover .row-actions,
+.song-row:focus-within .row-actions {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+  pointer-events: auto;
 }
 
 .row-act {
@@ -247,5 +266,25 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
 
 .row-act :deep(svg.filled) {
   fill: currentColor;
+}
+
+/* 首屏行错峰浮现：窗口期内渲染的行依次上浮淡入。
+   用 backwards 而非 forwards：结束后不残留 fill，行上原有的 hover 位移不被压住 */
+.song-row.stagger-row {
+  animation: row-reveal 340ms var(--ease-out) backwards;
+  animation-delay: calc(var(--reveal-i, 0) * 40ms);
+}
+
+@keyframes row-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .song-row.stagger-row {
+    animation: none;
+  }
 }
 </style>

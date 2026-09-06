@@ -10,6 +10,7 @@ import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
 import { useFavoritesStore } from '@/stores/favorites'
 import { useSongActions } from '@/composables/useSongActions'
+import { popPlayerCover } from '@/services/coverFlight'
 import { formatDuration, formatTotalDuration, formatFileSize, formatSampleRate } from '@/utils/format'
 import type { SongRecord } from '@/types'
 
@@ -121,8 +122,10 @@ function playAll(shuffle = false) {
   void player.playSong(first, songs)
 }
 
-function playSong(song: SongRecord) {
+function playSong(song: SongRecord, e?: MouseEvent) {
   if (!album.value) return
+  // 曲目行没有小封面，仅做播放栏封面弹跳
+  if (e) popPlayerCover()
   void player.playSong(song, album.value.songs)
 }
 
@@ -238,7 +241,7 @@ const metaRows = computed<MetaRow[]>(() => {
         :key="row.song.path"
         class="track-row"
         :class="{ playing: row.song.path === player.currentPath }"
-        @click="playSong(row.song)"
+        @click="playSong(row.song, $event)"
         @contextmenu.prevent="onRowMenu(row.song, $event)"
       >
         <span class="track-no">{{ row.no }}</span>
@@ -565,23 +568,32 @@ const metaRows = computed<MetaRow[]>(() => {
   font-variant-numeric: tabular-nums;
 }
 
-/* 悬停快捷操作（与 SongList 同款）：盖住时长浮出 */
+/* 悬停快捷操作（与 SongList 同款玻璃胶囊）：悬浮在标题区与时长之间的空白区，
+   不遮挡时长；opacity + 位移过渡浮现 */
 .row-actions {
   position: absolute;
-  right: 0;
-  display: none;
+  right: calc(100% + 8px);
+  display: flex;
   align-items: center;
   gap: 2px;
-  padding-left: 28px;
-  background: linear-gradient(to right, transparent, var(--bg-base) 38%);
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-1);
+  opacity: 0;
+  transform: translateX(6px);
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 
-.track-row:hover .row-actions {
-  display: flex;
-}
-
-.track-row.playing:hover .row-actions {
-  background: linear-gradient(to right, transparent, var(--bg-active) 38%);
+.track-row:hover .row-actions,
+.track-row:focus-within .row-actions {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
 }
 
 .row-act {

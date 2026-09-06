@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import CollageCover from '@/components/CollageCover.vue'
 import SongList from '@/components/SongList.vue'
@@ -11,6 +11,8 @@ import { usePlayerStore } from '@/stores/player'
 import { usePlaylistStore } from '@/stores/playlist'
 import { useFavoritesStore } from '@/stores/favorites'
 import { useSongActions } from '@/composables/useSongActions'
+import { useStaggerReveal } from '@/composables/useStaggerReveal'
+import { flyToPlayerFromRow } from '@/services/coverFlight'
 import { useUiStore } from '@/stores/ui'
 import type { SongRecord } from '@/types'
 
@@ -27,7 +29,19 @@ const ui = useUiStore()
 onMounted(() => {
   if (!playlistStore.loaded) playlistStore.load()
   consumeCreateRequest()
+  // 数据早已就绪时 watcher 不会触发，挂载时补一次登记
+  plReveal.refresh()
 })
+
+/* 歌单列表网格的错峰浮现 */
+const plHomeEl = ref<HTMLElement | null>(null)
+const plReveal = useStaggerReveal(() => plHomeEl.value, '.pl-card')
+watch(
+  () => playlistStore.playlists.length,
+  () => plReveal.refresh(),
+  { flush: 'post' },
+)
+onBeforeUnmount(() => plReveal.disconnect())
 
 // 侧边栏在其他页面点击「新建歌单」时也会置位请求标记
 watch(
@@ -57,6 +71,42 @@ const currentSongs = computed<SongRecord[]>(() => {
 
 /** 歌单内歌曲的封面 id 列表（拼贴封面用） */
 const currentCoverIds = computed(() => currentSongs.value.map((s) => s.coverId))
+
+/** 手动指定的封面：coverPath 指向的歌还在库中就用它的封面，否则回退拼贴 */
+const currentCoverId = computed<string | null>(() => {
+  const path = current.value?.coverPath
+  if (!path) return null
+  return library.songs.find((s) => s.path === path)?.coverId ?? null
+})
+
+/** 封面选择弹窗：歌单内歌曲按封面去重 */
+const coverChoices = computed(() => {
+  const seen = new Set<string>()
+  const list: { path: string; coverId: string; title: string }[] = []
+  for (const s of currentSongs.value) {
+    if (!s.coverId || seen.has(s.coverId)) continue
+    seen.add(s.coverId)
+    list.push({ path: s.path, coverId: s.coverId, title: s.title })
+  }
+  return list
+})
+
+const showCoverPicker = ref(false)
+
+function chooseCover(path: string | null) {
+  if (current.value) playlistStore.setCover(current.value.id, path)
+  showCoverPicker.value = false
+}
+
+/** 歌单列表页：id → 手动指定封面的 coverId（未设置则不在 map 里） */
+const cardCoverOverride = computed(() => {
+  const byPath = new Map(library.songs.map((s) => [s.path, s.coverId]))
+  const map = new Map<string, string | null>()
+  for (const p of playlistStore.playlists) {
+    if (p.coverPath) map.set(p.id, byPath.get(p.coverPath) ?? null)
+  }
+  return map
+})
 
 /** 歌单列表页：id → 封面 id 列表（一次建索引，避免逐卡片全库扫描） */
 const cardCoverIds = computed(() => {
@@ -175,7 +225,8 @@ function playAll(shuffle = false) {
   void player.playSong(first, songs)
 }
 
-function onPlay(song: SongRecord) {
+function onPlay(song: SongRecord, e?: MouseEvent) {
+  if (e) flyToPlayerFromRow(e)
   if (!currentSongs.value) return
   void player.playSong(song, currentSongs.value)
 }
@@ -251,7 +302,18 @@ function confirmRemove() {
     </button>
 
     <header class="pl-header">
-      <CollageCover :cover-ids="currentCoverIds" :size="120" class="header-cover" />
+      <div class="header-cover">
+        <CoverImage v-if="currentCoverId" :cover-id="currentCoverId" :size="120" />
+        <CollageCover v-else :cover-ids="currentCoverIds" :size="120" />
+        <button
+          class="cover-edit"
+          :disabled="currentSongs.length === 0"
+          title="从歌单歌曲的封面中选择"
+          @click="showCoverPicker = true"
+        >
+          <AppIcon name="image" :size="13" /> 设置封面
+        </button>
+      </div>
       <div class="pl-info">
         <h1 class="pl-name">{{ current.name }}</h1>
         <div class="pl-sub">{{ currentSongs.length }} 首歌曲</div>
@@ -296,11 +358,11 @@ function confirmRemove() {
         @dragover="onDragOver(i, $event)"
         @drop="onDrop(i, $event)"
         @dragend="onDragEnd"
-        @click="onPlay(song)"
+        @click="onPlay(song, $event)"
         @contextmenu.prevent="onRowMenu(song, $event)"
       >
         <span class="drag-handle">⋮⋮</span>
-        <CoverImage :cover-id="song.coverId" :size="36" />
+        <CoverImage :cover-id="song.coverId" :size="36" data-flight-cover />
         <span class="drag-title">{{ song.title }}</span>
         <span class="drag-artist">{{ song.artist }}</span>
         <span class="row-actions" @click.stop>
@@ -370,10 +432,36 @@ function confirmRemove() {
         </FrostedPanel>
       </div></Transition>
     </teleport>
+    <!-- 封面选择弹层：从歌单内歌曲封面中挑一张 -->
+    <teleport to="body">
+      <Transition name="modal"><div v-if="showCoverPicker" class="modal-mask" @click.self="showCoverPicker = false">
+        <FrostedPanel class="modal wide" radius="12px">
+          <h3 class="modal-title">设置「{{ current.name }}」的封面</h3>
+          <div class="cover-grid">
+            <button class="cover-choice" :class="{ active: !currentCoverId }" @click="chooseCover(null)">
+              <CollageCover :cover-ids="currentCoverIds" :size="72" />
+              <span class="cover-choice-name">自动拼贴</span>
+            </button>
+            <button
+              v-for="c in coverChoices"
+              :key="c.path"
+              class="cover-choice"
+              :class="{ active: current.coverPath === c.path }"
+              :title="c.title"
+              @click="chooseCover(c.path)"
+            >
+              <CoverImage :cover-id="c.coverId" :size="72" />
+              <span class="cover-choice-name">{{ c.title }}</span>
+            </button>
+          </div>
+          <div v-if="coverChoices.length === 0" class="empty-hint">歌单里的歌曲都没有封面</div>
+        </FrostedPanel>
+      </div></Transition>
+    </teleport>
   </div>
 
   <!-- 歌单列表 -->
-  <div v-else class="playlist-home">
+  <div v-else ref="plHomeEl" class="playlist-home">
     <div class="toolbar">
       <button class="primary-btn" @click="showCreate = true">
         <AppIcon name="plus" :size="16" /> 新建歌单
@@ -388,7 +476,13 @@ function confirmRemove() {
         class="pl-card"
         @click="openPlaylist(p, $event)"
       >
-        <CollageCover :cover-ids="cardCoverIds.get(p.id) ?? []" :size="120" />
+        <CoverImage
+          v-if="cardCoverOverride.get(p.id)"
+          :cover-id="cardCoverOverride.get(p.id)!"
+          :size="120"
+          class="card-cover"
+        />
+        <CollageCover v-else :cover-ids="cardCoverIds.get(p.id) ?? []" :size="120" />
         <div class="pl-card-name" :title="p.name">{{ p.name }}</div>
         <div class="pl-card-sub">{{ p.songPaths.length }} 首</div>
       </button>
@@ -448,6 +542,95 @@ function confirmRemove() {
   display: flex;
   align-items: center;
   gap: 20px;
+}
+
+/* 头部封面容器：悬停浮现「设置封面」入口 */
+.header-cover {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  box-shadow: var(--shadow-1);
+}
+
+.header-cover > :deep(.cover-img),
+.header-cover > :deep(.cover-fallback) {
+  border-radius: 8px;
+}
+
+.cover-edit {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 0;
+  font-size: 12px;
+  color: #fff;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.45) 70%, transparent);
+  border-radius: 0 0 8px 8px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity var(--dur-med) var(--ease-out), transform var(--dur-med) var(--ease-out);
+}
+
+.header-cover:hover .cover-edit,
+.cover-edit:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cover-edit:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 封面选择网格 */
+.cover-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 10px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.cover-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-radius: var(--radius-item);
+  border: 2px solid transparent;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.cover-choice:hover {
+  background: var(--bg-hover);
+}
+
+.cover-choice.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.cover-choice :deep(.cover-img),
+.cover-choice :deep(.cover-fallback) {
+  border-radius: 6px;
+}
+
+.cover-choice-name {
+  max-width: 100%;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pl-name {
@@ -599,23 +782,31 @@ function confirmRemove() {
   color: var(--danger);
 }
 
-/* 悬停快捷操作：盖住行尾浮出（收藏/更多/移除） */
+/* 悬停快捷操作（收藏/更多/移除）：玻璃小胶囊浮出行尾空白区，过渡浮现 */
 .row-actions {
   position: absolute;
   right: 8px;
-  display: none;
+  display: flex;
   align-items: center;
   gap: 2px;
-  padding-left: 28px;
-  background: linear-gradient(to right, transparent, var(--bg-base) 38%);
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-1);
+  opacity: 0;
+  transform: translateX(6px);
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 
-.drag-row:hover .row-actions {
-  display: flex;
-}
-
-.drag-row.playing:hover .row-actions {
-  background: linear-gradient(to right, transparent, var(--bg-active) 38%);
+.drag-row:hover .row-actions,
+.drag-row:focus-within .row-actions {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
 }
 
 .row-act {
@@ -674,6 +865,13 @@ function confirmRemove() {
 
 .pl-card:hover {
   background: var(--bg-hover);
+}
+
+/* 手动指定封面的卡片：与拼贴封面同样的圆角和投影 */
+.pl-card :deep(.card-cover.cover-img),
+.pl-card :deep(.card-cover.cover-fallback) {
+  border-radius: 8px;
+  box-shadow: var(--shadow-1);
 }
 
 .pl-card-name {

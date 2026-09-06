@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import { beginAlbumEnter } from '@/services/pageTransition'
 import { paletteCache } from '@/services/paletteCache'
 import { useMagneticGrid } from '@/composables/useMagneticGrid'
+import { useStaggerReveal } from '@/composables/useStaggerReveal'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 
@@ -16,6 +17,7 @@ const player = usePlayerStore()
 
 const gridEl = ref<HTMLElement | null>(null)
 const magnet = useMagneticGrid(gridEl, '.artist-card')
+const reveal = useStaggerReveal(() => gridEl.value, '.artist-card')
 
 function openArtist(artist: { name: string; coverId: string | null }, e: MouseEvent) {
   const cardEl = e.currentTarget as HTMLElement
@@ -55,7 +57,15 @@ function onHover(e: MouseEvent) {
   paletteCache.primeNow(card?.dataset.coverId)
 }
 
+/* 条目错峰浮现：数据就绪/增长后重新登记 */
+watch(
+  () => library.artists.length,
+  () => reveal.refresh(),
+  { flush: 'post' },
+)
+
 onMounted(() => {
+  reveal.refresh()
   scrollEl = (gridEl.value?.closest('.view-body') as HTMLElement | null) ?? null
   scrollEl?.addEventListener('scroll', onScroll, { passive: true })
   const ric = (window as Window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback
@@ -64,6 +74,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  reveal.disconnect()
   scrollEl?.removeEventListener('scroll', onScroll)
   window.clearTimeout(scrollTimer)
 })

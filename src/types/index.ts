@@ -51,6 +51,8 @@ export interface PlaylistRecord {
   name: string
   /** 歌曲 path 有序列表 */
   songPaths: string[]
+  /** 手动指定的封面来源歌曲 path；缺省时用歌曲封面自动拼贴 */
+  coverPath?: string
   createdAt: number
 }
 
