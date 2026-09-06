@@ -1,10 +1,13 @@
 import { defineStore } from 'pinia'
-import { ref, watchEffect } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 import type { ThemeMode } from '@/types'
 
 const STORAGE_KEY = 'settings.themeMode'
 const LYRIC_FS_KEY = 'settings.lyricFontSize'
-const LYRIC_OFFSET_KEY = 'settings.lyricOffset'
+const LYRIC_FW_KEY = 'settings.lyricFontWeight'
+const LYRIC_ALIGN_KEY = 'settings.lyricAlign'
+const LYRIC_BLUR_KEY = 'settings.lyricBlur'
+const LYRIC_CTRL_KEY = 'settings.lyricControls'
 const media = window.matchMedia('(prefers-color-scheme: dark)')
 
 function loadMode(): ThemeMode {
@@ -12,26 +15,36 @@ function loadMode(): ThemeMode {
   return raw === 'dark' || raw === 'light' ? raw : 'system'
 }
 
-/** 歌词字号档位：小 / 中 / 大 / 特大（主行 + 翻译行的成组字号） */
-export type LyricFontSize = 'sm' | 'md' | 'lg' | 'xl'
+/* ---------- 歌词页外观：字号/字重无级调节 + 对齐/景深模糊/控制样式 ---------- */
 
-export const LYRIC_FS_STEPS: { id: LyricFontSize; label: string; main: number; sub: number }[] = [
-  { id: 'sm', label: '小', main: 18, sub: 13 },
-  { id: 'md', label: '中', main: 22, sub: 15 },
-  { id: 'lg', label: '大', main: 27, sub: 18 },
-  { id: 'xl', label: '特大', main: 33, sub: 22 },
-]
-
-function loadLyricFs(): LyricFontSize {
-  const raw = localStorage.getItem(LYRIC_FS_KEY)
-  return LYRIC_FS_STEPS.some((s) => s.id === raw) ? (raw as LyricFontSize) : 'md'
+/** 歌词主行字号（px，无级），翻译行按比例派生 */
+function loadLyricPx(): number {
+  const raw = Number(localStorage.getItem(LYRIC_FS_KEY))
+  return Number.isFinite(raw) && raw >= 14 && raw <= 44 ? raw : 22
 }
 
-/** 歌词偏移（秒，-3 ~ +3）：正数 = 歌词整体提前显示，负数 = 延后。
-    不同来源的 LRC 时间轴与实际演唱普遍存在零点几秒的固定偏差，逐歌手动校准用。 */
-function loadLyricOffset(): number {
-  const raw = Number(localStorage.getItem(LYRIC_OFFSET_KEY))
-  return Number.isFinite(raw) ? Math.min(3, Math.max(-3, raw)) : 0
+/** 歌词字重（300-800，无级，50 步进） */
+function loadLyricWeight(): number {
+  const raw = Number(localStorage.getItem(LYRIC_FW_KEY))
+  return Number.isFinite(raw) && raw >= 300 && raw <= 800 ? Math.round(raw / 50) * 50 : 500
+}
+
+export type LyricAlign = 'center' | 'left'
+
+function loadLyricAlign(): LyricAlign {
+  return localStorage.getItem(LYRIC_ALIGN_KEY) === 'left' ? 'left' : 'center'
+}
+
+/** 歌词景深模糊：非当前行按距离轻微模糊（Apple Music 式层次） */
+function loadLyricBlur(): boolean {
+  return localStorage.getItem(LYRIC_BLUR_KEY) !== '0'
+}
+
+/** 歌词页控制组件风格：default 稳重 / minimal 简约（Apple Music 式小尺寸） */
+export type LyricControlsStyle = 'default' | 'minimal'
+
+function loadLyricControls(): LyricControlsStyle {
+  return localStorage.getItem(LYRIC_CTRL_KEY) === 'minimal' ? 'minimal' : 'default'
 }
 
 /** 启动时恢复上次队列（关闭则每次冷启动为空队列） */
@@ -83,8 +96,12 @@ function loadAmbient(): boolean {
  */
 export const useSettingsStore = defineStore('settings', () => {
   const themeMode = ref<ThemeMode>(loadMode())
-  const lyricFontSize = ref<LyricFontSize>(loadLyricFs())
-  const lyricOffset = ref(loadLyricOffset())
+  /** 歌词外观：字号/字重无级、对齐、景深模糊、控制组件风格 */
+  const lyricFontPx = ref(loadLyricPx())
+  const lyricFontWeight = ref(loadLyricWeight())
+  const lyricAlign = ref<LyricAlign>(loadLyricAlign())
+  const lyricBlur = ref(loadLyricBlur())
+  const lyricControls = ref<LyricControlsStyle>(loadLyricControls())
   const autoRestoreQueue = ref(loadAutoRestore())
   const autoResume = ref(loadAutoResume())
   /** 自定义主题色：'' = 默认海军蓝 */
@@ -95,10 +112,8 @@ export const useSettingsStore = defineStore('settings', () => {
   // 实际生效的主题（system 模式下随系统实时变化）
   const resolvedTheme = ref<'dark' | 'light'>(media.matches ? 'dark' : 'light')
 
-  /** 当前档位对应的主行 / 翻译行字号（px） */
-  const lyricFontPx = ref(
-    LYRIC_FS_STEPS.find((s) => s.id === lyricFontSize.value) ?? LYRIC_FS_STEPS[1],
-  )
+  /** 当前字号对应的翻译行字号（px）：按主行 0.66 比例派生 */
+  const lyricSubPx = computed(() => Math.round(lyricFontPx.value * 0.66))
 
   watchEffect(() => {
     resolvedTheme.value =
@@ -142,25 +157,31 @@ export const useSettingsStore = defineStore('settings', () => {
     themeMode.value = mode
   }
 
-  function setLyricFontSize(size: LyricFontSize) {
-    lyricFontSize.value = size
-    lyricFontPx.value = LYRIC_FS_STEPS.find((s) => s.id === size) ?? LYRIC_FS_STEPS[1]
-    localStorage.setItem(LYRIC_FS_KEY, size)
+  function setLyricFontSize(px: number) {
+    const v = Math.min(44, Math.max(14, Math.round(px)))
+    lyricFontPx.value = v
+    localStorage.setItem(LYRIC_FS_KEY, String(v))
   }
 
-  function cycleLyricFontSize() {
-    const idx = LYRIC_FS_STEPS.findIndex((s) => s.id === lyricFontSize.value)
-    setLyricFontSize(LYRIC_FS_STEPS[(idx + 1) % LYRIC_FS_STEPS.length].id)
+  function setLyricFontWeight(w: number) {
+    const v = Math.min(800, Math.max(300, Math.round(w / 50) * 50))
+    lyricFontWeight.value = v
+    localStorage.setItem(LYRIC_FW_KEY, String(v))
   }
 
-  function setLyricOffset(v: number) {
-    const clamped = Math.min(3, Math.max(-3, Math.round(v * 10) / 10))
-    lyricOffset.value = clamped
-    localStorage.setItem(LYRIC_OFFSET_KEY, String(clamped))
+  function setLyricAlign(a: LyricAlign) {
+    lyricAlign.value = a
+    localStorage.setItem(LYRIC_ALIGN_KEY, a)
   }
 
-  function nudgeLyricOffset(delta: number) {
-    setLyricOffset(lyricOffset.value + delta)
+  function setLyricBlur(v: boolean) {
+    lyricBlur.value = v
+    localStorage.setItem(LYRIC_BLUR_KEY, v ? '1' : '0')
+  }
+
+  function setLyricControls(s: LyricControlsStyle) {
+    lyricControls.value = s
+    localStorage.setItem(LYRIC_CTRL_KEY, s)
   }
 
   function setAutoRestoreQueue(v: boolean) {
@@ -188,13 +209,17 @@ export const useSettingsStore = defineStore('settings', () => {
     themeMode,
     resolvedTheme,
     setThemeMode,
-    lyricFontSize,
     lyricFontPx,
+    lyricSubPx,
+    lyricFontWeight,
     setLyricFontSize,
-    cycleLyricFontSize,
-    lyricOffset,
-    setLyricOffset,
-    nudgeLyricOffset,
+    setLyricFontWeight,
+    lyricAlign,
+    setLyricAlign,
+    lyricBlur,
+    setLyricBlur,
+    lyricControls,
+    setLyricControls,
     autoRestoreQueue,
     setAutoRestoreQueue,
     autoResume,

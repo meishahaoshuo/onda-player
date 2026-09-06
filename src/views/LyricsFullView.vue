@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
+import AppSwitch from '@/components/AppSwitch.vue'
 import CoverImage from '@/components/CoverImage.vue'
 import { readLrcFile } from '@/services/fs'
 import { parseLrc, type LyricGroup } from '@/services/lyrics'
@@ -8,7 +9,7 @@ import { extractBrightColors, renderAmbientUrl } from '@/services/palette'
 import { getAudio } from '@/services/player'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
-import { LYRIC_FS_STEPS, useSettingsStore, type LyricFontSize } from '@/stores/settings'
+import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 import { formatDuration } from '@/utils/format'
 import type { PlayMode } from '@/types'
@@ -33,32 +34,55 @@ const FLY_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
 /* ---------- 封面环境背景（单层预烘焙模糊图，避免多个全屏 blur 图层在飞入/切歌时并行栅格化） ---------- */
 
-const ambientUrl = ref<string | null>(null)
-const ambientShown = ref(false)
+/** 环境背景双层交叉淡化：layer 为当前层，prev 仅在切歌过渡期间保持可见，淡完退役。
+    首层等 revealAmbient（与封面飞入并行淡入）；色彩策略不变（同一套预烘焙/取色管线）。 */
+const ambientLayer = ref<{ url: string; visible: boolean } | null>(null)
+const ambientPrev = ref<{ url: string; visible: boolean } | null>(null)
 const ambientCache = new Map<string, string>()
-/** 流光圆斑颜色：从封面提取的明亮饱和色（浅色底的亮眼点缀） */
-const flowColors = ref<string[]>([])
-const flowCache = new Map<string, string[]>()
+let ambientRetireTimer = 0
 
 function revealAmbient() {
   requestAnimationFrame(() => {
-    ambientShown.value = true
+    if (ambientLayer.value) ambientLayer.value.visible = true
   })
 }
+
+function showAmbient(url: string) {
+  const cur = ambientLayer.value
+  if (!cur) {
+    ambientLayer.value = { url, visible: false }
+    return
+  }
+  if (cur.url === url) return
+  ambientPrev.value = { url: cur.url, visible: true }
+  ambientLayer.value = { url, visible: false }
+  window.clearTimeout(ambientRetireTimer)
+  // 双 rAF 确保新层以 opacity 0 完成首次绘制后再淡入，交叉过渡才成立
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (ambientLayer.value?.url === url) ambientLayer.value.visible = true
+    })
+  })
+  // 900ms > 淡化时长 600ms，旧层等新层完全显形后再卸载
+  ambientRetireTimer = window.setTimeout(() => {
+    ambientPrev.value = null
+  }, 900)
+}
+
+/** 流光圆斑颜色：从封面提取的明亮饱和色（浅色底的亮眼点缀） */
+const flowColors = ref<string[]>([])
+const flowCache = new Map<string, string[]>()
 
 watch(
   () => player.current?.coverId ?? null,
   async (coverId) => {
     if (!coverId) {
-      ambientUrl.value = null
-      ambientShown.value = false
+      ambientLayer.value = null
+      ambientPrev.value = null
       flowColors.value = []
       return
     }
-    const apply = (url: string) => {
-      ambientUrl.value = url
-      revealAmbient()
-    }
+    const apply = showAmbient
     const cached = ambientCache.get(coverId)
     if (cached) {
       apply(cached)
@@ -113,19 +137,7 @@ function preloadImage(src: string): Promise<void> {
 }
 
 const baseGroups = ref<LyricGroup[]>([])
-/** 应用歌词偏移后的时间轴：偏移 > 0 = 歌词提前显示。
-    高亮、逐字加深、点击跳播共用这份平移后的时间，保证三者的语义一致。 */
-const groups = computed<LyricGroup[]>(() =>
-  baseGroups.value.map((g) => {
-    if (g.time < 0) return g
-    const shift = Math.max(0, g.time - settings.lyricOffset) - g.time
-    return {
-      ...g,
-      time: g.time + shift,
-      charTimes: g.charTimes?.map((t) => t + shift),
-    }
-  }),
-)
+const groups = computed<LyricGroup[]>(() => baseGroups.value)
 const loading = ref(false)
 /** 歌词加载完成标记（有无歌词都置 true），飞入动画据此等布局稳定 */
 const lyricsSettled = ref(false)
@@ -485,12 +497,23 @@ function cycleMode() {
 
 const fsOpen = ref(false)
 
-function pickFontSize(size: LyricFontSize) {
-  settings.setLyricFontSize(size)
-  fsOpen.value = false
-  // 字号变了行高也变，需重新把当前行摆到视口上 1/3
-  requestAnimationFrame(() => scrollToActive(false))
+/** 字重数值 → 中文名（滑杆旁展示） */
+const WEIGHT_LABELS: Record<number, string> = {
+  300: '细',
+  400: '常规',
+  500: '适中',
+  600: '半粗',
+  700: '粗',
+  800: '特粗',
 }
+const weightLabel = computed(() => WEIGHT_LABELS[settings.lyricFontWeight] ?? String(settings.lyricFontWeight))
+
+/** 控制按钮图标尺寸：简约风整体收小一档（Apple Music 式） */
+const ctrlIcon = computed(() =>
+  settings.lyricControls === 'minimal'
+    ? { side: 17, prevNext: 20, play: 20 }
+    : { side: 20, prevNext: 24, play: 28 },
+)
 
 /* ---------- 底部进度条（作为 mini-bar 整体底边线） ---------- */
 
@@ -564,19 +587,12 @@ watch(
   },
 )
 
-/* 偏移变化 → 时间轴整体平移，立即重算高亮行并重新定位视口 */
-watch(
-  () => settings.lyricOffset,
-  () => {
-    activeIdx.value = computeActiveIdx(getAudio().currentTime)
-    nextTick(() => scrollToActive(false))
-  },
-)
-
-/** 歌词页根元素内联字号变量（档位切换即时生效） */
+/** 歌词页根元素内联样式变量：字号/字重/对齐（设置面板调节即时生效） */
 const lyricVars = computed(() => ({
-  '--lyric-fs': `${settings.lyricFontPx.main}px`,
-  '--lyric-fs-sub': `${settings.lyricFontPx.sub}px`,
+  '--lyric-fs': `${settings.lyricFontPx}px`,
+  '--lyric-fs-sub': `${settings.lyricSubPx}px`,
+  '--lyric-fw': String(settings.lyricFontWeight),
+  '--lyric-align': settings.lyricAlign,
 }))
 
 function close() {
@@ -626,8 +642,8 @@ function flyIn() {
     flyActive.value = true
     await nextTick()
     // 如果已有缓存背景（切歌时的预取或上次浏览），立即 reveal：
-    // 280ms 透明度淡入与飞行 (560ms) 并行，落地时背景已基本可见。
-    if (ambientUrl.value) revealAmbient()
+    // 淡入与飞行 (560ms) 并行，落地时背景已基本可见。
+    if (ambientLayer.value) revealAmbient()
 
     // 等待期间先藏起封面：否则会先看到落位的封面、再跳回起点飞入
     document.querySelector<HTMLElement>('.cover-main')?.style.setProperty('opacity', '0')
@@ -777,17 +793,22 @@ onMounted(() => {
   <div
     class="lyrics-full"
     ref="pageEl"
-    :class="{ closing, 'fly-active': flyActive, switching }"
+    :class="{ closing, 'fly-active': flyActive, switching, 'blur-on': settings.lyricBlur }"
     :style="lyricVars"
     @mousemove="onPageMouseMove"
   >
-    <!-- 背景：浅色暖调渐变 + 低透明度环境光 + 封面明亮色流光圆斑 -->
+    <!-- 背景：浅色暖调渐变 + 环境光双层交叉淡化（切歌时旧背景保持到新背景显形） + 封面明亮色流光圆斑 -->
     <div class="bg" />
     <div
-      v-if="ambientUrl"
+      v-if="ambientPrev"
+      class="bg-ambient show"
+      :style="{ backgroundImage: `url(${ambientPrev.url})` }"
+    />
+    <div
+      v-if="ambientLayer"
       class="bg-ambient"
-      :class="{ show: ambientShown }"
-      :style="{ backgroundImage: `url(${ambientUrl})` }"
+      :class="{ show: ambientLayer.visible }"
+      :style="{ backgroundImage: `url(${ambientLayer.url})` }"
     />
     <div
       v-for="(c, i) in flowColors.slice(0, 2)"
@@ -797,7 +818,7 @@ onMounted(() => {
       :style="{ '--fc': c }"
     />
 
-    <!-- 右上角工具组：歌词设置（字号，后续可扩展） + 退出 -->
+    <!-- 右上角工具组：歌词设置（字号/字重/对齐/模糊/控制样式） + 退出 -->
     <div class="top-tools">
       <div class="fs-picker" :class="{ open: fsOpen }">
         <button
@@ -810,22 +831,75 @@ onMounted(() => {
         </button>
         <Transition name="fs-pop">
           <div v-if="fsOpen" class="fs-menu">
-            <div class="fs-heading">歌词字号</div>
-            <button
-              v-for="step in LYRIC_FS_STEPS"
-              :key="step.id"
-              class="fs-item"
-              :class="{ current: settings.lyricFontSize === step.id }"
-              @click="pickFontSize(step.id)"
-            >
-              <span class="fs-dot" :style="{ width: `${step.main / 3.2}px`, height: `${step.main / 3.2}px` }" />
-              <span class="fs-label">{{ step.label }}</span>
-            </button>
-            <div class="fs-heading" title="正数歌词提前显示，负数延后">歌词偏移</div>
-            <div class="offset-row">
-              <button class="offset-btn" title="延后 0.1s" @click="settings.nudgeLyricOffset(-0.1)">−</button>
-              <span class="offset-val">{{ settings.lyricOffset.toFixed(1) }}s</span>
-              <button class="offset-btn" title="提前 0.1s" @click="settings.nudgeLyricOffset(0.1)">＋</button>
+            <div class="fs-heading">字号</div>
+            <div class="slider-row">
+              <input
+                class="lyric-slider"
+                type="range"
+                min="14"
+                max="44"
+                step="1"
+                :value="settings.lyricFontPx"
+                :style="{ '--pct': `${((settings.lyricFontPx - 14) / 30) * 100}%` }"
+                @input="settings.setLyricFontSize(Number(($event.target as HTMLInputElement).value))"
+              />
+              <span class="slider-val">{{ settings.lyricFontPx }}</span>
+            </div>
+            <div class="fs-heading">字重</div>
+            <div class="slider-row">
+              <input
+                class="lyric-slider"
+                type="range"
+                min="300"
+                max="800"
+                step="50"
+                :value="settings.lyricFontWeight"
+                :style="{ '--pct': `${((settings.lyricFontWeight - 300) / 500) * 100}%` }"
+                @input="settings.setLyricFontWeight(Number(($event.target as HTMLInputElement).value))"
+              />
+              <span class="slider-val">{{ weightLabel }}</span>
+            </div>
+            <div class="fs-heading">对齐</div>
+            <div class="seg-row">
+              <button
+                class="seg-btn"
+                :class="{ on: settings.lyricAlign === 'center' }"
+                @click="settings.setLyricAlign('center')"
+              >
+                居中
+              </button>
+              <button
+                class="seg-btn"
+                :class="{ on: settings.lyricAlign === 'left' }"
+                @click="settings.setLyricAlign('left')"
+              >
+                左对齐
+              </button>
+            </div>
+            <div class="fs-heading">景深模糊</div>
+            <div class="switch-row">
+              <span class="switch-desc">非当前行按距离轻微模糊</span>
+              <AppSwitch
+                :model-value="settings.lyricBlur"
+                @update:model-value="settings.setLyricBlur"
+              />
+            </div>
+            <div class="fs-heading">控制样式</div>
+            <div class="seg-row">
+              <button
+                class="seg-btn"
+                :class="{ on: settings.lyricControls === 'default' }"
+                @click="settings.setLyricControls('default')"
+              >
+                稳重
+              </button>
+              <button
+                class="seg-btn"
+                :class="{ on: settings.lyricControls === 'minimal' }"
+                @click="settings.setLyricControls('minimal')"
+              >
+                简约
+              </button>
             </div>
           </div>
         </Transition>
@@ -882,26 +956,26 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="controls">
+          <div class="controls" :class="{ minimal: settings.lyricControls === 'minimal' }">
             <button class="ctrl-btn ghost" :title="modeMeta.label" @click="cycleMode">
-              <AppIcon :name="modeMeta.icon" :size="20" />
+              <AppIcon :name="modeMeta.icon" :size="ctrlIcon.side" />
             </button>
             <button class="ctrl-btn" title="上一曲" @click="player.prev()">
-              <AppIcon name="prev" :size="24" />
+              <AppIcon name="prev" :size="ctrlIcon.prevNext" />
             </button>
             <button
               class="ctrl-btn play"
               :title="player.playing ? '暂停' : '播放'"
               @click="player.current ? player.togglePlay() : player.resumePlay()"
             >
-              <AppIcon :name="player.playing ? 'pause' : 'play'" :size="28" />
+              <AppIcon :name="player.playing ? 'pause' : 'play'" :size="ctrlIcon.play" />
             </button>
             <button class="ctrl-btn" title="下一曲" @click="player.next()">
-              <AppIcon name="next" :size="24" />
+              <AppIcon name="next" :size="ctrlIcon.prevNext" />
             </button>
             <div class="volume-wrap">
               <button class="ctrl-btn ghost" :title="`音量 ${player.volume}%`" @click="player.toggleMute()">
-                <AppIcon :name="player.volume === 0 ? 'volumeMute' : 'volume'" :size="20" />
+                <AppIcon :name="player.volume === 0 ? 'volumeMute' : 'volume'" :size="ctrlIcon.side" />
               </button>
               <input
                 class="volume-slider"
@@ -975,7 +1049,8 @@ onMounted(() => {
   background: linear-gradient(165deg, #fbf9f4 0%, var(--lyric-bg) 52%, var(--lyric-bg-deep) 100%);
 }
 
-/* 单层环境光：多焦点已烘焙进图内（palette.renderAmbientUrl），低透明度叠在浅底上 */
+/* 单层环境光：多焦点已烘焙进图内（palette.renderAmbientUrl），低透明度叠在浅底上；
+   600ms 淡化配合双层结构，切歌时新旧背景交叉过渡 */
 .bg-ambient {
   position: absolute;
   inset: 0;
@@ -984,7 +1059,7 @@ onMounted(() => {
   opacity: 0;
   transform-origin: center center;
   animation: ambient-breathe 12s ease-in-out infinite;
-  transition: opacity 280ms var(--ease-out);
+  transition: opacity 600ms var(--ease-out);
   will-change: transform, opacity;
 }
 
@@ -1308,6 +1383,49 @@ onMounted(() => {
   transform: scale(0.95);
 }
 
+/* ---------- 简约风控制条（Apple Music 式）：小尺寸、无底色悬停、纯图标 ---------- */
+.controls.minimal {
+  gap: 6px;
+  margin-top: 20px;
+}
+
+.controls.minimal .ctrl-btn {
+  width: 42px;
+  height: 42px;
+}
+
+.controls.minimal .ctrl-btn.ghost {
+  width: 38px;
+  height: 38px;
+}
+
+.controls.minimal .ctrl-btn:hover {
+  background: transparent;
+  color: #000;
+}
+
+.controls.minimal .ctrl-btn.ghost:hover {
+  background: var(--lyric-control-bg);
+}
+
+.controls.minimal .ctrl-btn.play {
+  width: 48px;
+  height: 48px;
+  margin: 0 6px;
+  box-shadow: 0 5px 14px rgba(29, 29, 31, 0.2);
+}
+
+.controls.minimal .ctrl-btn.play:hover {
+  transform: none;
+  background: var(--lyric-text-active);
+  color: var(--lyric-bg);
+}
+
+.controls.minimal .volume-slider:focus-visible,
+.controls.minimal .volume-wrap:hover .volume-slider {
+  width: 60px;
+}
+
 /* 音量滑杆（hover 展开） */
 .volume-wrap {
   display: flex;
@@ -1400,8 +1518,8 @@ onMounted(() => {
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
-  min-width: 148px;
-  padding: 8px 6px 6px;
+  width: 236px;
+  padding: 10px 10px 8px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(32px) saturate(1.4);
@@ -1415,79 +1533,96 @@ onMounted(() => {
 }
 
 .fs-heading {
-  padding: 2px 10px 6px;
+  padding: 4px 4px 5px;
   font-size: 11px;
   color: var(--lyric-time);
   letter-spacing: 0.5px;
 }
 
-.fs-item {
+/* 无级滑杆行：填充进度走 --pct（内联按当前值计算） */
+.slider-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 10px;
-  border-radius: 9px;
-  color: var(--lyric-control);
-  font-size: 13px;
-  transition: background 0.12s var(--ease-out), color 0.12s var(--ease-out);
+  padding: 0 4px 6px;
 }
 
-.fs-item:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: var(--lyric-text-active);
+.lyric-slider {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--lyric-text-active) var(--pct, 50%),
+    rgba(0, 0, 0, 0.1) var(--pct, 50%)
+  );
+  cursor: pointer;
 }
 
-.fs-item.current {
-  color: var(--lyric-text-active);
-}
-
-.fs-dot {
-  flex-shrink: 0;
+.lyric-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
-  background: var(--lyric-control);
-  transition: background 0.12s;
+  background: var(--lyric-text-active);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  transition: transform var(--dur-fast) var(--ease-spring);
 }
 
-.fs-item.current .fs-dot {
+.lyric-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+
+.slider-val {
+  min-width: 34px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--lyric-text-active);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 分段选择（对齐/控制样式）：胶囊高亮滑动语义与全站一致 */
+.seg-row {
+  display: flex;
+  gap: 4px;
+  padding: 0 4px 6px;
+}
+
+.seg-btn {
+  flex: 1;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--lyric-control);
+  background: rgba(0, 0, 0, 0.04);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.seg-btn:hover {
+  color: var(--lyric-text-active);
+}
+
+.seg-btn.on {
+  color: #fff;
   background: var(--lyric-text-active);
 }
 
-.fs-label {
-  flex: 1;
-  text-align: left;
-}
-
-.offset-row {
+/* 开关行（景深模糊） */
+.switch-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 10px 6px;
+  gap: 10px;
+  padding: 0 4px 6px;
 }
 
-.offset-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  font-size: 14px;
-  line-height: 1;
-  color: var(--lyric-control);
-  transition: background 0.12s var(--ease-out), color 0.12s var(--ease-out);
-}
-
-.offset-btn:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: var(--lyric-text-active);
-}
-
-.offset-val {
-  min-width: 42px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--lyric-text-active);
-  font-variant-numeric: tabular-nums;
+.switch-desc {
+  font-size: 11px;
+  color: var(--lyric-time);
 }
 
 .fs-pop-enter-active {
@@ -1519,7 +1654,7 @@ onMounted(() => {
   flex: 1;
   height: 100%;
   overflow-y: auto;
-  text-align: center;
+  text-align: var(--lyric-align, center);
   padding: 0 4vw;
   mask-image: linear-gradient(transparent, var(--lyric-mask) 12%, var(--lyric-mask) 88%, transparent);
   -webkit-mask-image: linear-gradient(transparent, var(--lyric-mask) 12%, var(--lyric-mask) 88%, transparent);
@@ -1559,6 +1694,13 @@ onMounted(() => {
 .lyric-line.dim-3 { opacity: 0.32; }
 .lyric-line.dim-4 { opacity: 0.22; }
 
+/* 景深模糊（设置可关）：非当前行按距离轻微模糊，层次更接近 Apple Music。
+   filter 不参与 transition（多行同时过渡会掉帧），突变被透明度差异掩盖 */
+.blur-on .lyric-line.dim-1 { filter: blur(0.4px); }
+.blur-on .lyric-line.dim-2 { filter: blur(1px); }
+.blur-on .lyric-line.dim-3 { filter: blur(1.8px); }
+.blur-on .lyric-line.dim-4 { filter: blur(2.6px); }
+
 .lyric-line:hover {
   opacity: 0.9;
 }
@@ -1570,13 +1712,13 @@ onMounted(() => {
 
 .lyric-line.active .lyric-text {
   color: var(--lyric-text-active);
-  font-weight: 700;
+  font-weight: calc(var(--lyric-fw) + 200);
   text-shadow: var(--lyric-shadow);
 }
 
 .lyric-text {
   font-size: var(--lyric-fs);
-  font-weight: 500;
+  font-weight: var(--lyric-fw);
   color: var(--lyric-text);
   line-height: 1.6;
   letter-spacing: 0.2px;
