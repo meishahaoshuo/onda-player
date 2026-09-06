@@ -293,16 +293,16 @@ function onRecordKeydown(e: KeyboardEvent) {
         <!-- 关于 -->
         <section v-else key="about" class="panel-section">
           <h2 class="panel-title">关于</h2>
-          <p class="panel-sub">ONDA · 澜 — 网页版本地音乐播放器</p>
+          <p class="panel-sub">Onda Player — 网页版本地音乐播放器</p>
           <div class="about-brand">
             <img
               :src="brandLogo"
-              alt="ONDA · 澜"
+              alt="Onda Player"
               class="about-brand-logo"
               :class="{ 'no-shadow': settings.resolvedTheme === 'dark' }"
             />
             <div class="about-brand-text">
-              <span class="about-brand-name">ONDA · 澜</span>
+              <span class="about-brand-name">Onda Player</span>
               <span class="about-brand-ver">v0.1.0 · 对标 Salt Player 的本地播放器</span>
             </div>
           </div>

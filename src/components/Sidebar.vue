@@ -120,10 +120,9 @@ function plClick(id: string) {
   <aside class="sidebar">
     <PlaylistContextMenu />
     <div class="brand">
-      <img :src="brandLogo" alt="ONDA" class="brand-logo" :class="{ 'no-shadow': settings.resolvedTheme === 'dark' }" />
+      <img :src="brandLogo" alt="Onda Player" class="brand-logo" :class="{ 'no-shadow': settings.resolvedTheme === 'dark' }" />
       <div class="brand-text">
-        <span class="brand-name">ONDA</span>
-        <span class="brand-sub">澜</span>
+        <span class="brand-name">Onda Player</span>
       </div>
     </div>
 
@@ -247,12 +246,6 @@ function plClick(id: string) {
   font-size: 17px;
   font-weight: 700;
   letter-spacing: 0.5px;
-}
-
-.brand-sub {
-  font-size: 11px;
-  color: var(--text-secondary);
-  letter-spacing: 4px;
 }
 
 .nav {
