@@ -172,7 +172,7 @@ function plClick(id: string) {
           @click="plClick(p.id)"
           @contextmenu.prevent="openPlaylistMenu(p.id, $event)"
         >
-          <CoverImage :cover-id="playlistCovers.get(p.id) ?? null" :size="28" class="playlist-cover" />
+          <CoverImage :cover-id="playlistCovers.get(p.id) ?? null" :size="36" class="playlist-cover" />
           <span class="playlist-name">{{ p.name }}</span>
         </button>
       </div>
@@ -270,6 +270,9 @@ function plClick(id: string) {
 
 .nav-item {
   position: relative;
+  /* button 不会像块级元素那样自动撑满父容器（width:auto 是收缩宽度），
+     必须显式铺满，否则悬停底色/点击热区只有文字那一截 */
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -285,6 +288,11 @@ function plClick(id: string) {
 .nav-item:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+/* 选中项的强调只保留滑动胶囊一层：悬停不再叠加灰底盖住胶囊 */
+.nav-item.active:hover {
+  background: transparent;
 }
 
 .nav-item:active {
@@ -355,8 +363,14 @@ function plClick(id: string) {
   text-overflow: ellipsis;
 }
 
+/* 歌单子项：更大的封面与行高，和主导航项形成分组层次 */
+.nav-item.playlist-item {
+  height: 48px;
+  gap: 10px;
+}
+
 .playlist-cover {
-  border-radius: 6px;
+  border-radius: 8px;
   flex-shrink: 0;
 }
 

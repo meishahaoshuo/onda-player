@@ -2,29 +2,33 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import CollageCover from '@/components/CollageCover.vue'
-import SongList from '@/components/SongList.vue'
 import AppIcon from '@/components/AppIcon.vue'
+import AppSwitch from '@/components/AppSwitch.vue'
 import FrostedPanel from '@/components/FrostedPanel.vue'
 import { beginAlbumEnter, playAlbumEnter, playAlbumExit } from '@/services/pageTransition'
-import { useDragReorder } from '@/composables/useDragReorder'
+import { extractBrightColors } from '@/services/palette'
+import * as db from '@/services/db'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { usePlaylistStore } from '@/stores/playlist'
 import { useFavoritesStore } from '@/stores/favorites'
+import { useStatsStore } from '@/stores/stats'
 import { useSongActions } from '@/composables/useSongActions'
 import { useStaggerReveal } from '@/composables/useStaggerReveal'
 import { flyToPlayerFromRow } from '@/services/coverFlight'
 import { useUiStore } from '@/stores/ui'
+import { formatDuration, formatTotalDuration } from '@/utils/format'
 import type { SongRecord } from '@/types'
 
 /**
- * 歌单页：歌单列表 / 歌单详情（播放、重命名、删除、添加歌曲、拖拽排序）
+ * 歌单页：歌单列表 / 歌单详情（播放、重命名、删除、添加歌曲、自定义排序）
  * 详情是覆盖层，列表网格常驻 —— 供「引力坍缩」过渡编排器做对称返回
  */
 const library = useLibraryStore()
 const player = usePlayerStore()
 const playlistStore = usePlaylistStore()
 const favorites = useFavoritesStore()
+const stats = useStatsStore()
 const { openSongMenu } = useSongActions()
 const ui = useUiStore()
 
@@ -45,7 +49,6 @@ watch(
 )
 onBeforeUnmount(() => {
   plReveal.disconnect()
-  listDrag.dispose()
 })
 
 // 侧边栏在其他页面点击「新建歌单」时也会置位请求标记
@@ -137,6 +140,8 @@ const cardCoverIds = computed(() => {
 /* 「引力坍缩」过渡：进入由编排器接管（点击卡片时 beginAlbumEnter 记录原点），
    返回对称反向；内容波前浮现由编排器驱动，不再需要 CSS 错峰 */
 const detailEl = ref<HTMLElement | null>(null)
+/** 返回动画进行中：防重复触发导致收尾被打断 */
+const closing = ref(false)
 
 watch(
   current,
@@ -149,11 +154,16 @@ watch(
 )
 
 async function closePlaylist() {
-  if (!current.value || ui.dolly !== 'idle') return
+  if (!current.value || ui.dolly !== 'idle' || closing.value) return
   // 编排器负责收尾（clearTransitionState / closeDetail / endDolly）；
   // 无编排原点（如右键直接进入）时编排器内部走轻量路径
-  ui.beginDollyExit()
-  await playAlbumExit(detailEl.value)
+  closing.value = true
+  try {
+    ui.beginDollyExit()
+    await playAlbumExit(detailEl.value)
+  } finally {
+    closing.value = false
+  }
 }
 
 function openPlaylist(p: { id: string }, e: MouseEvent) {
@@ -269,6 +279,55 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
   openSongMenu(e, song, { playlistId: current.value.id, context: currentSongs.value })
 }
 
+/* ---------- 自定义排序：显示顺序与播放队列分离，排序选择持久化到 kv ---------- */
+
+type PlaylistSort = 'custom' | 'title' | 'artist' | 'album' | 'plays' | 'duration'
+const SORT_KEY = 'playlists.songSort'
+const SORT_OPTIONS: { id: PlaylistSort; label: string }[] = [
+  { id: 'custom', label: '自定义顺序' },
+  { id: 'title', label: '歌曲名' },
+  { id: 'artist', label: '艺术家' },
+  { id: 'album', label: '专辑' },
+  { id: 'plays', label: '播放次数' },
+  { id: 'duration', label: '时长' },
+]
+const sortId = ref<PlaylistSort>('custom')
+const sortOpen = ref(false)
+const sortLabel = computed(() => SORT_OPTIONS.find((o) => o.id === sortId.value)?.label ?? '')
+
+onMounted(() => {
+  void db.kvGet<PlaylistSort>(SORT_KEY).then((v) => {
+    if (v && SORT_OPTIONS.some((o) => o.id === v)) sortId.value = v
+  })
+})
+
+function setSort(id: PlaylistSort) {
+  sortId.value = id
+  sortOpen.value = false
+  void db.kvSet(SORT_KEY, id)
+}
+
+/** 详情列表的显示顺序：custom 即底层存储（添加）顺序 */
+const displaySongs = computed<SongRecord[]>(() => {
+  const songs = currentSongs.value
+  if (sortId.value === 'custom') return songs
+  const zh = 'zh-Hans-CN'
+  const arr = [...songs]
+  switch (sortId.value) {
+    case 'plays':
+      return arr.sort(
+        (a, b) => (stats.counts[b.path] ?? 0) - (stats.counts[a.path] ?? 0) || a.title.localeCompare(b.title, zh),
+      )
+    case 'duration':
+      return arr.sort((a, b) => (b.durationSec ?? 0) - (a.durationSec ?? 0))
+    default: {
+      const key = (s: SongRecord) =>
+        sortId.value === 'artist' ? s.artist : sortId.value === 'album' ? s.album : s.title
+      return arr.sort((a, b) => key(a).localeCompare(key(b), zh) || a.title.localeCompare(b.title, zh))
+    }
+  }
+})
+
 /* ---------- 播放 ---------- */
 
 function playAll(shuffle = false) {
@@ -285,12 +344,38 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
   void player.playSong(song, currentSongs.value)
 }
 
-/* ---------- 拖拽排序：长按触发 + FLIP 让位，替代原生 HTML5 DnD ---------- */
-const listDrag = useDragReorder({
-  onReorder: (from, to) => {
-    if (current.value) playlistStore.moveSong(current.value.id, from, to)
+/* ---------- 头部流光光斑：取色自当前封面（手动封面优先，否则拼贴首图），带缓存 ---------- */
+const flowColors = ref<string[]>([])
+const flowCache = new Map<string, string[]>()
+
+watch(
+  () => [current.value?.id, currentCoverId.value] as const,
+  async ([plId, coverId]) => {
+    flowColors.value = (plId ? flowCache.get(plId) : undefined) ?? []
+    if (!plId) return
+    const cid =
+      coverId ?? currentCoverIds.value.find((c): c is string => !!c) ?? null
+    if (!cid) return
+    try {
+      const url = await library.coverUrl(cid)
+      if (!url) return
+      const blob = await (await fetch(url)).blob()
+      const colors = await extractBrightColors(blob).catch(() => [] as string[])
+      flowCache.set(plId, colors)
+      if (current.value?.id === plId) flowColors.value = colors
+    } catch {
+      /* 取色失败则保留中性底 */
+    }
   },
-})
+  { immediate: true },
+)
+
+/** 歌单总时长（统计行展示） */
+const totalDurationLabel = computed(() =>
+  formatTotalDuration(currentSongs.value.reduce((sum, s) => sum + (s.durationSec ?? 0), 0)),
+)
+
+/* ---------- 拖拽排序已移除：改为列表工具栏的自定义排序 ---------- */
 
 function confirmRemove() {
   if (!current.value) return
@@ -308,9 +393,17 @@ function confirmRemove() {
     </button>
 
     <header class="pl-header">
+      <!-- 流光呼吸光斑（对齐专辑详情页头部） -->
+      <div
+        v-for="(c, i) in flowColors.slice(0, 2)"
+        :key="i"
+        class="blob"
+        :class="`hb-${i}`"
+        :style="{ '--fc': c }"
+      />
       <div class="header-cover">
-        <CoverImage v-if="currentCoverId" :cover-id="currentCoverId" :size="120" />
-        <CollageCover v-else :cover-ids="currentCoverIds" :size="120" />
+        <CoverImage v-if="currentCoverId" :cover-id="currentCoverId" :size="176" />
+        <CollageCover v-else :cover-ids="currentCoverIds" :size="176" />
         <button
           class="cover-edit"
           :disabled="currentSongs.length === 0"
@@ -322,7 +415,10 @@ function confirmRemove() {
       </div>
       <div class="pl-info">
         <h1 class="pl-name">{{ current.name }}</h1>
-        <div class="pl-sub">{{ currentSongs.length }} 首歌曲</div>
+        <div class="pl-stats">
+          <span>{{ currentSongs.length }}</span><span class="stat-label">歌曲</span>
+          <span>{{ totalDurationLabel }}</span><span class="stat-label">时长</span>
+        </div>
         <div class="pl-actions">
           <button class="action-btn primary" :disabled="currentSongs.length === 0" @click="playAll(false)">
             <AppIcon name="play" :size="14" /> 播放全部
@@ -348,21 +444,41 @@ function confirmRemove() {
     </header>
 
     <div v-if="currentSongs.length === 0" class="empty-hint">歌单还是空的，点击「添加歌曲」吧</div>
-    <div v-else class="drag-list">
-      <div
-        v-for="(song, i) in currentSongs"
-        :key="song.path"
-        class="drag-row"
-        :class="{
-          playing: song.path === player.currentPath,
-          dragging: listDrag.draggingIndex.value === i,
-        }"
-        @pointerdown="listDrag.onItemPointerdown(i, $event)"
-        @click="onPlay(song, $event)"
-        @contextmenu.prevent="onRowMenu(song, $event)"
-      >
-        <span class="drag-handle">⋮⋮</span>
-        <CoverImage :cover-id="song.coverId" :size="36" data-flight-cover />
+    <template v-else>
+      <!-- 列表工具栏：排序方式（持久化，全局生效） -->
+      <div class="list-toolbar">
+        <span class="list-count">{{ currentSongs.length }} 首</span>
+        <div class="sort-drop">
+          <button class="sort-btn" @click="sortOpen = !sortOpen">
+            <AppIcon name="order" :size="14" /> {{ sortLabel }}
+            <AppIcon name="expand" :size="11" class="sort-caret" />
+          </button>
+          <div v-if="sortOpen" class="sort-menu glass">
+            <button
+              v-for="o in SORT_OPTIONS"
+              :key="o.id"
+              class="sort-item"
+              :class="{ active: sortId === o.id }"
+              @click="setSort(o.id)"
+            >
+              <span class="sort-check"><AppIcon v-if="sortId === o.id" name="check" :size="13" /></span>
+              {{ o.label }}
+            </button>
+          </div>
+        </div>
+      </div>
+      <div v-if="sortOpen" class="sort-mask" @click="sortOpen = false" />
+
+      <div class="drag-list">
+        <div
+          v-for="song in displaySongs"
+          :key="song.path"
+          class="drag-row"
+          :class="{ playing: song.path === player.currentPath }"
+          @click="onPlay(song, $event)"
+          @contextmenu.prevent="onRowMenu(song, $event)"
+        >
+          <CoverImage :cover-id="song.coverId" :size="36" data-flight-cover />
         <span class="drag-title">{{ song.title }}</span>
         <span class="drag-artist">{{ song.artist }}</span>
         <span class="row-actions" @pointerdown.stop @click.stop>
@@ -382,7 +498,8 @@ function confirmRemove() {
           </button>
         </span>
       </div>
-    </div>
+      </div>
+    </template>
 
     <!-- 重命名弹层 -->
     <teleport to="body">
@@ -398,14 +515,22 @@ function confirmRemove() {
       </div></Transition>
     </teleport>
 
-    <!-- 添加歌曲弹层（多选批量添加：全选/反选/仅看未添加） -->
+    <!-- 添加歌曲：大号二级弹层（多选批量添加：全选/反选/仅看未添加） -->
     <teleport to="body">
       <Transition name="modal"><div v-if="showAdd" class="modal-mask" @click.self="showAdd = false">
-        <FrostedPanel class="modal wide" radius="12px">
-          <h3 class="modal-title">添加歌曲到「{{ current.name }}」</h3>
+        <FrostedPanel class="modal add-modal" radius="14px">
+          <div class="add-head">
+            <div>
+              <h3 class="modal-title">添加歌曲</h3>
+              <p class="add-sub">添加到「{{ current.name }}」</p>
+            </div>
+            <button class="add-close" title="关闭" @click="showAdd = false">
+              <AppIcon name="close" :size="15" />
+            </button>
+          </div>
           <div class="add-toolbar">
             <div class="add-search">
-              <AppIcon name="search" :size="14" />
+              <AppIcon name="search" :size="15" />
               <input
                 v-model="addFilter"
                 class="add-search-input"
@@ -413,14 +538,10 @@ function confirmRemove() {
                 placeholder="搜索标题 / 艺术家 / 专辑"
               />
             </div>
-            <button
-              class="add-toggle"
-              :class="{ on: addOnlyNew }"
-              title="隐藏已在歌单中的歌曲"
-              @click="addOnlyNew = !addOnlyNew"
-            >
-              <AppIcon v-if="addOnlyNew" name="check" :size="12" /> 仅看未添加
-            </button>
+            <label class="add-onlynew" title="隐藏已在歌单中的歌曲">
+              <AppSwitch v-model="addOnlyNew" />
+              <span>仅看未添加</span>
+            </label>
           </div>
           <div class="add-select-row">
             <span class="add-selected-count">已选 {{ addSelected.size }} 首</span>
@@ -444,16 +565,17 @@ function confirmRemove() {
                 :disabled="inPlaylist(song.path)"
                 @change="toggleAddSelect(song.path)"
               />
-              <CoverImage :cover-id="song.coverId" :size="40" class="add-cover" />
+              <CoverImage :cover-id="song.coverId" :size="44" class="add-cover" />
               <span class="add-meta">
-                <span class="drag-title">{{ song.title }}</span>
-                <span class="drag-artist">{{ song.artist }} · {{ song.album }}</span>
+                <span class="add-title">{{ song.title }}</span>
+                <span class="add-subline">{{ song.artist }} · {{ song.album }}</span>
               </span>
+              <span class="add-dur">{{ formatDuration(song.durationSec) }}</span>
               <span class="add-state">{{ inPlaylist(song.path) ? '已在歌单' : '' }}</span>
             </label>
             <div v-if="addCandidates.length === 0" class="add-empty">没有匹配的歌曲</div>
           </div>
-          <div class="modal-actions">
+          <div class="add-footer">
             <button class="action-btn" @click="showAdd = false">取消</button>
             <button
               class="action-btn primary"
@@ -494,8 +616,8 @@ function confirmRemove() {
     </teleport>
   </div>
 
-  <!-- 歌单列表：网格常驻（v-show），供过渡编排器对称返回 -->
-  <div v-show="!current" ref="plHomeEl" class="playlist-home">
+  <!-- 歌单列表：永久渲染（详情覆盖层以不透明底盖住），返回动画收尾时网格喷回可见 -->
+  <div ref="plHomeEl" class="playlist-home">
     <div class="toolbar">
       <button class="primary-btn" @click="showCreate = true">
         <AppIcon name="plus" :size="16" /> 新建歌单
@@ -589,19 +711,72 @@ function confirmRemove() {
 }
 
 .pl-header {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 20px;
+  gap: 24px;
+  align-items: flex-end;
+  padding: 28px 24px;
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  /* 头部背景：中性渐变（主题自适应），光斑与噪点提供质感（对齐专辑详情页） */
+  background: linear-gradient(120deg, var(--bg-hover) 0%, var(--bg-base) 70%);
+}
+
+/* 呼吸光斑：缩放与透明度同步起伏，周期 10-12s 交错 */
+.blob {
+  position: absolute;
+  width: clamp(300px, 32vw, 460px);
+  height: clamp(300px, 32vw, 460px);
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, var(--fc), transparent 70%);
+  will-change: transform, opacity;
+  z-index: 0;
+}
+
+.blob.hb-0 {
+  top: -46%;
+  left: -4%;
+  animation: hb-0 10s ease-in-out infinite alternate;
+}
+
+.blob.hb-1 {
+  top: -18%;
+  right: -5%;
+  animation: hb-1 12s ease-in-out infinite alternate;
+}
+
+@keyframes hb-0 {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.2; }
+  50% { transform: translate(2vw, 1.5vh) scale(1.1); opacity: 0.3; }
+}
+
+@keyframes hb-1 {
+  0%, 100% { transform: translate(0, 0) scale(1.04); opacity: 0.14; }
+  50% { transform: translate(-2vw, 2vh) scale(0.94); opacity: 0.22; }
+}
+
+/* 胶片噪点：4% 细颗粒破掉 flat 渐变的塑料感 */
+.pl-header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
 }
 
 /* 头部封面容器：悬停浮现「设置封面」入口 */
 .header-cover {
   position: relative;
-  width: 120px;
-  height: 120px;
+  z-index: 2;
+  width: 176px;
+  height: 176px;
   flex-shrink: 0;
   border-radius: 8px;
-  box-shadow: var(--shadow-1);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
 }
 
 .header-cover > :deep(.cover-img),
@@ -683,15 +858,31 @@ function confirmRemove() {
   text-overflow: ellipsis;
 }
 
+.pl-info {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .pl-name {
   font-size: 24px;
   font-weight: 600;
 }
 
-.pl-sub {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 4px 0 10px;
+.pl-stats {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-right: 10px;
 }
 
 .pl-actions {
@@ -738,7 +929,95 @@ function confirmRemove() {
   cursor: default;
 }
 
-/* 拖拽排序列表 */
+/* 列表工具栏：排序 */
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.list-count {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.sort-drop {
+  position: relative;
+}
+
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.sort-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sort-caret {
+  transform: rotate(90deg);
+  color: var(--text-tertiary);
+}
+
+.sort-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+  min-width: 148px;
+  padding: 6px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-1);
+}
+
+.sort-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.sort-item:hover {
+  background: var(--bg-hover);
+}
+
+.sort-item.active {
+  color: var(--accent);
+}
+
+.sort-check {
+  display: inline-flex;
+  width: 15px;
+  justify-content: center;
+}
+
+/* 关闭排序菜单的透明遮罩（在菜单层之下） */
+.sort-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+}
+
+/* 播放列表 */
 .drag-list {
   display: flex;
   flex-direction: column;
@@ -748,18 +1027,13 @@ function confirmRemove() {
 .drag-row {
   position: relative;
   display: grid;
-  grid-template-columns: 24px 36px 1fr 1fr 32px;
+  grid-template-columns: 36px 1fr 1fr 32px;
   gap: 12px;
   align-items: center;
   height: 52px;
   padding: 0 12px;
   border-radius: 8px;
-  cursor: grab;
   transition: background 0.12s var(--ease-out), opacity 0.12s var(--ease-out);
-}
-
-.drag-row:active {
-  cursor: grabbing;
 }
 
 .drag-row:hover {
@@ -768,22 +1042,6 @@ function confirmRemove() {
 
 .drag-row.playing {
   background: var(--bg-active);
-}
-
-/* 拖拽中的行：不加底色，避免与正在播放行的高亮（更长的那块）重叠 */
-.drag-row.dragging:not(.playing) {
-  background: var(--bg-hover);
-}
-
-.drag-row.dragging {
-  cursor: grabbing;
-  z-index: 2;
-}
-
-.drag-handle {
-  color: var(--text-tertiary);
-  text-align: center;
-  letter-spacing: -2px;
 }
 
 .drag-title {
@@ -801,7 +1059,6 @@ function confirmRemove() {
   text-overflow: ellipsis;
 }
 
-.drag-remove,
 .row-act {
   display: flex;
   align-items: center;
@@ -810,11 +1067,6 @@ function confirmRemove() {
   height: 26px;
   border-radius: 6px;
   color: var(--text-tertiary);
-}
-
-.drag-remove:hover {
-  background: var(--bg-hover);
-  color: var(--danger);
 }
 
 /* 悬停快捷操作（收藏/更多/移除）：透明底浮出行尾空白区，过渡浮现 */
@@ -1003,9 +1255,49 @@ function confirmRemove() {
   gap: 8px;
 }
 
+/* ---------- 添加歌曲大弹层 ---------- */
+.modal.add-modal {
+  width: min(900px, 92vw);
+  height: min(640px, 86vh);
+  padding: 24px;
+  gap: 14px;
+}
+
+.add-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.add-head .modal-title {
+  font-size: 18px;
+}
+
+.add-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.add-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--text-tertiary);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.add-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .add-toolbar {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
 }
 
@@ -1014,9 +1306,9 @@ function confirmRemove() {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 9px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-hover);
   color: var(--text-tertiary);
@@ -1040,29 +1332,14 @@ function confirmRemove() {
   color: var(--text-tertiary);
 }
 
-.add-toggle {
+.add-onlynew {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border-subtle);
-  font-size: 12px;
+  gap: 8px;
+  font-size: 13px;
   color: var(--text-secondary);
   white-space: nowrap;
-  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
-    background var(--dur-fast) var(--ease-out);
-}
-
-.add-toggle:hover {
-  background: var(--bg-hover);
-}
-
-.add-toggle.on {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-soft);
+  cursor: pointer;
 }
 
 .add-select-row {
@@ -1101,21 +1378,23 @@ function confirmRemove() {
 }
 
 .add-list {
-  max-height: 340px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding: 2px;
 }
 
 .add-row {
   display: grid;
-  grid-template-columns: 20px 40px 1fr auto;
-  gap: 12px;
+  grid-template-columns: 20px 44px 1fr auto auto;
+  gap: 14px;
   align-items: center;
-  height: 52px;
-  padding: 0 8px;
-  border-radius: 8px;
+  height: 58px;
+  padding: 0 10px;
+  border-radius: 9px;
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out);
 }
@@ -1142,19 +1421,52 @@ function confirmRemove() {
 
 .add-cover :deep(.cover-img),
 .add-cover :deep(.cover-fallback) {
-  border-radius: 6px;
+  border-radius: 7px;
 }
 
 .add-meta {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
+}
+
+.add-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.add-subline {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.add-dur {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 
 .add-state {
   font-size: 12px;
   color: var(--text-tertiary);
+  min-width: 56px;
+  text-align: right;
+}
+
+.add-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .add-empty {

@@ -288,7 +288,10 @@ export function installTrackSwapWatcher(): void {
         popPlayerCover()
         return
       }
-      if (useUiStore().dolly !== 'idle' || Date.now() < flightUntil) return
+      const ui = useUiStore()
+      // 歌词页全屏盖住播放栏，卡带挂在 body 上（z 高于歌词页）会浮在歌词页上穿模；歌词页有自己的切歌过渡
+      if (ui.lyricsOpen) return
+      if (ui.dolly !== 'idle' || Date.now() < flightUntil) return
       void runSwap(player.current, library)
     },
   )

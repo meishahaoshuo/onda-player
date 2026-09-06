@@ -70,16 +70,8 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
 <template>
   <div ref="rootEl" class="charts-view">
     <template v-if="ranked.length > 0">
-      <div class="list-header">
-        <span class="col-rank">名次</span>
-        <span class="col-title">标题</span>
-        <span class="col-artist">艺术家</span>
-        <span class="col-album">专辑</span>
-        <span class="col-count">播放次数</span>
-        <span class="col-duration">时长</span>
-      </div>
       <div class="list-body">
-        <!-- 前三强：磨砂玻璃卡，随内容滚动 -->
+        <!-- 前三强：磨砂玻璃卡，随内容滚动；领奖台区不带表头 -->
         <div v-if="podium.length > 0" class="top3" :class="{ in: podiumIn }">
           <button
             v-for="p in podium"
@@ -101,9 +93,19 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
           </button>
           <div v-if="rest.length === 0" class="list-end-hint">前三名就是全部上榜歌曲</div>
         </div>
-        <div
-          v-for="row in rest"
-          :key="row.song.path"
+        <!-- 表头只挂在第 4 名起的列表区上方，与行列严格同 grid 对齐 -->
+        <template v-if="rest.length > 0">
+          <div class="list-header">
+            <span class="col-rank">名次</span>
+            <span class="col-title">标题</span>
+            <span class="col-artist">艺术家</span>
+            <span class="col-album">专辑</span>
+            <span class="col-count">播放次数</span>
+            <span class="col-duration">时长</span>
+          </div>
+          <div
+            v-for="row in rest"
+            :key="row.song.path"
           class="chart-row"
           :class="{ playing: row.song.path === player.currentPath }"
           @click="onPlay(row.song, $event)"
@@ -122,6 +124,7 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
           <span class="col-count">{{ row.count }} 次</span>
           <span class="col-duration">{{ formatDuration(row.song.durationSec) }}</span>
         </div>
+        </template>
       </div>
     </template>
     <div v-else class="empty">
@@ -277,14 +280,14 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
 }
 
 .list-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   height: 36px;
   font-size: 12px;
   color: var(--text-tertiary);
   border-bottom: 1px solid var(--border-subtle);
-}
-
-.list-header.first-group {
-  margin-top: 8px;
+  background: var(--bg-base);
 }
 
 .list-body {

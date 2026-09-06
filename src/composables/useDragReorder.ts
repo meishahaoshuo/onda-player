@@ -28,6 +28,8 @@ export function useDragReorder(opts: DragReorderOptions) {
   let moveRaf = 0
   let active = false
   let dragging = false
+  /** 拖拽态下是否真的移动过：决定松手后是否抑制 click（纯长按未动视作点击放行） */
+  let dragged = false
   let fromIndex = -1
   let targetIndex = -1
   let startY = 0
@@ -128,8 +130,9 @@ export function useDragReorder(opts: DragReorderOptions) {
         sib.style.transform = ''
       }
     }
-    if (dragging) suppressUntil = performance.now() + SUPPRESS_MS
+    if (dragging && dragged) suppressUntil = performance.now() + SUPPRESS_MS
     dragging = false
+    dragged = false
     active = false
     draggingIndex.value = null
     itemEl = null
@@ -144,6 +147,7 @@ export function useDragReorder(opts: DragReorderOptions) {
       return
     }
     e.preventDefault()
+    dragged = true
     scheduleApply()
   }
 

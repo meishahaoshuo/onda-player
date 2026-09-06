@@ -14,6 +14,7 @@ import {
 } from '@/services/hotkeys'
 import type { ThemeMode } from '@/types'
 import AppIcon from '@/components/AppIcon.vue'
+import AppSwitch from '@/components/AppSwitch.vue'
 
 /**
  * 设置页：左侧分类导航 + 右侧内容面板。
@@ -196,12 +197,7 @@ function onRecordKeydown(e: KeyboardEvent) {
               <span class="opt-name">封面氛围光</span>
               <span class="opt-desc">内容区背景跟随当前播放封面的主色泛起淡淡光晕</span>
             </div>
-            <button
-              class="toggle"
-              :class="{ on: settings.ambientGlow }"
-              :aria-pressed="settings.ambientGlow"
-              @click="settings.setAmbientGlow(!settings.ambientGlow)"
-            />
+            <AppSwitch :model-value="settings.ambientGlow" @update:model-value="settings.setAmbientGlow" />
           </div>
         </section>
 
@@ -968,37 +964,4 @@ function onRecordKeydown(e: KeyboardEvent) {
   cursor: pointer;
 }
 
-/* 开关 */
-.toggle {
-  position: relative;
-  width: 40px;
-  height: 22px;
-  flex-shrink: 0;
-  border-radius: 11px;
-  background: var(--bg-hover);
-  border: 1px solid var(--border-subtle);
-  transition: background var(--dur-med) var(--ease-out), border-color var(--dur-med) var(--ease-out);
-}
-
-.toggle::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--text-secondary);
-  transition: left var(--dur-med) var(--ease-spring), background var(--dur-med) var(--ease-out);
-}
-
-.toggle.on {
-  background: var(--accent);
-  border-color: transparent;
-}
-
-.toggle.on::after {
-  left: 20px;
-  background: var(--accent-text);
-}
 </style>
