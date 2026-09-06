@@ -185,21 +185,27 @@ function confirmRename() {
 
 const showAdd = ref(false)
 const addFilter = ref('')
+const addOnlyNew = ref(false)
 /** 多选批量添加的选中集 */
 const addSelected = ref<Set<string>>(new Set())
 
 function openAdd() {
   addSelected.value = new Set()
   addFilter.value = ''
+  addOnlyNew.value = false
   showAdd.value = true
 }
 
 const addCandidates = computed(() =>
-  addFilter.value
-    ? library.sortedSongs.filter((s) =>
-        (s.title + s.artist + s.album).toLowerCase().includes(addFilter.value.toLowerCase()),
-      )
-    : library.sortedSongs,
+  library.sortedSongs.filter((s) => {
+    if (addOnlyNew.value && inPlaylist(s.path)) return false
+    if (
+      addFilter.value &&
+      !(s.title + s.artist + s.album).toLowerCase().includes(addFilter.value.toLowerCase())
+    )
+      return false
+    return true
+  }),
 )
 
 function inPlaylist(path: string) {
@@ -211,6 +217,28 @@ function toggleAddSelect(path: string) {
   if (next.has(path)) next.delete(path)
   else next.add(path)
   addSelected.value = next
+}
+
+/** 全选：把列表内所有可添加（未在歌单）的歌曲加入选中集 */
+function selectAllAdd() {
+  const next = new Set(addSelected.value)
+  for (const s of addCandidates.value) if (!inPlaylist(s.path)) next.add(s.path)
+  addSelected.value = next
+}
+
+/** 反选：对列表内可添加的歌曲取反 */
+function invertAdd() {
+  const next = new Set(addSelected.value)
+  for (const s of addCandidates.value) {
+    if (inPlaylist(s.path)) continue
+    if (next.has(s.path)) next.delete(s.path)
+    else next.add(s.path)
+  }
+  addSelected.value = next
+}
+
+function clearAdd() {
+  addSelected.value = new Set()
 }
 
 function confirmAddSelected() {
@@ -409,18 +437,44 @@ function confirmRemove() {
       </div></Transition>
     </teleport>
 
-    <!-- 添加歌曲弹层（多选批量添加） -->
+    <!-- 添加歌曲弹层（多选批量添加：全选/反选/仅看未添加） -->
     <teleport to="body">
       <Transition name="modal"><div v-if="showAdd" class="modal-mask" @click.self="showAdd = false">
         <FrostedPanel class="modal wide" radius="12px">
           <h3 class="modal-title">添加歌曲到「{{ current.name }}」</h3>
-          <input v-model="addFilter" class="text-input" type="text" placeholder="搜索标题 / 艺术家 / 专辑" />
+          <div class="add-toolbar">
+            <div class="add-search">
+              <AppIcon name="search" :size="14" />
+              <input
+                v-model="addFilter"
+                class="add-search-input"
+                type="text"
+                placeholder="搜索标题 / 艺术家 / 专辑"
+              />
+            </div>
+            <button
+              class="add-toggle"
+              :class="{ on: addOnlyNew }"
+              title="隐藏已在歌单中的歌曲"
+              @click="addOnlyNew = !addOnlyNew"
+            >
+              <AppIcon v-if="addOnlyNew" name="check" :size="12" /> 仅看未添加
+            </button>
+          </div>
+          <div class="add-select-row">
+            <span class="add-selected-count">已选 {{ addSelected.size }} 首</span>
+            <span class="add-select-btns">
+              <button class="mini-link" @click="selectAllAdd">全选</button>
+              <button class="mini-link" @click="invertAdd">反选</button>
+              <button class="mini-link" :disabled="addSelected.size === 0" @click="clearAdd">清除</button>
+            </span>
+          </div>
           <div class="add-list">
             <label
               v-for="song in addCandidates"
               :key="song.path"
               class="add-row"
-              :class="{ added: inPlaylist(song.path) }"
+              :class="{ added: inPlaylist(song.path), checked: addSelected.has(song.path) }"
             >
               <input
                 type="checkbox"
@@ -429,14 +483,22 @@ function confirmRemove() {
                 :disabled="inPlaylist(song.path)"
                 @change="toggleAddSelect(song.path)"
               />
-              <span class="drag-title">{{ song.title }}</span>
-              <span class="drag-artist">{{ song.artist }}</span>
+              <CoverImage :cover-id="song.coverId" :size="40" class="add-cover" />
+              <span class="add-meta">
+                <span class="drag-title">{{ song.title }}</span>
+                <span class="drag-artist">{{ song.artist }} · {{ song.album }}</span>
+              </span>
               <span class="add-state">{{ inPlaylist(song.path) ? '已在歌单' : '' }}</span>
             </label>
+            <div v-if="addCandidates.length === 0" class="add-empty">没有匹配的歌曲</div>
           </div>
           <div class="modal-actions">
             <button class="action-btn" @click="showAdd = false">取消</button>
-            <button class="action-btn primary" :disabled="addSelected.size === 0" @click="confirmAddSelected(); showAdd = false">
+            <button
+              class="action-btn primary"
+              :disabled="addSelected.size === 0"
+              @click="confirmAddSelected(); showAdd = false"
+            >
               添加{{ addSelected.size > 0 ? ` ${addSelected.size} 首` : '' }}
             </button>
           </div>
@@ -979,8 +1041,105 @@ function confirmRemove() {
   gap: 8px;
 }
 
+.add-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.add-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-hover);
+  color: var(--text-tertiary);
+}
+
+.add-search:focus-within {
+  border-color: var(--accent);
+}
+
+.add-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.add-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.add-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.add-toggle:hover {
+  background: var(--bg-hover);
+}
+
+.add-toggle.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.add-select-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.add-selected-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.add-select-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.mini-link {
+  font-size: 12px;
+  color: var(--accent);
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.mini-link:hover {
+  background: var(--accent-soft);
+}
+
+.mini-link:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: none;
+}
+
 .add-list {
-  max-height: 320px;
+  max-height: 340px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -989,21 +1148,26 @@ function confirmRemove() {
 
 .add-row {
   display: grid;
-  grid-template-columns: 20px 1fr 1fr auto;
+  grid-template-columns: 20px 40px 1fr auto;
   gap: 12px;
   align-items: center;
-  height: 40px;
+  height: 52px;
   padding: 0 8px;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
 }
 
 .add-row:hover {
   background: var(--bg-hover);
 }
 
+.add-row.checked {
+  background: var(--accent-soft);
+}
+
 .add-row.added {
-  opacity: 0.55;
+  opacity: 0.45;
   cursor: default;
 }
 
@@ -1014,9 +1178,28 @@ function confirmRemove() {
   cursor: pointer;
 }
 
+.add-cover :deep(.cover-img),
+.add-cover :deep(.cover-fallback) {
+  border-radius: 6px;
+}
+
+.add-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .add-state {
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+.add-empty {
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  padding: 30px 0;
 }
 
 /* 共享元素过渡落定后的错峰浮现 + 返回轻淡出 */

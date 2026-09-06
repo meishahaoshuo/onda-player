@@ -56,6 +56,8 @@ export const iconPaths = {
     '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M12 12v4"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
+  keyboard:
+    '<rect x="2" y="6" width="20" height="14" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M9 15h6"/>',
   image:
     '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
 } as const

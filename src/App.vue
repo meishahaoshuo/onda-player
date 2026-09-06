@@ -12,6 +12,8 @@ import ArtistsView from '@/views/ArtistsView.vue'
 import FavoritesView from '@/views/FavoritesView.vue'
 import ChartsView from '@/views/ChartsView.vue'
 import RecentView from '@/views/RecentView.vue'
+import SearchResultsView from '@/views/SearchResultsView.vue'
+import AppIcon from '@/components/AppIcon.vue'
 import PlaylistsView from '@/views/PlaylistsView.vue'
 import LyricsFullView from '@/views/LyricsFullView.vue'
 import SettingsView from '@/views/SettingsView.vue'
@@ -25,6 +27,8 @@ import { useFavoritesStore } from '@/stores/favorites'
 import { useSettingsStore } from '@/stores/settings'
 import { clearTransitionState } from '@/services/pageTransition'
 import { installTrackSwapWatcher } from '@/services/coverFlight'
+import { installHotkeys } from '@/services/hotkeys'
+import { extractBrightColors } from '@/services/palette'
 import type { ViewId } from '@/types'
 
 const ui = useUiStore()
@@ -91,12 +95,47 @@ onMounted(async () => {
   await library.init()
   await player.restore()
   installTrackSwapWatcher()
+  installHotkeys()
 })
 
 /** 切换视图时清理过渡残留（网格可能已被卸载，动画引用会指向已销毁的 DOM） */
 watch(
   () => ui.activeView,
   () => clearTransitionState(),
+)
+
+/* ---------- 封面氛围光：取当前播放封面主色的两个低强度光斑 ---------- */
+const ambientColors = ref<(string | null)[]>([])
+let ambientSeq = 0
+
+watch(
+  () => player.current?.coverId ?? null,
+  async (coverId) => {
+    if (!settings.ambientGlow || !coverId) {
+      ambientColors.value = []
+      return
+    }
+    const seq = ++ambientSeq
+    try {
+      const url = await library.coverUrl(coverId)
+      if (!url || seq !== ambientSeq) return
+      const blob = await (await fetch(url)).blob()
+      const colors = await extractBrightColors(blob).catch(() => [] as string[])
+      if (seq !== ambientSeq || !settings.ambientGlow) return
+      ambientColors.value = colors.length > 0 ? colors.slice(0, 2) : [null, null]
+    } catch {
+      /* 取色失败保持无氛围光 */
+    }
+  },
+  { immediate: true },
+)
+
+// 关闭氛围光开关时清空
+watch(
+  () => settings.ambientGlow,
+  (on) => {
+    if (!on) ambientColors.value = []
+  },
 )
 
 /** 详情覆盖层被绕过返回过渡直接关闭时（典型：详情打开时点侧边栏当前视图，
@@ -115,16 +154,38 @@ watch(
     <div class="body-row">
       <Sidebar />
       <main class="content">
+        <!-- 封面氛围光：跟随当前播放封面取色的低强度背景光斑 -->
+        <div v-if="settings.ambientGlow && player.current?.coverId" class="ambient-layer" aria-hidden="true">
+          <Transition v-for="(c, i) in ambientColors" :key="`${player.currentPath}-${i}`" name="ambient">
+            <div v-if="c" class="ambient-blob" :class="`ab-${i}`" :style="{ '--fc': c }" />
+          </Transition>
+        </div>
         <header class="view-header">
           <h1>{{ title }}</h1>
+          <div class="search-box">
+            <AppIcon name="search" :size="15" />
+            <input
+              v-model="ui.searchQuery"
+              class="search-input"
+              type="text"
+              placeholder="搜索歌曲、艺术家、专辑"
+              @keydown.esc="ui.searchQuery = ''"
+            />
+            <button v-if="ui.searchQuery" class="search-clear" title="清除搜索" @click="ui.searchQuery = ''">
+              <AppIcon name="close" :size="12" />
+            </button>
+          </div>
         </header>
         <Transition name="view" mode="out-in" @enter="onViewEnter">
           <section ref="sectionEl" :key="ui.activeView" class="view-body">
+            <!-- 搜索优先：有关键词时内容区显示搜索结果 -->
             <!-- 注意：这条 v-if / v-else-if 链必须从 SongsView 一路连通到 PlaceholderView。
                  曾经 template v-if 与 SongsView 的 v-if 断开成两条链，
                  songs 视图下兜底的 PlaceholderView 也会渲染，view-body 被撑出
                  双倍高度 → 外层滚动条出现 + 内层虚拟列表失效。 -->
-            <SongsView v-if="ui.activeView === 'songs'" />
+            <SearchResultsView v-if="ui.searchQuery.trim()" />
+
+            <SongsView v-else-if="ui.activeView === 'songs'" />
 
             <FavoritesView v-else-if="ui.activeView === 'favorites'" />
 
@@ -190,6 +251,65 @@ watch(
   position: relative;
 }
 
+/* 封面氛围光：绝对定位背景层，内容抬到其上 */
+.ambient-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ambient-blob {
+  position: absolute;
+  width: clamp(320px, 36vw, 520px);
+  height: clamp(320px, 36vw, 520px);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--fc), transparent 70%);
+  opacity: 0.15;
+  animation: ambient-breathe 12s ease-in-out infinite alternate;
+  transition: background 1.2s var(--ease-out);
+}
+
+.ambient-blob.ab-0 {
+  top: -22%;
+  left: -6%;
+}
+
+.ambient-blob.ab-1 {
+  bottom: -26%;
+  right: -4%;
+  animation-delay: -6s;
+}
+
+@keyframes ambient-breathe {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.12;
+  }
+  50% {
+    transform: translate(2vw, 2vh) scale(1.08);
+    opacity: 0.18;
+  }
+}
+
+.ambient-enter-active,
+.ambient-leave-active {
+  transition: opacity 1.2s var(--ease-out);
+}
+
+.ambient-enter-from,
+.ambient-leave-to {
+  opacity: 0;
+}
+
+.view-header,
+.view-body {
+  position: relative;
+  z-index: 1;
+}
+
 /* 专辑详情覆盖层：盖住标题与网格，自带滚动；放在 .content 内天然避开侧栏与播放条 */
 .detail-layer {
   position: absolute;
@@ -202,12 +322,68 @@ watch(
 }
 
 .view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   padding: 20px 24px 12px;
 }
 
 .view-header h1 {
   font-size: 22px;
   font-weight: 600;
+}
+
+/* 顶栏搜索框：聚焦时轻微加宽 */
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 260px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-item);
+  background: var(--bg-hover);
+  border: 1px solid transparent;
+  color: var(--text-tertiary);
+  transition: width var(--dur-med) var(--ease-out), border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.search-box:focus-within {
+  width: 330px;
+  border-color: var(--accent);
+  background: var(--bg-base);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: var(--text-tertiary);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.search-clear:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
 }
 
 .view-body {

@@ -46,6 +46,36 @@ function loadAutoResume(): boolean {
   return localStorage.getItem(AUTO_RESUME_KEY) === '1'
 }
 
+/* ---------- 自定义主题色 ----------
+   accentColor 为空字符串表示使用 CSS 默认（海军蓝）；非空则运行时写 override 变量。 */
+const ACCENT_KEY = 'settings.accentColor'
+function loadAccent(): string {
+  const raw = localStorage.getItem(ACCENT_KEY) ?? ''
+  return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : ''
+}
+
+/** 由十六进制色计算相对亮度（0 暗 ~ 1 亮），决定文字用黑还是白 */
+function luminance(hex: string): number {
+  const n = parseInt(hex.slice(1), 16)
+  const r = (n >> 16) & 255
+  const g = (n >> 8) & 255
+  const b = n & 255
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+}
+
+/** 主色压暗（strong 变体）：各通道 ×0.78 并钳制 */
+function darken(hex: string, f = 0.78): string {
+  const n = parseInt(hex.slice(1), 16)
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(v * f))
+  return `#${ch.map((v) => v.toString(16).padStart(2, '0')).join('')}`
+}
+
+/* ---------- 封面氛围光开关 ---------- */
+const AMBIENT_KEY = 'settings.ambientGlow'
+function loadAmbient(): boolean {
+  return localStorage.getItem(AMBIENT_KEY) !== '0'
+}
+
 /**
  * 主题设置：跟随系统 / 深色 / 浅色，切换即时生效并持久化。
  * 注：第 2 阶段 IndexedDB 就绪后仍保留 localStorage——主题需要在
@@ -57,6 +87,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const lyricOffset = ref(loadLyricOffset())
   const autoRestoreQueue = ref(loadAutoRestore())
   const autoResume = ref(loadAutoResume())
+  /** 自定义主题色：'' = 默认海军蓝 */
+  const accentColor = ref(loadAccent())
+  /** 封面氛围光：主内容区背景跟随当前播放封面取色发光 */
+  const ambientGlow = ref(loadAmbient())
 
   // 实际生效的主题（system 模式下随系统实时变化）
   const resolvedTheme = ref<'dark' | 'light'>(media.matches ? 'dark' : 'light')
@@ -85,6 +119,23 @@ export const useSettingsStore = defineStore('settings', () => {
     if (themeMode.value === 'system') {
       resolvedTheme.value = e.matches ? 'dark' : 'light'
     }
+  })
+
+  // 自定义主题色派生：写 inline override 压过 CSS 默认；空值时清除回退
+  watchEffect(() => {
+    const c = accentColor.value
+    const root = document.documentElement
+    if (!c) {
+      for (const v of ['--accent', '--accent-strong', '--accent-text', '--accent-soft', '--bg-active', '--ambient-fallback'])
+        root.style.removeProperty(v)
+      return
+    }
+    root.style.setProperty('--accent', c)
+    root.style.setProperty('--accent-strong', darken(c))
+    root.style.setProperty('--accent-text', luminance(c) > 0.62 ? '#17203a' : '#ffffff')
+    root.style.setProperty('--accent-soft', `color-mix(in srgb, ${c} 22%, transparent)`)
+    root.style.setProperty('--bg-active', `color-mix(in srgb, ${c} 16%, transparent)`)
+    root.style.setProperty('--ambient-fallback', `color-mix(in srgb, ${c} 18%, transparent)`)
   })
 
   function setThemeMode(mode: ThemeMode) {
@@ -122,6 +173,17 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(AUTO_RESUME_KEY, v ? '1' : '0')
   }
 
+  /** 设置自定义主题色：'' 恢复默认 */
+  function setAccentColor(c: string) {
+    accentColor.value = /^#[0-9a-fA-F]{6}$/.test(c) ? c : ''
+    localStorage.setItem(ACCENT_KEY, accentColor.value)
+  }
+
+  function setAmbientGlow(v: boolean) {
+    ambientGlow.value = v
+    localStorage.setItem(AMBIENT_KEY, v ? '1' : '0')
+  }
+
   return {
     themeMode,
     resolvedTheme,
@@ -137,5 +199,9 @@ export const useSettingsStore = defineStore('settings', () => {
     setAutoRestoreQueue,
     autoResume,
     setAutoResume,
+    accentColor,
+    setAccentColor,
+    ambientGlow,
+    setAmbientGlow,
   }
 })

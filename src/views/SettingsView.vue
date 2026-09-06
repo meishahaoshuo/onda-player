@@ -3,6 +3,15 @@ import { computed, ref } from 'vue'
 import { useLibraryStore } from '@/stores/library'
 import { useSettingsStore } from '@/stores/settings'
 import { useStatsStore } from '@/stores/stats'
+import {
+  HOTKEY_ACTIONS,
+  HOTKEY_DEFAULTS,
+  comboFromEvent,
+  resetBinding,
+  setBinding,
+  useHotkeyBindings,
+  type HotkeyAction,
+} from '@/services/hotkeys'
 import type { ThemeMode } from '@/types'
 import AppIcon from '@/components/AppIcon.vue'
 
@@ -13,13 +22,20 @@ import AppIcon from '@/components/AppIcon.vue'
 const library = useLibraryStore()
 const settings = useSettingsStore()
 const stats = useStatsStore()
+const hotkeyBindings = useHotkeyBindings()
 
 const emit = defineEmits<{ addFolder: [] }>()
 
-type SectionId = 'appearance' | 'folders' | 'data' | 'about'
+type SectionId = 'appearance' | 'hotkeys' | 'folders' | 'data' | 'about'
 
-const SECTIONS: { id: SectionId; label: string; icon: 'sun' | 'folder' | 'info' | 'trash'; desc: string }[] = [
+const SECTIONS: {
+  id: SectionId
+  label: string
+  icon: 'sun' | 'keyboard' | 'folder' | 'info' | 'trash'
+  desc: string
+}[] = [
   { id: 'appearance', label: '外观', icon: 'sun', desc: '主题与配色' },
+  { id: 'hotkeys', label: '快捷键', icon: 'keyboard', desc: '键盘控制播放' },
   { id: 'folders', label: '音乐文件夹', icon: 'folder', desc: '曲库来源与扫描' },
   { id: 'data', label: '数据', icon: 'trash', desc: '播放统计管理' },
   { id: 'about', label: '关于', icon: 'info', desc: '版本与说明' },
@@ -45,12 +61,56 @@ const brandLogo = computed(() =>
 
 const songCount = computed(() => library.songs.length)
 
+/** 主题色预设（首项"默认"在模板单独渲染） */
+const ACCENT_PRESETS = [
+  '#0e9488',
+  '#2f7d5c',
+  '#c2841d',
+  '#c04a6e',
+  '#7a5cd0',
+  '#5b6470',
+  '#9a3b52',
+]
+
 /* ---------- 数据：清空播放统计 ---------- */
 const confirmClearStats = ref(false)
 
 async function doClearStats() {
   confirmClearStats.value = false
   await stats.clear()
+}
+
+/* ---------- 快捷键录制 ---------- */
+const recording = ref<HotkeyAction | null>(null)
+const recordingConflict = ref('')
+
+function startRecording(action: HotkeyAction) {
+  recording.value = action
+  recordingConflict.value = ''
+  window.addEventListener('keydown', onRecordKeydown, { capture: true })
+}
+
+function stopRecording() {
+  recording.value = null
+  recordingConflict.value = ''
+  window.removeEventListener('keydown', onRecordKeydown, { capture: true })
+}
+
+function onRecordKeydown(e: KeyboardEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+  if (e.key === 'Escape') {
+    stopRecording()
+    return
+  }
+  const combo = comboFromEvent(e)
+  if (!combo) return // 仅按了修饰键，等待主键
+  // 冲突检测：其它动作占用了同一组合则覆盖
+  const conflicts = HOTKEY_ACTIONS.filter((a) => a.id !== recording.value && hotkeyBindings.value[a.id] === combo)
+  recordingConflict.value =
+    conflicts.length > 0 ? `已覆盖「${conflicts.map((c) => c.label).join('、')}」的原键位` : ''
+  setBinding(recording.value!, combo)
+  stopRecording()
 }
 </script>
 
@@ -96,6 +156,81 @@ async function doClearStats() {
               <span class="theme-check"><AppIcon v-if="settings.themeMode === opt.mode" name="check" :size="15" /></span>
             </button>
           </div>
+
+          <!-- 主题色 -->
+          <p class="panel-sub accent-heading">主题色</p>
+          <div class="accent-row">
+            <button
+              class="accent-swatch default"
+              :class="{ active: settings.accentColor === '' }"
+              title="默认海军蓝"
+              @click="settings.setAccentColor('')"
+            >
+              <AppIcon v-if="settings.accentColor === ''" name="check" :size="15" />
+            </button>
+            <button
+              v-for="c in ACCENT_PRESETS"
+              :key="c"
+              class="accent-swatch"
+              :class="{ active: settings.accentColor === c }"
+              :style="{ background: c }"
+              :title="c"
+              @click="settings.setAccentColor(c)"
+            >
+              <AppIcon v-if="settings.accentColor === c" name="check" :size="15" />
+            </button>
+            <label class="accent-custom" title="自定义颜色">
+              <input
+                type="color"
+                :value="settings.accentColor || '#172554'"
+                @input="settings.setAccentColor(($event.target as HTMLInputElement).value)"
+              />
+              <AppIcon name="plus" :size="14" />
+            </label>
+          </div>
+
+          <!-- 背景 -->
+          <p class="panel-sub accent-heading">背景</p>
+          <div class="opt-row">
+            <div class="opt-text">
+              <span class="opt-name">封面氛围光</span>
+              <span class="opt-desc">内容区背景跟随当前播放封面的主色泛起淡淡光晕</span>
+            </div>
+            <button
+              class="toggle"
+              :class="{ on: settings.ambientGlow }"
+              :aria-pressed="settings.ambientGlow"
+              @click="settings.setAmbientGlow(!settings.ambientGlow)"
+            />
+          </div>
+        </section>
+
+        <!-- 快捷键 -->
+        <section v-else-if="active === 'hotkeys'" key="hotkeys" class="panel-section">
+          <h2 class="panel-title">快捷键</h2>
+          <p class="panel-sub">点击键位后按下新组合即可重新录制（Esc 取消）；输入框聚焦时快捷键自动失效</p>
+          <div class="hotkey-list">
+            <div v-for="a in HOTKEY_ACTIONS" :key="a.id" class="hotkey-row">
+              <span class="hotkey-label">{{ a.label }}</span>
+              <button
+                class="hotkey-cap"
+                :class="{ recording: recording === a.id }"
+                @click="startRecording(a.id)"
+              >
+                <template v-if="recording === a.id">按下新组合…</template>
+                <template v-else>{{ hotkeyBindings[a.id].split('+').join(' + ') }}</template>
+              </button>
+              <button
+                v-if="hotkeyBindings[a.id] !== HOTKEY_DEFAULTS[a.id]"
+                class="hotkey-reset"
+                :title="`恢复默认 ${HOTKEY_DEFAULTS[a.id]}`"
+                @click="resetBinding(a.id)"
+              >
+                <AppIcon name="close" :size="12" />
+              </button>
+            </div>
+          </div>
+          <p v-if="recordingConflict" class="hotkey-conflict">{{ recordingConflict }}</p>
         </section>
 
         <!-- 音乐文件夹 -->
@@ -695,5 +830,175 @@ async function doClearStats() {
   .nav-desc {
     display: none;
   }
+}
+
+/* 快捷键 */
+.hotkey-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.hotkey-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.hotkey-row + .hotkey-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.hotkey-label {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.hotkey-cap {
+  min-width: 130px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.hotkey-cap:hover {
+  border-color: var(--accent);
+}
+
+.hotkey-cap.recording {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.hotkey-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.hotkey-reset:hover {
+  background: var(--bg-hover);
+  color: var(--danger);
+}
+
+.hotkey-conflict {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+/* 主题色板与背景 */
+.accent-heading {
+  margin-top: 22px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.accent-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.accent-swatch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  color: #fff;
+  transition: transform var(--dur-fast) var(--ease-spring), border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.accent-swatch:hover {
+  transform: scale(1.1);
+}
+
+.accent-swatch.active {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.accent-swatch.default {
+  background: linear-gradient(135deg, #172554, #5c7ce0);
+}
+
+.accent-custom {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px dashed var(--border-subtle);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.accent-custom:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.accent-custom input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* 开关 */
+.toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  transition: background var(--dur-med) var(--ease-out), border-color var(--dur-med) var(--ease-out);
+}
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  transition: left var(--dur-med) var(--ease-spring), background var(--dur-med) var(--ease-out);
+}
+
+.toggle.on {
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.toggle.on::after {
+  left: 20px;
+  background: var(--accent-text);
 }
 </style>
