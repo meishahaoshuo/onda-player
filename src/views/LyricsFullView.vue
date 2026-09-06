@@ -224,8 +224,8 @@ function setLineEl(i: number) {
 
 /* 自定义缓动滚动：out-quart。
    时长按距离缩放（140-300ms）——顺次换行要跟手，seek 大跳要干脆。 */
-const SCROLL_DURATION_MIN = 140
-const SCROLL_DURATION_MAX = 300
+const SCROLL_DURATION_MIN = 80
+const SCROLL_DURATION_MAX = 160
 /** 超过该距离（约两屏以上，典型是 seek 跨段）直接定位，长距离动画只会显得拖沓 */
 const INSTANT_SCROLL_PX = 2400
 let scrollRaf = 0
@@ -250,7 +250,7 @@ function smoothScrollTo(container: HTMLElement, target: number) {
   }
   const duration = Math.min(
     SCROLL_DURATION_MAX,
-    SCROLL_DURATION_MIN + Math.abs(delta) / 12,
+    SCROLL_DURATION_MIN + Math.abs(delta) / 24,
   )
   const t0 = performance.now()
   const ease = (t: number) => 1 - Math.pow(1 - t, 4)
