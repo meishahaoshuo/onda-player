@@ -4,9 +4,9 @@ import { usePlayerStore } from '@/stores/player'
 import { useLibraryStore } from '@/stores/library'
 
 /**
- * 歌曲封面 → 底部播放栏的「换带」动效（无仓门，简单直接）：
- * - 点歌行：行内封面化作卡带（外壳框 + 卷带轮），沿弧线飞向播放栏落位，带 squash 重量感；
- * - 任何方式切歌（下一曲/上一曲/队列等）：旧卡带在播放栏封面位升起退出、淡出，新卡带随即落入；
+ * 歌曲封面 → 底部播放栏的换带动效（简化版）：
+ * - 点歌行：行内封面化作卡带（外壳框），沿弧线飞向播放栏落位，带 squash 重量感；
+ * - 任何方式切歌（下一曲/上一曲/队列等）：新封面从上方落入播放栏封面位；
  * - 落位时播放栏轻微下沉回弹，封面 pop 接住。
  * 与页面切换编排器（pageTransition）互斥：编排期间只做落点弹跳。
  */
@@ -27,7 +27,7 @@ function playerCoverEl(): HTMLElement | null {
 /** 行点击飞行进行中（含收尾缓冲）：期间曲目变化 watcher 不重复演出 */
 let flightUntil = 0
 
-/** 播放栏封面弹跳：接住卡带——放大、歪头、回正 */
+/** 播放栏封面弹跳：接住封面——放大、歪头、回正 */
 export function popPlayerCover(): void {
   const target = playerCoverEl()
   if (!target) return
@@ -42,7 +42,7 @@ export function popPlayerCover(): void {
   )
 }
 
-/** 播放栏整体下沉回弹：像卡带机承受了入仓的重量 */
+/** 播放栏整体下沉回弹：落位的重量感 */
 function dipPlayerBar(delayMs: number): void {
   const bar = document.querySelector<HTMLElement>('.player-bar')
   if (!bar) return
@@ -71,26 +71,7 @@ function makeShell(): HTMLElement {
   return el
 }
 
-/** 卷带轮：卡带窗里的小转轮（带轮齿高光的圆盘，旋转可见） */
-function makeReel(): HTMLElement {
-  const el = document.createElement('div')
-  Object.assign(el.style, {
-    position: 'absolute',
-    top: '50%',
-    width: '26%',
-    aspectRatio: '1',
-    borderRadius: '50%',
-    transform: 'translate(-50%, -50%)',
-    background:
-      'radial-gradient(circle, rgba(0,0,0,0.42) 0 34%, transparent 35%), conic-gradient(rgba(255,255,255,0.95) 0 34deg, rgba(255,255,255,0.28) 34deg 360deg)',
-    border: '2px solid rgba(255,255,255,0.85)',
-    boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
-    pointerEvents: 'none',
-  } as CSSStyleDeclaration)
-  return el
-}
-
-/** 定位在播放栏封面位的一盘卡带（封面 + 外壳 + 卷轮）；src 为空则是空带 */
+/** 定位在播放栏封面位的新封面卡带（封面 + 外壳框） */
 function makeCassette(to: DOMRect, src: string | null, z: number): HTMLElement {
   const wrapper = document.createElement('div')
   Object.assign(wrapper.style, {
@@ -127,15 +108,9 @@ function makeCassette(to: DOMRect, src: string | null, z: number): HTMLElement {
     } as CSSStyleDeclaration)
     wrapper.appendChild(body)
   }
-  const reelL = makeReel()
-  const reelR = makeReel()
-  reelL.style.left = '30%'
-  reelR.style.left = '70%'
-  reelL.style.width = '30%'
-  reelR.style.width = '30%'
-  reelL.style.opacity = '1'
-  reelR.style.opacity = '1'
-  wrapper.append(reelL, reelR)
+  const shell = makeShell()
+  shell.style.zIndex = '-1'
+  wrapper.appendChild(shell)
   return wrapper
 }
 
@@ -155,10 +130,7 @@ export function flyToPlayer(fromEl: Element | null): void {
     return
   }
 
-  // 换歌检测：已有曲目在播 → 旧带先退场
-  const replacing = !!usePlayerStore().currentPath
   flightUntil = Date.now() + FLIGHT_MS + 150
-  const oldSrc = (target.querySelector('img') as HTMLImageElement | null)?.currentSrc ?? null
 
   const from = img.getBoundingClientRect()
   const to = target.getBoundingClientRect()
@@ -182,7 +154,7 @@ export function flyToPlayer(fromEl: Element | null): void {
 
   const startRadius = getComputedStyle(img).borderRadius
 
-  /* ---------- 飞行载体：外壳框 + 封面 + 两卷轮 ---------- */
+  /* ---------- 飞行载体：外壳框 + 封面 ---------- */
   const flying = document.createElement('div')
   flying.className = 'cover-flight'
   Object.assign(flying.style, {
@@ -208,14 +180,8 @@ export function flyToPlayer(fromEl: Element | null): void {
     borderRadius: startRadius,
   } as CSSStyleDeclaration)
   const shell = makeShell()
-  const reelL = makeReel()
-  const reelR = makeReel()
-  reelL.style.left = '27%'
-  reelR.style.left = '73%'
-  reelL.style.opacity = '0'
-  reelR.style.opacity = '0'
   shell.style.zIndex = '-1'
-  flying.append(shell, cloneImg, reelL, reelR)
+  flying.append(shell, cloneImg)
 
   document.querySelectorAll('.cover-flight, .player-door').forEach((n) => n.remove())
   document.body.appendChild(flying)
@@ -260,30 +226,16 @@ export function flyToPlayer(fromEl: Element | null): void {
   )
 
   /* ---------- 卡带部件的节奏 ---------- */
-  // 外壳与卷轮在滑行段浮现，落位后随整体淡出
-  for (const el of [shell, reelL, reelR]) {
-    el.animate(
-      [
-        { opacity: 0, offset: 0 },
-        { opacity: 1, offset: 0.24 },
-        { opacity: 1, offset: 0.78 },
-        { opacity: 0, offset: 0.97 },
-      ],
-      { duration: FLIGHT_MS, fill: 'both', easing: 'ease-out' },
-    )
-  }
-  // 卷轮持续转动：起步 → 落位后转完大半圈"上带"
-  for (const reel of [reelL, reelR]) {
-    reel.animate(
-      [
-        { transform: 'translate(-50%, -50%) rotate(0deg)', offset: 0 },
-        { transform: 'translate(-50%, -50%) rotate(28deg)', offset: 0.24 },
-        { transform: `translate(-50%, -50%) rotate(${180 + 28 * dir}deg)`, offset: 0.86 },
-        { transform: `translate(-50%, -50%) rotate(${168 + 28 * dir}deg)`, offset: 1 },
-      ],
-      { duration: FLIGHT_MS, fill: 'both', easing: 'linear' },
-    )
-  }
+  // 外壳框在滑行段浮现，落位后随整体淡出
+  shell.animate(
+    [
+      { opacity: 0, offset: 0 },
+      { opacity: 1, offset: 0.24 },
+      { opacity: 1, offset: 0.78 },
+      { opacity: 0, offset: 0.97 },
+    ],
+    { duration: FLIGHT_MS, fill: 'both', easing: 'ease-out' },
+  )
   // 封面标签圆角收平（卡带标签是直角贴纸的感觉）
   cloneImg.animate(
     [
@@ -294,39 +246,12 @@ export function flyToPlayer(fromEl: Element | null): void {
     { duration: FLIGHT_MS, fill: 'both', easing: 'ease-out' },
   )
 
-  /* ---------- 退带：换歌时旧卡带在仓位上升起退出 ---------- */
-  let oldCassette: HTMLElement | null = null
-  if (replacing) {
-    oldCassette = makeCassette(to, oldSrc, 69)
-    document.body.appendChild(oldCassette)
-    oldCassette.animate(
-      [
-        { transform: 'translateY(0) scale(1)', opacity: 1, offset: 0 },
-        { transform: 'translateY(-30px) scale(1.05)', opacity: 1, offset: 0.55 },
-        { transform: 'translateY(-52px) scale(0.98)', opacity: 0, offset: 1 },
-      ],
-      { duration: FLIGHT_MS * 0.42, delay: FLIGHT_MS * 0.06, easing: EASE_OUT, fill: 'both' },
-    )
-    for (const reel of oldCassette.querySelectorAll('div')) {
-      reel.animate(
-        [
-          { transform: 'translate(-50%, -50%) rotate(0deg)', offset: 0 },
-          { transform: 'translate(-50%, -50%) rotate(-52deg)', offset: 1 },
-        ],
-        { duration: FLIGHT_MS * 0.42, delay: FLIGHT_MS * 0.06, easing: 'ease-out', fill: 'both' },
-      )
-    }
-  }
-
   /* ---------- 落位时刻的对齐表演 ---------- */
   const landDelay = Math.round(FLIGHT_MS * LAND_AT) - 30
   dipPlayerBar(landDelay)
   window.setTimeout(() => popPlayerCover(), Math.round(FLIGHT_MS * 0.86))
 
-  const cleanup = () => {
-    flying.remove()
-    oldCassette?.remove()
-  }
+  const cleanup = () => flying.remove()
   anim.finished.then(cleanup, cleanup)
   window.setTimeout(cleanup, FLIGHT_MS + 400)
 }
@@ -344,15 +269,12 @@ export function flyToPlayerFromRow(e: MouseEvent): void {
   flyToPlayer(el)
 }
 
-/* ================= 机上换带：任何方式切歌都有替换动画 =================
+/* ================= 机上换带：任何方式切歌都有落位动画 =================
    下一曲/上一曲/队列点歌/右键播放等不经过行点击的切歌，封面原本是瞬间
-   被覆盖的。这里监听曲目变化：旧卡带升起退出、新卡带随即落入。
-   行点击触发的飞行已包含同样叙事，用 flightUntil 错开避免双重演出。
+   被覆盖的。这里监听曲目变化：新封面从上方落入播放栏封面位。
+   行点击触发的飞行已包含同样叙事，用 flightUntil 错开避免双重演出。 */
 
-   所有动画都是「从编排起点开始的单一 offset 时间线」——同一元素同一属性
-   绝不挂两个动画：双动画的 backwards/forwards 填充会在延迟期互相压制。 */
-
-const SWAP_MS = 760
+const SWAP_MS = 620
 
 /** 在 App 挂载后调用一次：监听播放曲目变化，驱动「机上换带」 */
 export function installTrackSwapWatcher(): void {
@@ -377,31 +299,6 @@ async function runSwap(song: { coverId: string | null } | null, library: ReturnT
   if (!target) return
   const to = target.getBoundingClientRect()
   if (to.width < 4 || to.height < 4) return
-  const oldSrc = (target.querySelector('img') as HTMLImageElement | null)?.currentSrc ?? null
-
-  const opts = { duration: SWAP_MS, fill: 'both' as FillMode }
-
-  // 旧带升起退出（0 → 0.62）
-  const oldC = makeCassette(to, oldSrc, 69)
-  document.querySelectorAll('.cover-flight, .player-door').forEach((n) => n.remove())
-  document.body.appendChild(oldC)
-  oldC.animate(
-    [
-      { transform: 'translateY(0) scale(1)', opacity: 1, offset: 0, easing: EASE_OUT },
-      { transform: 'translateY(-34px) scale(1.05)', opacity: 1, offset: 0.45, easing: EASE_OUT },
-      { transform: 'translateY(-56px) scale(0.98)', opacity: 0, offset: 0.62 },
-    ],
-    opts,
-  )
-  for (const reel of oldC.querySelectorAll('div')) {
-    reel.animate(
-      [
-        { transform: 'translate(-50%, -50%) rotate(0deg)', offset: 0 },
-        { transform: 'translate(-50%, -50%) rotate(-48deg)', offset: 0.62 },
-      ],
-      { ...opts, easing: 'ease-out' },
-    )
-  }
 
   // 新带封面 URL：缓存通常即时命中；给一点等待上限避免拖节奏
   let newSrc: string | null = null
@@ -411,36 +308,21 @@ async function runSwap(song: { coverId: string | null } | null, library: ReturnT
       new Promise<null>((r) => window.setTimeout(() => r(null), 260)),
     ])
   }
-  if (!document.body.contains(oldC)) return // 已被新一轮换带清理
 
-  // 新带从上方落入舱位（0.42 起落、0.72 落定，与旧带在空中短暂交接）
+  // 新封面从上方落入封面位（0 → 0.7 落定）
   const newC = makeCassette(to, newSrc, 70)
+  document.querySelectorAll('.cover-flight, .player-door').forEach((n) => n.remove())
   document.body.appendChild(newC)
   newC.animate(
     [
-      { transform: 'translateY(-42px) scale(1.06)', opacity: 0, offset: 0.42, easing: EASE_OUT },
-      { transform: 'translateY(-6px) scale(1.02)', opacity: 1, offset: 0.62, easing: EASE_OUT },
+      { transform: 'translateY(-38px) scale(1.05)', opacity: 0, offset: 0, easing: EASE_OUT },
+      { transform: 'translateY(-6px) scale(1.02)', opacity: 1, offset: 0.6, easing: EASE_OUT },
       { transform: 'translateY(0) scale(1)', opacity: 1, offset: 0.72 },
     ],
-    opts,
+    { duration: SWAP_MS, fill: 'both' },
   )
-  for (const reel of newC.querySelectorAll('div')) {
-    reel.animate(
-      [
-        { transform: 'translate(-50%, -50%) rotate(0deg)', offset: 0.42 },
-        { transform: 'translate(-50%, -50%) rotate(64deg)', offset: 0.72 },
-      ],
-      { ...opts, easing: 'ease-out' },
-    )
-  }
 
-  dipPlayerBar(Math.round(SWAP_MS * 0.6))
-  window.setTimeout(() => popPlayerCover(), Math.round(SWAP_MS * 0.72))
-  window.setTimeout(
-    () => {
-      oldC.remove()
-      newC.remove()
-    },
-    SWAP_MS + 150,
-  )
+  dipPlayerBar(Math.round(SWAP_MS * 0.55))
+  window.setTimeout(() => popPlayerCover(), Math.round(SWAP_MS * 0.7))
+  window.setTimeout(() => newC.remove(), SWAP_MS + 150)
 }
