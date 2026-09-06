@@ -91,42 +91,102 @@ function makeReel(): HTMLElement {
 }
 
 /**
- * 仓门：盖在播放栏封面位上的两片玻璃板，滑开迎接卡带、合拢后再淡出。
- * 开合用单个动画的 offset 关键帧表达，避免同属性双动画的 fill 竞争。
+ * 卡带仓：播放栏封面位上的"设备舱体"。
+ * 层次：机舱内衬（深色内凹，门滑开时露出的是机器内部）→ 左右门板（面板渐变
+ * + 顶部高光 + 立体投影 + 中缝侧凹槽拉手）→ 开门时中缝透出的品牌色光线。
+ * 门板开合用单个动画的 offset 关键帧表达，避免同属性双动画的 fill 竞争。
  */
-function makeDoor(to: DOMRect): { root: HTMLElement; left: HTMLElement; right: HTMLElement } {
+function makeBay(to: DOMRect): {
+  root: HTMLElement
+  doorL: HTMLElement
+  doorR: HTMLElement
+  glow: HTMLElement
+} {
   const root = document.createElement('div')
   root.className = 'player-door'
   Object.assign(root.style, {
     position: 'fixed',
-    left: `${to.left - 5}px`,
-    top: `${to.top - 5}px`,
-    width: `${to.width + 10}px`,
-    height: `${to.height + 10}px`,
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
+    left: `${to.left - 7}px`,
+    top: `${to.top - 7}px`,
+    width: `${to.width + 14}px`,
+    height: `${to.height + 14}px`,
     zIndex: '71',
     pointerEvents: 'none',
     opacity: '0',
   } as CSSStyleDeclaration)
-  const mk = (side: 'l' | 'r') => {
+
+  // 机舱内衬：深色内凹，门开时露出"机器内部"
+  const recess = document.createElement('div')
+  Object.assign(recess.style, {
+    position: 'absolute',
+    inset: '3px',
+    borderRadius: '8px',
+    background:
+      'linear-gradient(180deg, rgba(0,0,0,0.5), rgba(0,0,0,0.28) 42%, rgba(0,0,0,0.46))',
+    boxShadow:
+      'inset 0 2px 7px rgba(0,0,0,0.55), inset 0 -1px 2px rgba(255,255,255,0.06), 0 1px 0 rgba(255,255,255,0.07)',
+    border: '1px solid rgba(0,0,0,0.35)',
+  } as unknown as CSSStyleDeclaration)
+
+  // 中缝光线：开门时从缝里透出的品牌色光
+  const glow = document.createElement('div')
+  Object.assign(glow.style, {
+    position: 'absolute',
+    left: '50%',
+    top: '14%',
+    bottom: '14%',
+    width: '3px',
+    transform: 'translateX(-50%)',
+    borderRadius: '2px',
+    background:
+      'linear-gradient(180deg, transparent, var(--accent) 22%, color-mix(in srgb, var(--accent) 55%, #fff) 50%, var(--accent) 78%, transparent)',
+    boxShadow: '0 0 10px var(--accent), 0 0 22px color-mix(in srgb, var(--accent) 60%, transparent)',
+    opacity: '0',
+  } as unknown as CSSStyleDeclaration)
+
+  // 门板：不透明面板渐变 + 顶部高光 + 立体投影，靠中缝一侧带凹槽拉手
+  const mkDoor = (side: 'l' | 'r') => {
     const el = document.createElement('div')
     Object.assign(el.style, {
-      background: 'var(--queue-bg)',
-      backdropFilter: 'var(--glass-blur)',
-      WebkitBackdropFilter: 'var(--glass-blur)',
-      borderTop: '1px solid var(--glass-border)',
+      position: 'absolute',
+      top: '0',
+      bottom: '0',
+      left: side === 'l' ? '0' : '50%',
+      width: '50.5%',
+      background:
+        'linear-gradient(180deg, var(--bg-panel) 0%, var(--bg-hover) 58%, var(--bg-panel) 100%)',
+      borderTop: '1px solid var(--glass-highlight)',
       borderBottom: '1px solid var(--glass-border)',
-      borderRadius: side === 'l' ? '9px 2px 2px 9px' : '2px 9px 9px 2px',
       borderLeft: side === 'l' ? '1px solid var(--glass-border)' : 'none',
       borderRight: side === 'r' ? '1px solid var(--glass-border)' : 'none',
+      borderRadius: side === 'l' ? '10px 3px 3px 10px' : '3px 10px 10px 3px',
+      boxShadow: side === 'l'
+        ? 'inset 0 1px 0 rgba(255,255,255,0.10), 4px 0 10px rgba(0,0,0,0.28)'
+        : 'inset 0 1px 0 rgba(255,255,255,0.10), -4px 0 10px rgba(0,0,0,0.28)',
+      overflow: 'visible',
     } as unknown as CSSStyleDeclaration)
+    // 凹槽拉手：贴中缝的竖向细槽
+    const grip = document.createElement('div')
+    Object.assign(grip.style, {
+      position: 'absolute',
+      top: '50%',
+      [side === 'l' ? 'right' : 'left']: '6px',
+      transform: 'translateY(-50%)',
+      width: '3px',
+      height: '38%',
+      borderRadius: '2px',
+      background: 'rgba(0,0,0,0.28)',
+      boxShadow:
+        'inset 0 1px 2px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.10)',
+    } as unknown as CSSStyleDeclaration)
+    el.appendChild(grip)
     return el
   }
-  const left = mk('l')
-  const right = mk('r')
-  root.append(left, right)
-  return { root, left, right }
+
+  const doorL = mkDoor('l')
+  const doorR = mkDoor('r')
+  root.append(recess, glow, doorL, doorR)
+  return { root, doorL, doorR, glow }
 }
 
 /**
@@ -202,10 +262,10 @@ export function flyToPlayer(fromEl: Element | null): void {
   shell.style.zIndex = '-1'
 
   /* ---------- 仓门 ---------- */
-  const door = makeDoor(to)
+  const bay = makeBay(to)
 
   document.querySelectorAll('.cover-flight, .player-door').forEach((n) => n.remove())
-  document.body.append(flying, door.root)
+  document.body.append(flying, bay.root)
 
   /* ---------- 主编排（900ms，offset 驱动四阶段） ---------- */
   const anim = flying.animate(
@@ -279,8 +339,8 @@ export function flyToPlayer(fromEl: Element | null): void {
     { duration: FLIGHT_MS, fill: 'both', easing: 'ease-out' },
   )
 
-  /* ---------- 仓门的开合节奏 ---------- */
-  door.root.animate(
+  /* ---------- 舱门的开合节奏 ---------- */
+  bay.root.animate(
     [
       { opacity: 0, offset: 0 },
       { opacity: 1, offset: 0.38 },
@@ -298,8 +358,20 @@ export function flyToPlayer(fromEl: Element | null): void {
       { transform: 'translateX(0)', offset: 0.88 },
     ]
   }
-  door.left.animate(doorSlide('l'), { duration: FLIGHT_MS, fill: 'both' })
-  door.right.animate(doorSlide('r'), { duration: FLIGHT_MS, fill: 'both' })
+  bay.doorL.animate(doorSlide('l'), { duration: FLIGHT_MS, fill: 'both' })
+  bay.doorR.animate(doorSlide('r'), { duration: FLIGHT_MS, fill: 'both' })
+
+  /* ---------- 中缝光线：开门时"通电"亮起，合拢后熄灭 ---------- */
+  bay.glow.animate(
+    [
+      { opacity: 0, offset: 0 },
+      { opacity: 0.9, offset: 0.55 },
+      { opacity: 0.35, offset: 0.66 },
+      { opacity: 0.85, offset: 0.76 },
+      { opacity: 0, offset: 0.92 },
+    ],
+    { duration: FLIGHT_MS, fill: 'both', easing: 'ease-in-out' },
+  )
 
   /* ---------- 落仓时刻的对齐表演 ---------- */
   const landDelay = Math.round(FLIGHT_MS * LAND_AT) - 30
@@ -308,7 +380,7 @@ export function flyToPlayer(fromEl: Element | null): void {
 
   const cleanup = () => {
     flying.remove()
-    door.root.remove()
+    bay.root.remove()
   }
   anim.finished.then(cleanup, cleanup)
   window.setTimeout(cleanup, FLIGHT_MS + 400)
