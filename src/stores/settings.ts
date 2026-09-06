@@ -7,7 +7,6 @@ const LYRIC_FS_KEY = 'settings.lyricFontSize'
 const LYRIC_FW_KEY = 'settings.lyricFontWeight'
 const LYRIC_ALIGN_KEY = 'settings.lyricAlign'
 const LYRIC_BLUR_KEY = 'settings.lyricBlur'
-const LYRIC_CTRL_KEY = 'settings.lyricControls'
 const media = window.matchMedia('(prefers-color-scheme: dark)')
 
 function loadMode(): ThemeMode {
@@ -38,14 +37,6 @@ function loadLyricAlign(): LyricAlign {
 /** 歌词景深模糊：非当前行按距离轻微模糊（Apple Music 式层次） */
 function loadLyricBlur(): boolean {
   return localStorage.getItem(LYRIC_BLUR_KEY) !== '0'
-}
-
-/** 歌词页控制组件风格：default 稳重 / minimal 简约（Apple Music 式小尺寸）/ glass 玻璃拟态（磨砂圆底+品牌色播放键） */
-export type LyricControlsStyle = 'default' | 'minimal' | 'glass'
-
-function loadLyricControls(): LyricControlsStyle {
-  const raw = localStorage.getItem(LYRIC_CTRL_KEY)
-  return raw === 'minimal' || raw === 'glass' ? raw : 'default'
 }
 
 /** 启动时恢复上次队列（关闭则每次冷启动为空队列） */
@@ -102,7 +93,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const lyricFontWeight = ref(loadLyricWeight())
   const lyricAlign = ref<LyricAlign>(loadLyricAlign())
   const lyricBlur = ref(loadLyricBlur())
-  const lyricControls = ref<LyricControlsStyle>(loadLyricControls())
   const autoRestoreQueue = ref(loadAutoRestore())
   const autoResume = ref(loadAutoResume())
   /** 自定义主题色：'' = 默认海军蓝 */
@@ -180,11 +170,6 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(LYRIC_BLUR_KEY, v ? '1' : '0')
   }
 
-  function setLyricControls(s: LyricControlsStyle) {
-    lyricControls.value = s
-    localStorage.setItem(LYRIC_CTRL_KEY, s)
-  }
-
   function setAutoRestoreQueue(v: boolean) {
     autoRestoreQueue.value = v
     localStorage.setItem(AUTO_RESTORE_KEY, v ? '1' : '0')
@@ -219,8 +204,6 @@ export const useSettingsStore = defineStore('settings', () => {
     setLyricAlign,
     lyricBlur,
     setLyricBlur,
-    lyricControls,
-    setLyricControls,
     autoRestoreQueue,
     setAutoRestoreQueue,
     autoResume,

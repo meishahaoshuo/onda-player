@@ -507,13 +507,6 @@ const WEIGHT_LABELS: Record<number, string> = {
 }
 const weightLabel = computed(() => WEIGHT_LABELS[settings.lyricFontWeight] ?? String(settings.lyricFontWeight))
 
-/** 控制按钮图标尺寸：简约风整体收小一档（Apple Music 式） */
-const ctrlIcon = computed(() =>
-  settings.lyricControls === 'minimal'
-    ? { side: 17, prevNext: 20, play: 20 }
-    : { side: 20, prevNext: 24, play: 28 },
-)
-
 /* ---------- 底部进度条（作为 mini-bar 整体底边线） ---------- */
 
 const progressDuration = computed(() => player.duration || player.current?.durationSec || 0)
@@ -878,30 +871,6 @@ onMounted(() => {
                 @update:model-value="settings.setLyricBlur"
               />
             </div>
-            <div class="fs-heading">控制样式</div>
-            <div class="seg-row">
-              <button
-                class="seg-btn"
-                :class="{ on: settings.lyricControls === 'default' }"
-                @click="settings.setLyricControls('default')"
-              >
-                稳重
-              </button>
-              <button
-                class="seg-btn"
-                :class="{ on: settings.lyricControls === 'minimal' }"
-                @click="settings.setLyricControls('minimal')"
-              >
-                简约
-              </button>
-              <button
-                class="seg-btn"
-                :class="{ on: settings.lyricControls === 'glass' }"
-                @click="settings.setLyricControls('glass')"
-              >
-                玻璃
-              </button>
-            </div>
           </div>
         </Transition>
       </div>
@@ -957,32 +926,26 @@ onMounted(() => {
             </div>
           </div>
 
-          <div
-            class="controls"
-            :class="{
-              minimal: settings.lyricControls === 'minimal',
-              glass: settings.lyricControls === 'glass',
-            }"
-          >
+          <div class="controls">
             <button class="ctrl-btn ghost" :title="modeMeta.label" @click="cycleMode">
-              <AppIcon :name="modeMeta.icon" :size="ctrlIcon.side" />
+              <AppIcon :name="modeMeta.icon" :size="20" />
             </button>
             <button class="ctrl-btn" title="上一曲" @click="player.prev()">
-              <AppIcon name="prev" :size="ctrlIcon.prevNext" />
+              <AppIcon name="prev" :size="24" />
             </button>
             <button
               class="ctrl-btn play"
               :title="player.playing ? '暂停' : '播放'"
               @click="player.current ? player.togglePlay() : player.resumePlay()"
             >
-              <AppIcon :name="player.playing ? 'pause' : 'play'" :size="ctrlIcon.play" />
+              <AppIcon :name="player.playing ? 'pause' : 'play'" :size="28" />
             </button>
             <button class="ctrl-btn" title="下一曲" @click="player.next()">
-              <AppIcon name="next" :size="ctrlIcon.prevNext" />
+              <AppIcon name="next" :size="24" />
             </button>
             <div class="volume-wrap">
               <button class="ctrl-btn ghost" :title="`音量 ${player.volume}%`" @click="player.toggleMute()">
-                <AppIcon :name="player.volume === 0 ? 'volumeMute' : 'volume'" :size="ctrlIcon.side" />
+                <AppIcon :name="player.volume === 0 ? 'volumeMute' : 'volume'" :size="20" />
               </button>
               <input
                 class="volume-slider"
@@ -1387,91 +1350,6 @@ onMounted(() => {
 
 .ctrl-btn.play:active {
   transform: scale(0.95);
-}
-
-/* ---------- 简约风控制条（Apple Music 式）：小尺寸、无底色悬停、纯图标 ---------- */
-.controls.minimal {
-  gap: 6px;
-  margin-top: 20px;
-}
-
-.controls.minimal .ctrl-btn {
-  width: 42px;
-  height: 42px;
-}
-
-.controls.minimal .ctrl-btn.ghost {
-  width: 38px;
-  height: 38px;
-}
-
-.controls.minimal .ctrl-btn:hover {
-  background: transparent;
-  color: #000;
-}
-
-.controls.minimal .ctrl-btn.ghost:hover {
-  background: var(--lyric-control-bg);
-}
-
-.controls.minimal .ctrl-btn.play {
-  width: 48px;
-  height: 48px;
-  margin: 0 6px;
-  box-shadow: 0 5px 14px rgba(29, 29, 31, 0.2);
-}
-
-.controls.minimal .ctrl-btn.play:hover {
-  transform: none;
-  background: var(--lyric-text-active);
-  color: var(--lyric-bg);
-}
-
-.controls.minimal .volume-slider:focus-visible,
-.controls.minimal .volume-wrap:hover .volume-slider {
-  width: 60px;
-}
-
-/* ---------- 玻璃拟态控制条：磨砂玻璃圆底 + 品牌色播放键，对齐全站设计语言 ---------- */
-.controls.glass {
-  gap: 12px;
-}
-
-.controls.glass .ctrl-btn {
-  width: 46px;
-  height: 46px;
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(18px) saturate(1.3);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 4px 14px rgba(70, 58, 34, 0.1);
-}
-
-.controls.glass .ctrl-btn.ghost {
-  width: 42px;
-  height: 42px;
-  background: rgba(255, 255, 255, 0.4);
-}
-
-.controls.glass .ctrl-btn:hover {
-  background: rgba(255, 255, 255, 0.78);
-  color: var(--lyric-control-hover);
-}
-
-.controls.glass .ctrl-btn.play {
-  width: 56px;
-  height: 56px;
-  background: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 55%, #fff);
-  color: var(--accent-text);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    0 10px 24px color-mix(in srgb, var(--accent) 32%, transparent);
-}
-
-.controls.glass .ctrl-btn.play:hover {
-  background: var(--accent-strong);
-  color: var(--accent-text);
-  transform: scale(1.04);
 }
 
 /* 音量滑杆（hover 展开） */
