@@ -691,15 +691,15 @@ function confirmRemove() {
   gap: 16px;
 }
 
-/* 详情覆盖层：盖住常驻的列表网格，自带滚动。
-   底色按 --wallpaper-bg-alpha 半透明：无壁纸时与纯色底视觉一致（同 App.vue .detail-layer） */
+/* 详情覆盖层：盖住常驻的列表网格，自带滚动。必须完全不透明，
+   否则一级网格的卡片/封面会穿透出来（同 App.vue .detail-layer 的教训） */
 .playlist-detail {
   position: absolute;
   inset: 0;
   z-index: 2;
   overflow-y: auto;
   overflow-x: hidden;
-  background: color-mix(in srgb, var(--bg-base) calc(var(--wallpaper-bg-alpha) * 100%), transparent);
+  background: var(--bg-base);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -761,7 +761,7 @@ function confirmRemove() {
   border-radius: var(--radius-panel);
   overflow: hidden;
   /* 头部背景：中性渐变（主题自适应），光斑与噪点提供质感（对齐专辑详情页） */
-  background: linear-gradient(120deg, var(--bg-hover) 0%, color-mix(in srgb, var(--bg-base) calc(var(--wallpaper-bg-alpha) * 100%), transparent) 70%);
+  background: linear-gradient(120deg, var(--bg-hover) 0%, var(--bg-base) 70%);
 }
 
 /* 呼吸光斑：缩放与透明度同步起伏，周期 10-12s 交错 */

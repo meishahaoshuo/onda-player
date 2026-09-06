@@ -368,8 +368,8 @@ watch(
 }
 
 /* 专辑详情覆盖层：盖住标题与网格，自带滚动；放在 .content 内天然避开侧栏与播放条。
-   底色按 --wallpaper-bg-alpha 半透明：无壁纸时与纯色底视觉一致，有壁纸时隐约透出。
-   不加 backdrop-filter——滚动容器的实时 blur 重采样有全屏卡顿前科。 */
+   必须保持完全不透明：覆盖层与 body 之间夹着一级界面的网格/封面，
+   一旦半透明一级内容就会穿透出来（无论有没有壁纸）。 */
 .detail-layer {
   position: absolute;
   inset: 0;
@@ -377,7 +377,7 @@ watch(
   overflow-y: auto;
   overflow-x: hidden;
   padding: 20px 24px 24px;
-  background: color-mix(in srgb, var(--bg-base) calc(var(--wallpaper-bg-alpha) * 100%), transparent);
+  background: var(--bg-base);
 }
 
 .view-header {

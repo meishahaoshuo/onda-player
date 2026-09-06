@@ -62,8 +62,6 @@
   --wallpaper-veil: #000000;
   --wallpaper-veil-base: 0.12;
   --wallpaper-veil-gain: 0.38;
-  /* 详情覆盖层在壁纸上的不透明度占比（两主题同值；无壁纸时与纯色底视觉一致） */
-  --wallpaper-bg-alpha: 0.86;
 }
 
 :root[data-theme='light'] {
@@ -113,7 +111,6 @@
   --wallpaper-veil: #ffffff;
   --wallpaper-veil-base: 0.22;
   --wallpaper-veil-gain: 0.4;
-  --wallpaper-bg-alpha: 0.86;
 }
 
 /* ---------- 动效令牌 ---------- */
