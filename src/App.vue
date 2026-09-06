@@ -26,6 +26,7 @@ import { useStatsStore } from '@/stores/stats'
 import { useFavoritesStore } from '@/stores/favorites'
 import { useSettingsStore } from '@/stores/settings'
 import { clearTransitionState } from '@/services/pageTransition'
+import { useSearchScope } from '@/composables/useSearchScope'
 import { installTrackSwapWatcher } from '@/services/coverFlight'
 import { installHotkeys } from '@/services/hotkeys'
 import { extractBrightColors } from '@/services/palette'
@@ -52,8 +53,15 @@ const viewTitles: Record<ViewId, string> = {
 }
 
 const title = computed(() => viewTitles[ui.activeView])
-const selectedRootId = ref<string | null>(null)
 const sectionEl = ref<HTMLElement | null>(null)
+/** 是否有搜索关键词（内容区被搜索结果接管） */
+const searching = computed(() => ui.searchQuery.trim().length > 0)
+const { scope: searchScope } = useSearchScope()
+const searchPlaceholder = computed(() =>
+  searchScope.value.scoped
+    ? `在「${searchScope.value.label}」中搜索`
+    : '搜索歌曲、艺术家、专辑',
+)
 
 /* ---------- 全应用滚动位置记忆 ----------
    切视图 / 钻取详情前把旧容器的 scrollTop 记入 ui store，
@@ -169,7 +177,7 @@ watch(
               v-model="ui.searchQuery"
               class="search-input"
               type="text"
-              placeholder="搜索歌曲、艺术家、专辑"
+              :placeholder="searchPlaceholder"
               @keydown.esc="ui.searchQuery = ''"
             />
             <button v-if="ui.searchQuery" class="search-clear" title="清除搜索" @click="ui.searchQuery = ''">
@@ -198,7 +206,7 @@ watch(
 
             <ArtistsView v-else-if="ui.activeView === 'artists'" />
 
-            <FoldersView v-else-if="ui.activeView === 'folders'" v-model:selected-root="selectedRootId" @add-folder="addFolder" />
+            <FoldersView v-else-if="ui.activeView === 'folders'" v-model:selected-root="ui.folderRootId" @add-folder="addFolder" />
 
             <PlaylistsView v-else-if="ui.activeView === 'playlists'" />
 
@@ -213,13 +221,13 @@ watch(
              而 v-if/v-else 会让网格立刻卸载，网格就没法参与"相机后退"。
              移到 .content 内的绝对定位覆盖层后，网格始终挂载，滚动位置与卡片 DOM 全部保留。 -->
         <AlbumDetailView
-          v-if="ui.activeView === 'albums' && ui.detailKey"
+          v-if="ui.activeView === 'albums' && ui.detailKey && !searching"
           :album-key="ui.detailKey"
           class="detail-layer"
         />
         <!-- 艺术家详情：与专辑详情同架构（覆盖层 + 引力坍缩过渡） -->
         <ArtistDetailView
-          v-else-if="ui.activeView === 'artists' && ui.detailKey"
+          v-else-if="ui.activeView === 'artists' && ui.detailKey && !searching"
           :artist-name="ui.detailKey"
           class="detail-layer"
         />

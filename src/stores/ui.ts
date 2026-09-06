@@ -19,6 +19,10 @@ export const useUiStore = defineStore('ui', () => {
   const dolly = ref<'idle' | 'enter' | 'exit'>('idle')
   /** 顶部搜索框关键词：非空时内容区显示搜索结果 */
   const searchQuery = ref('')
+  /** 搜索范围强制为全库（默认按当前页面上下文收窄，用户可手动切到全库） */
+  const searchAll = ref(false)
+  /** 文件夹板块当前选中的根目录 id（搜索作用域需要知道它） */
+  const folderRootId = ref<string | null>(null)
   /** 侧栏歌单右键「设置封面」请求：歌单 id，PlaylistsView 消费后清空 */
   const playlistEditCover = ref<string | null>(null)
 
@@ -76,6 +80,9 @@ export const useUiStore = defineStore('ui', () => {
     activeView.value = view
     detailKey.value = null
     dolly.value = 'idle'
+    // 换页面就等于换搜索上下文：清掉关键词，否则内容区仍停在旧的搜索结果上
+    searchQuery.value = ''
+    searchAll.value = false
   }
 
   function requestPlaylistCreate(seedPaths: string[] = []) {
@@ -88,11 +95,16 @@ export const useUiStore = defineStore('ui', () => {
   /** 进入聚合页详情（同一视图内切换） */
   function openDetail(key: string) {
     detailKey.value = key
+    // 搜索结果会占住内容区，带着关键词钻取会看不到目标详情
+    searchQuery.value = ''
+    searchAll.value = false
   }
 
   function closeDetail() {
     detailKey.value = null
     dolly.value = 'idle'
+    searchQuery.value = ''
+    searchAll.value = false
   }
 
   function startDolly() {
@@ -114,6 +126,8 @@ export const useUiStore = defineStore('ui', () => {
     playlistCreateSeedPaths,
     playlistEditCover,
     searchQuery,
+    searchAll,
+    folderRootId,
     lyricsOpen,
     dolly,
     navOrder,
