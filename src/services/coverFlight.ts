@@ -1,4 +1,5 @@
 import { useUiStore } from '@/stores/ui'
+import { usePlayerStore } from '@/stores/player'
 
 /**
  * 歌曲封面飞入底部播放栏 ——「卡带 · 滑门入仓」编排。
@@ -190,6 +191,54 @@ function makeBay(to: DOMRect): {
 }
 
 /**
+ * 退带（Eject）：换歌时旧卡带先出仓。旧封面 + 外壳框 + 卷轮组成的卡带
+ * 从舱内升起、淡出，给新卡带腾位。无旧封面图时退一盘空带（外壳+卷轮）。
+ */
+function makeOldCassette(to: DOMRect, src: string | null): HTMLElement {
+  const wrapper = document.createElement('div')
+  Object.assign(wrapper.style, {
+    position: 'absolute',
+    inset: '4px',
+    borderRadius: '8px',
+    willChange: 'transform, opacity',
+  } as CSSStyleDeclaration)
+  if (src) {
+    const img = document.createElement('img')
+    img.src = src
+    Object.assign(img.style, {
+      width: '100%',
+      height: '100%',
+      objectFit: 'cover',
+      display: 'block',
+      borderRadius: '7px',
+      boxShadow: 'var(--shadow-1)',
+    } as CSSStyleDeclaration)
+    wrapper.appendChild(img)
+  } else {
+    const body = document.createElement('div')
+    Object.assign(body.style, {
+      position: 'absolute',
+      inset: '0',
+      borderRadius: '7px',
+      background: 'var(--bg-hover)',
+      border: '1px solid var(--glass-border)',
+    } as CSSStyleDeclaration)
+    wrapper.appendChild(body)
+  }
+  // 卷带轮收窄一点贴在卡带窗位置，读作"一盘带"
+  const reelL = makeReel()
+  const reelR = makeReel()
+  reelL.style.left = '30%'
+  reelR.style.left = '70%'
+  reelL.style.width = '30%'
+  reelR.style.width = '30%'
+  reelL.style.opacity = '1'
+  reelR.style.opacity = '1'
+  wrapper.append(reelL, reelR)
+  return wrapper
+}
+
+/**
  * 从 fromEl（行内封面元素或其容器）起飞。找不到可用封面图时只做落点弹跳。
  * 调用方在触发播放的同一次点击里调用（飞行的起点矩形必须在布局变化前测量）。
  */
@@ -204,6 +253,10 @@ export function flyToPlayer(fromEl: Element | null): void {
     popPlayerCover()
     return
   }
+
+  // 换歌检测：已有曲目在播 → 先退带再入仓
+  const replacing = !!usePlayerStore().currentPath
+  const oldCoverImg = target.querySelector('img') as HTMLImageElement | null
 
   const from = img.getBoundingClientRect()
   const to = target.getBoundingClientRect()
@@ -263,6 +316,13 @@ export function flyToPlayer(fromEl: Element | null): void {
 
   /* ---------- 仓门 ---------- */
   const bay = makeBay(to)
+
+  // 换歌：把旧卡带放进舱内（内衬之上、门板之下），门一开就能看到它退出
+  let oldCassette: HTMLElement | null = null
+  if (replacing) {
+    oldCassette = makeOldCassette(to, oldCoverImg?.currentSrc ?? null)
+    bay.root.insertBefore(oldCassette, bay.doorL)
+  }
 
   document.querySelectorAll('.cover-flight, .player-door').forEach((n) => n.remove())
   document.body.append(flying, bay.root)
@@ -339,11 +399,13 @@ export function flyToPlayer(fromEl: Element | null): void {
     { duration: FLIGHT_MS, fill: 'both', easing: 'ease-out' },
   )
 
-  /* ---------- 舱门的开合节奏 ---------- */
+  /* ---------- 舱门的开合节奏 ----------
+     换歌时门提前滑开（退带窗口），首次播放维持原节奏 */
+  const openAt = replacing ? 0.3 : 0.61
   bay.root.animate(
     [
       { opacity: 0, offset: 0 },
-      { opacity: 1, offset: 0.38 },
+      { opacity: 1, offset: replacing ? 0.18 : 0.38 },
       { opacity: 1, offset: 0.9 },
       { opacity: 0, offset: 1 },
     ],
@@ -353,7 +415,7 @@ export function flyToPlayer(fromEl: Element | null): void {
     const open = side === 'l' ? 'translateX(-104%)' : 'translateX(104%)'
     return [
       { transform: 'translateX(0)', offset: 0, easing: 'ease-in-out' },
-      { transform: open, offset: 0.61, easing: 'ease-in-out' },
+      { transform: open, offset: openAt, easing: 'ease-in-out' },
       { transform: open, offset: 0.71, easing: 'ease-in-out' },
       { transform: 'translateX(0)', offset: 0.88 },
     ]
@@ -362,16 +424,45 @@ export function flyToPlayer(fromEl: Element | null): void {
   bay.doorR.animate(doorSlide('r'), { duration: FLIGHT_MS, fill: 'both' })
 
   /* ---------- 中缝光线：开门时"通电"亮起，合拢后熄灭 ---------- */
-  bay.glow.animate(
-    [
-      { opacity: 0, offset: 0 },
-      { opacity: 0.9, offset: 0.55 },
-      { opacity: 0.35, offset: 0.66 },
-      { opacity: 0.85, offset: 0.76 },
-      { opacity: 0, offset: 0.92 },
-    ],
-    { duration: FLIGHT_MS, fill: 'both', easing: 'ease-in-out' },
-  )
+  const glowKeys = replacing
+    ? [
+        { opacity: 0, offset: 0 },
+        { opacity: 0.75, offset: 0.22 },
+        { opacity: 0.2, offset: 0.34 },
+        { opacity: 0.9, offset: 0.55 },
+        { opacity: 0.35, offset: 0.66 },
+        { opacity: 0.85, offset: 0.76 },
+        { opacity: 0, offset: 0.92 },
+      ]
+    : [
+        { opacity: 0, offset: 0 },
+        { opacity: 0.9, offset: 0.55 },
+        { opacity: 0.35, offset: 0.66 },
+        { opacity: 0.85, offset: 0.76 },
+        { opacity: 0, offset: 0.92 },
+      ]
+  bay.glow.animate(glowKeys, { duration: FLIGHT_MS, fill: 'both', easing: 'ease-in-out' })
+
+  /* ---------- 退带：旧卡带升起出舱、淡出 ---------- */
+  if (oldCassette) {
+    oldCassette.animate(
+      [
+        { transform: 'translateY(0) scale(1)', opacity: 1, offset: 0 },
+        { transform: 'translateY(-30px) scale(1.05)', opacity: 1, offset: 0.55 },
+        { transform: 'translateY(-52px) scale(0.98)', opacity: 0, offset: 1 },
+      ],
+      { duration: FLIGHT_MS * 0.42, delay: FLIGHT_MS * 0.06, easing: EASE_OUT, fill: 'both' },
+    )
+    for (const reel of oldCassette.querySelectorAll('div')) {
+      reel.animate(
+        [
+          { transform: 'translate(-50%, -50%) rotate(0deg)', offset: 0 },
+          { transform: 'translate(-50%, -50%) rotate(-52deg)', offset: 1 },
+        ],
+        { duration: FLIGHT_MS * 0.42, delay: FLIGHT_MS * 0.06, easing: 'ease-out', fill: 'both' },
+      )
+    }
+  }
 
   /* ---------- 落仓时刻的对齐表演 ---------- */
   const landDelay = Math.round(FLIGHT_MS * LAND_AT) - 30
