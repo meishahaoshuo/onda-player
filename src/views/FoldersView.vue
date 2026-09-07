@@ -63,7 +63,9 @@ function selectRoot(id: string) {
     </div>
 
     <div v-if="library.roots.length === 0" class="empty">
-      <AppIcon name="folder" :size="48" class="empty-icon" />
+      <div class="empty-badge">
+        <AppIcon name="folder" :size="32" />
+      </div>
       <p class="empty-title">还没有添加音乐文件夹</p>
       <p class="empty-hint">授权一个文件夹，ONDA 会自动扫描其中的音乐建库</p>
       <button class="primary-btn" @click="emit('addFolder')">
@@ -221,11 +223,24 @@ function selectRoot(id: string) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
+  text-align: center;
 }
 
-.empty-icon {
+/* 图标底座：玻璃圆角方块，与左栏 root-card 的玻璃语言呼应 */
+.empty-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 22px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   color: var(--text-tertiary);
+  margin-bottom: 4px;
 }
 
 .empty-title {
@@ -236,7 +251,12 @@ function selectRoot(id: string) {
 .empty-hint {
   font-size: 13px;
   color: var(--text-secondary);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+}
+
+/* 空态按钮保持内容宽度（flex:1 仅属于 .side-toolbar 布局，见下方作用域规则） */
+.empty .primary-btn {
+  flex: none;
 }
 
 /* 双栏 */
@@ -413,6 +433,12 @@ function selectRoot(id: string) {
   border-radius: 8px;
   font-size: 13px;
   transition: opacity 0.15s, background 0.15s;
+}
+
+/* 仅左栏底部工具栏内两按钮均分宽度（flex:1 不能放进共享规则——
+   纵向 flex 容器（空态）里会作用到主轴把按钮拉成通栏高竖条） */
+.side-toolbar .primary-btn,
+.side-toolbar .ghost-btn {
   flex: 1;
   justify-content: center;
 }
