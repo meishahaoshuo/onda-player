@@ -290,14 +290,6 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
   background: var(--bg-base);
 }
 
-/* 有壁纸时吸顶表头改半透明 + 模糊：壁纸透出、下方滚动内容被模糊隔离不透字；
-   36px 窄条带的 backdrop-filter 代价可忽略。无壁纸时保持实底不变 */
-:root[data-wallpaper] .list-header {
-  background: color-mix(in srgb, var(--bg-base) 70%, transparent);
-  backdrop-filter: blur(24px) saturate(1.2);
-  -webkit-backdrop-filter: blur(24px) saturate(1.2);
-}
-
 .list-body {
   flex: 1;
   min-height: 0;

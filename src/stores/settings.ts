@@ -81,16 +81,6 @@ function loadAmbient(): boolean {
   return localStorage.getItem(AMBIENT_KEY) !== '0'
 }
 
-/* ---------- 背景壁纸浓度（0-100，图片本体在 IndexedDB kv，见 services/wallpaper.ts） ---------- */
-const WP_INTENSITY_KEY = 'settings.wallpaperIntensity'
-function loadWpIntensity(): number {
-  // 注意不能直接 Number(getItem())：键不存在时得到 Number(null)=0，而 0 恰在合法范围内
-  const raw = localStorage.getItem(WP_INTENSITY_KEY)
-  if (raw === null) return 100
-  const n = Number(raw)
-  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : 100
-}
-
 /**
  * 主题设置：跟随系统 / 深色 / 浅色，切换即时生效并持久化。
  * 注：第 2 阶段 IndexedDB 就绪后仍保留 localStorage——主题需要在
@@ -109,8 +99,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const accentColor = ref(loadAccent())
   /** 封面氛围光：主内容区背景跟随当前播放封面取色发光 */
   const ambientGlow = ref(loadAmbient())
-  /** 背景壁纸浓度：100 = 完整原图，0 = 不显示壁纸（纯色底） */
-  const wallpaperIntensity = ref(loadWpIntensity())
 
   // 实际生效的主题（system 模式下随系统实时变化）
   const resolvedTheme = ref<'dark' | 'light'>(media.matches ? 'dark' : 'light')
@@ -203,20 +191,6 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(AMBIENT_KEY, v ? '1' : '0')
   }
 
-  // 壁纸浓度写为无单位 CSS 变量（0~1），壁纸层 opacity 与可读性遮罩都用它派生
-  watchEffect(() => {
-    document.documentElement.style.setProperty(
-      '--wallpaper-intensity',
-      String(wallpaperIntensity.value / 100),
-    )
-  })
-
-  function setWallpaperIntensity(v: number) {
-    const x = Math.min(100, Math.max(0, Math.round(v)))
-    wallpaperIntensity.value = x
-    localStorage.setItem(WP_INTENSITY_KEY, String(x))
-  }
-
   return {
     themeMode,
     resolvedTheme,
@@ -238,7 +212,5 @@ export const useSettingsStore = defineStore('settings', () => {
     setAccentColor,
     ambientGlow,
     setAmbientGlow,
-    wallpaperIntensity,
-    setWallpaperIntensity,
   }
 })

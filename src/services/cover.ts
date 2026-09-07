@@ -26,7 +26,7 @@ export async function extractHiResCover(song: SongRecord): Promise<Blob | null> 
 }
 
 /** 最长边超过阈值才缩放，否则直接用原图 */
-export async function downscale(blob: Blob, maxEdge: number): Promise<Blob> {
+async function downscale(blob: Blob, maxEdge: number): Promise<Blob> {
   let bitmap: ImageBitmap
   try {
     bitmap = await createImageBitmap(blob)

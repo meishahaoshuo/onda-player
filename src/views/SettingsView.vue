@@ -15,7 +15,6 @@ import {
 import type { ThemeMode } from '@/types'
 import AppIcon from '@/components/AppIcon.vue'
 import AppSwitch from '@/components/AppSwitch.vue'
-import { clearWallpaper, setWallpaper, wallpaperUrl } from '@/services/wallpaper'
 
 /**
  * 设置页：左侧分类导航 + 右侧内容面板。
@@ -62,22 +61,6 @@ const brandLogo = computed(() =>
 )
 
 const songCount = computed(() => library.songs.length)
-
-/* ---------- 背景壁纸：选图（验证失败给提示）、清除、浓度走 settings store ---------- */
-const wallpaperBusy = ref(false)
-const wallpaperError = ref('')
-
-async function onWallpaperFile(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = '' // 清空以便可重复选择同一文件
-  if (!file || wallpaperBusy.value) return
-  wallpaperBusy.value = true
-  wallpaperError.value = ''
-  const ok = await setWallpaper(file)
-  if (!ok) wallpaperError.value = '该图片无法使用，请换一张试试'
-  wallpaperBusy.value = false
-}
 
 /** 主题色预设（首项"默认"在模板单独渲染） */
 const ACCENT_PRESETS = [
@@ -211,50 +194,11 @@ function onRecordKeydown(e: KeyboardEvent) {
           <p class="panel-sub accent-heading">背景</p>
           <div class="opt-row">
             <div class="opt-text">
-              <span class="opt-name">背景壁纸</span>
-              <span class="opt-desc">选择本地图片作为应用背景，侧栏与播放条会以磨砂玻璃叠加其上</span>
-            </div>
-            <div class="wp-actions">
-              <img v-if="wallpaperUrl" :src="wallpaperUrl" class="wp-thumb" alt="当前壁纸预览" />
-              <label class="wp-btn" :class="{ busy: wallpaperBusy }">
-                <input type="file" accept="image/*" class="wp-file" @change="onWallpaperFile" />
-                {{ wallpaperBusy ? '处理中…' : wallpaperUrl ? '更换图片' : '选择图片' }}
-              </label>
-              <button v-if="wallpaperUrl" class="wp-clear" @click="clearWallpaper">清除</button>
-            </div>
-          </div>
-
-          <p v-if="wallpaperError" class="wp-error">{{ wallpaperError }}</p>
-
-          <div v-if="wallpaperUrl" class="opt-row">
-            <div class="opt-text">
-              <span class="opt-name">壁纸通透程度</span>
-              <span class="opt-desc">100% 显示完整原图，调低让界面更通透、文字更易读</span>
-            </div>
-            <div class="wp-slider-wrap">
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                class="wp-slider"
-                :style="{ '--pct': `${settings.wallpaperIntensity}%` }"
-                :value="settings.wallpaperIntensity"
-                :aria-valuetext="`壁纸通透程度 ${settings.wallpaperIntensity}%`"
-                @input="settings.setWallpaperIntensity(Number(($event.target as HTMLInputElement).value))"
-              />
-              <span class="wp-slider-val">{{ settings.wallpaperIntensity }}%</span>
-            </div>
-          </div>
-
-          <div class="opt-row">
-            <div class="opt-text">
               <span class="opt-name">封面氛围光</span>
               <span class="opt-desc">内容区背景跟随当前播放封面的主色泛起淡淡光晕</span>
             </div>
             <AppSwitch :model-value="settings.ambientGlow" @update:model-value="settings.setAmbientGlow" />
           </div>
-          <p class="wp-note">壁纸覆盖整个应用；全屏歌词页保持独立的沉浸底色。</p>
         </section>
 
         <!-- 快捷键 -->
@@ -654,117 +598,6 @@ function onRecordKeydown(e: KeyboardEvent) {
 .opt-desc {
   font-size: 12px;
   color: var(--text-tertiary);
-}
-
-/* ---------- 背景壁纸 ---------- */
-.wp-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.wp-thumb {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-item);
-  object-fit: cover;
-  border: 1px solid var(--border-subtle);
-}
-
-.wp-btn {
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-primary);
-  background: var(--bg-hover);
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  padding: 6px 14px;
-  transition: background var(--dur-fast) var(--ease-out);
-}
-
-.wp-btn:hover {
-  background: var(--bg-active);
-}
-
-.wp-btn.busy {
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-.wp-file {
-  display: none;
-}
-
-.wp-clear {
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--danger);
-  background: transparent;
-  border: none;
-  padding: 6px 2px;
-}
-
-.wp-clear:hover {
-  text-decoration: underline;
-}
-
-.wp-slider-wrap {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 240px;
-  flex-shrink: 0;
-}
-
-.wp-slider {
-  flex: 1;
-  min-width: 0;
-  height: 4px;
-  appearance: none;
-  -webkit-appearance: none;
-  border-radius: 999px;
-  background: linear-gradient(
-    to right,
-    var(--accent) var(--pct, 100%),
-    var(--bg-hover) var(--pct, 100%)
-  );
-  cursor: pointer;
-}
-
-.wp-slider::-webkit-slider-thumb {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 1px 4px var(--shadow-1);
-  transition: transform var(--dur-fast) var(--ease-spring);
-}
-
-.wp-slider:hover::-webkit-slider-thumb {
-  transform: scale(1.15);
-}
-
-.wp-slider-val {
-  min-width: 38px;
-  text-align: right;
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
-.wp-note {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  padding-top: 2px;
-}
-
-.wp-error {
-  font-size: 12px;
-  color: var(--danger);
-  padding: 4px 0 0;
 }
 
 .modal-mask {
