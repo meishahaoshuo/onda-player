@@ -792,7 +792,7 @@ onMounted(() => {
   <div
     class="lyrics-full"
     ref="pageEl"
-    :class="{ closing, 'fly-active': flyActive, switching, 'depth-on': settings.lyricDepth, 'blur-on': settings.lyricDepth && settings.lyricBlur }"
+    :class="{ closing, 'fly-active': flyActive, switching, 'blur-on': settings.lyricBlur }"
     :style="lyricVars"
     @mousemove="onPageMouseMove"
   >
@@ -863,17 +863,9 @@ onMounted(() => {
                 左对齐
               </button>
             </div>
-            <div class="fs-heading">立体景深</div>
-            <div class="switch-row">
-              <span class="switch-desc">当前行放大，其余行按距离缩小变淡</span>
-              <AppSwitch
-                :model-value="settings.lyricDepth"
-                @update:model-value="settings.setLyricDepth"
-              />
-            </div>
             <div class="fs-heading">景深模糊</div>
             <div class="switch-row">
-              <span class="switch-desc">远行逐渐模糊（需开启立体景深）</span>
+              <span class="switch-desc">非当前行按距离轻微模糊</span>
               <AppSwitch
                 :model-value="settings.lyricBlur"
                 @update:model-value="settings.setLyricBlur"
@@ -1580,26 +1572,27 @@ onMounted(() => {
   gap: 34px;
 }
 
-/* 歌词行基线：所有行统一（立体景深关闭时的平铺形态）。
-   depth-on 时由下方阶梯接管：当前行放大、其余行按距离缩小变淡（透视纵深）。 */
+/* 景深：只用 opacity + transform 表达远近，不用 filter: blur()（多行同时过渡会掉帧）。
+   当前行加粗变黑、其余灰阶，对照参考排版。 */
 .lyric-line {
   cursor: pointer;
   opacity: 0.72;
   transform-origin: center center;
+  transform: scale(0.97);
   transition: opacity 0.35s var(--ease-out), transform 0.35s var(--ease-out);
 }
 
-.depth-on .lyric-line.dim-1 { opacity: 0.55; transform: scale(0.96); }
-.depth-on .lyric-line.dim-2 { opacity: 0.4; transform: scale(0.93); }
-.depth-on .lyric-line.dim-3 { opacity: 0.28; transform: scale(0.91); }
-.depth-on .lyric-line.dim-4 { opacity: 0.18; transform: scale(0.89); }
+.lyric-line.dim-1 { opacity: 0.6; }
+.lyric-line.dim-2 { opacity: 0.45; }
+.lyric-line.dim-3 { opacity: 0.32; }
+.lyric-line.dim-4 { opacity: 0.22; }
 
-/* 景深模糊（需同时开启立体景深）：远处行逐级强模糊，最远行几乎融进背景。
+/* 景深模糊（设置可关）：非当前行按距离轻微模糊，层次更接近 Apple Music。
    filter 不参与 transition（多行同时过渡会掉帧），突变被透明度差异掩盖 */
-.depth-on.blur-on .lyric-line.dim-1 { filter: blur(0.8px); }
-.depth-on.blur-on .lyric-line.dim-2 { filter: blur(1.8px); }
-.depth-on.blur-on .lyric-line.dim-3 { filter: blur(3.4px); }
-.depth-on.blur-on .lyric-line.dim-4 { filter: blur(5.5px); }
+.blur-on .lyric-line.dim-1 { filter: blur(0.4px); }
+.blur-on .lyric-line.dim-2 { filter: blur(1px); }
+.blur-on .lyric-line.dim-3 { filter: blur(1.8px); }
+.blur-on .lyric-line.dim-4 { filter: blur(2.6px); }
 
 .lyric-line:hover {
   opacity: 0.9;
@@ -1607,11 +1600,7 @@ onMounted(() => {
 
 .lyric-line.active {
   opacity: 1;
-}
-
-/* 立体景深开启时当前行放大强调（1.04 轻微放大，避免过大喧宾夺主） */
-.depth-on .lyric-line.active {
-  transform: scale(1.04);
+  transform: scale(1);
 }
 
 .lyric-line.active .lyric-text {
