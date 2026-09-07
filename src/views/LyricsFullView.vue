@@ -1565,27 +1565,28 @@ onMounted(() => {
   gap: 34px;
 }
 
-/* 景深：只用 opacity + transform 表达远近，不用 filter: blur()（多行同时过渡会掉帧）。
-   当前行加粗变黑、其余灰阶，对照参考排版。 */
+/* 景深立体（对照 Salt Player）：当前行放大最清晰，其余行按距离
+   缩小 + 降透明（+ 可关模糊），形成透视纵深。
+   只动 opacity/transform，blur 阶梯见下方 .blur-on（不参与 transition，突变被透明度掩盖）。 */
 .lyric-line {
   cursor: pointer;
   opacity: 0.72;
   transform-origin: center center;
-  transform: scale(0.97);
+  transform: scale(0.9);
   transition: opacity 0.35s var(--ease-out), transform 0.35s var(--ease-out);
 }
 
-.lyric-line.dim-1 { opacity: 0.6; }
-.lyric-line.dim-2 { opacity: 0.45; }
-.lyric-line.dim-3 { opacity: 0.32; }
-.lyric-line.dim-4 { opacity: 0.22; }
+.lyric-line.dim-1 { opacity: 0.55; transform: scale(0.96); }
+.lyric-line.dim-2 { opacity: 0.4; transform: scale(0.93); }
+.lyric-line.dim-3 { opacity: 0.28; transform: scale(0.91); }
+.lyric-line.dim-4 { opacity: 0.18; transform: scale(0.89); }
 
-/* 景深模糊（设置可关）：非当前行按距离轻微模糊，层次更接近 Apple Music。
+/* 景深模糊（设置可关）：远处行逐级强模糊，最远行几乎融进背景（Salt 式纵深）。
    filter 不参与 transition（多行同时过渡会掉帧），突变被透明度差异掩盖 */
-.blur-on .lyric-line.dim-1 { filter: blur(0.4px); }
-.blur-on .lyric-line.dim-2 { filter: blur(1px); }
-.blur-on .lyric-line.dim-3 { filter: blur(1.8px); }
-.blur-on .lyric-line.dim-4 { filter: blur(2.6px); }
+.blur-on .lyric-line.dim-1 { filter: blur(0.8px); }
+.blur-on .lyric-line.dim-2 { filter: blur(1.8px); }
+.blur-on .lyric-line.dim-3 { filter: blur(3.4px); }
+.blur-on .lyric-line.dim-4 { filter: blur(5.5px); }
 
 .lyric-line:hover {
   opacity: 0.9;
@@ -1593,7 +1594,7 @@ onMounted(() => {
 
 .lyric-line.active {
   opacity: 1;
-  transform: scale(1);
+  transform: scale(1.08);
 }
 
 .lyric-line.active .lyric-text {
