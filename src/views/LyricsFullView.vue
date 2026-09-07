@@ -222,8 +222,9 @@ function setLineEl(i: number) {
 
 /* 自定义缓动滚动：out-quart。
    时长按距离缩放（140-300ms）——顺次换行要跟手，seek 大跳要干脆。 */
-const SCROLL_DURATION_MIN = 80
-const SCROLL_DURATION_MAX = 160
+// Q 弹滚动：时长给足回弹空间（easeOutBack 需要时间展现过冲→回弹）
+const SCROLL_DURATION_MIN = 220
+const SCROLL_DURATION_MAX = 460
 /** 超过该距离（约两屏以上，典型是 seek 跨段）直接定位，长距离动画只会显得拖沓 */
 const INSTANT_SCROLL_PX = 2400
 let scrollRaf = 0
@@ -248,10 +249,16 @@ function smoothScrollTo(container: HTMLElement, target: number) {
   }
   const duration = Math.min(
     SCROLL_DURATION_MAX,
-    SCROLL_DURATION_MIN + Math.abs(delta) / 24,
+    SCROLL_DURATION_MIN + Math.abs(delta) / 30,
   )
   const t0 = performance.now()
-  const ease = (t: number) => 1 - Math.pow(1 - t, 4)
+  // easeOutBack：越过目标再轻微回弹（Q 弹收尾），比纯减速曲线灵动
+  const c1 = 1.35
+  const c3 = c1 + 1
+  const ease = (t: number) => {
+    const u = t - 1
+    return 1 + c3 * u * u * u + c1 * u * u
+  }
   const frame = (now: number) => {
     const p = Math.min(1, (now - t0) / duration)
     markProgrammaticScroll()
@@ -785,7 +792,7 @@ onMounted(() => {
   <div
     class="lyrics-full"
     ref="pageEl"
-    :class="{ closing, 'fly-active': flyActive, switching, 'blur-on': settings.lyricBlur }"
+    :class="{ closing, 'fly-active': flyActive, switching, 'depth-on': settings.lyricDepth, 'blur-on': settings.lyricDepth && settings.lyricBlur }"
     :style="lyricVars"
     @mousemove="onPageMouseMove"
   >
@@ -856,9 +863,17 @@ onMounted(() => {
                 左对齐
               </button>
             </div>
+            <div class="fs-heading">立体景深</div>
+            <div class="switch-row">
+              <span class="switch-desc">当前行放大，其余行按距离缩小变淡</span>
+              <AppSwitch
+                :model-value="settings.lyricDepth"
+                @update:model-value="settings.setLyricDepth"
+              />
+            </div>
             <div class="fs-heading">景深模糊</div>
             <div class="switch-row">
-              <span class="switch-desc">非当前行按距离轻微模糊</span>
+              <span class="switch-desc">远行逐渐模糊（需开启立体景深）</span>
               <AppSwitch
                 :model-value="settings.lyricBlur"
                 @update:model-value="settings.setLyricBlur"
@@ -1565,28 +1580,26 @@ onMounted(() => {
   gap: 34px;
 }
 
-/* 景深立体（对照 Salt Player）：当前行放大最清晰，其余行按距离
-   缩小 + 降透明（+ 可关模糊），形成透视纵深。
-   只动 opacity/transform，blur 阶梯见下方 .blur-on（不参与 transition，突变被透明度掩盖）。 */
+/* 歌词行基线：所有行统一（立体景深关闭时的平铺形态）。
+   depth-on 时由下方阶梯接管：当前行放大、其余行按距离缩小变淡（透视纵深）。 */
 .lyric-line {
   cursor: pointer;
   opacity: 0.72;
   transform-origin: center center;
-  transform: scale(0.9);
   transition: opacity 0.35s var(--ease-out), transform 0.35s var(--ease-out);
 }
 
-.lyric-line.dim-1 { opacity: 0.55; transform: scale(0.96); }
-.lyric-line.dim-2 { opacity: 0.4; transform: scale(0.93); }
-.lyric-line.dim-3 { opacity: 0.28; transform: scale(0.91); }
-.lyric-line.dim-4 { opacity: 0.18; transform: scale(0.89); }
+.depth-on .lyric-line.dim-1 { opacity: 0.55; transform: scale(0.96); }
+.depth-on .lyric-line.dim-2 { opacity: 0.4; transform: scale(0.93); }
+.depth-on .lyric-line.dim-3 { opacity: 0.28; transform: scale(0.91); }
+.depth-on .lyric-line.dim-4 { opacity: 0.18; transform: scale(0.89); }
 
-/* 景深模糊（设置可关）：远处行逐级强模糊，最远行几乎融进背景（Salt 式纵深）。
+/* 景深模糊（需同时开启立体景深）：远处行逐级强模糊，最远行几乎融进背景。
    filter 不参与 transition（多行同时过渡会掉帧），突变被透明度差异掩盖 */
-.blur-on .lyric-line.dim-1 { filter: blur(0.8px); }
-.blur-on .lyric-line.dim-2 { filter: blur(1.8px); }
-.blur-on .lyric-line.dim-3 { filter: blur(3.4px); }
-.blur-on .lyric-line.dim-4 { filter: blur(5.5px); }
+.depth-on.blur-on .lyric-line.dim-1 { filter: blur(0.8px); }
+.depth-on.blur-on .lyric-line.dim-2 { filter: blur(1.8px); }
+.depth-on.blur-on .lyric-line.dim-3 { filter: blur(3.4px); }
+.depth-on.blur-on .lyric-line.dim-4 { filter: blur(5.5px); }
 
 .lyric-line:hover {
   opacity: 0.9;
@@ -1594,7 +1607,11 @@ onMounted(() => {
 
 .lyric-line.active {
   opacity: 1;
-  transform: scale(1.08);
+}
+
+/* 立体景深开启时当前行放大强调（1.04 轻微放大，避免过大喧宾夺主） */
+.depth-on .lyric-line.active {
+  transform: scale(1.04);
 }
 
 .lyric-line.active .lyric-text {

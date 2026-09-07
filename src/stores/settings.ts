@@ -39,6 +39,12 @@ function loadLyricBlur(): boolean {
   return localStorage.getItem(LYRIC_BLUR_KEY) !== '0'
 }
 
+/** 歌词立体景深：当前行放大、其余行按距离缩小变淡（总开关，模糊是它的子项） */
+const LYRIC_DEPTH_KEY = 'settings.lyricDepth'
+function loadLyricDepth(): boolean {
+  return localStorage.getItem(LYRIC_DEPTH_KEY) !== '0'
+}
+
 /** 启动时恢复上次队列（关闭则每次冷启动为空队列） */
 const AUTO_RESTORE_KEY = 'settings.autoRestoreQueue'
 function loadAutoRestore(): boolean {
@@ -93,6 +99,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const lyricFontWeight = ref(loadLyricWeight())
   const lyricAlign = ref<LyricAlign>(loadLyricAlign())
   const lyricBlur = ref(loadLyricBlur())
+  const lyricDepth = ref(loadLyricDepth())
   const autoRestoreQueue = ref(loadAutoRestore())
   const autoResume = ref(loadAutoResume())
   /** 自定义主题色：'' = 默认海军蓝 */
@@ -170,6 +177,11 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(LYRIC_BLUR_KEY, v ? '1' : '0')
   }
 
+  function setLyricDepth(v: boolean) {
+    lyricDepth.value = v
+    localStorage.setItem(LYRIC_DEPTH_KEY, v ? '1' : '0')
+  }
+
   function setAutoRestoreQueue(v: boolean) {
     autoRestoreQueue.value = v
     localStorage.setItem(AUTO_RESTORE_KEY, v ? '1' : '0')
@@ -204,6 +216,8 @@ export const useSettingsStore = defineStore('settings', () => {
     setLyricAlign,
     lyricBlur,
     setLyricBlur,
+    lyricDepth,
+    setLyricDepth,
     autoRestoreQueue,
     setAutoRestoreQueue,
     autoResume,
