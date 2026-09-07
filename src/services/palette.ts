@@ -262,3 +262,198 @@ export async function renderAmbientUrl(blob: Blob): Promise<string> {
     bitmap.close()
   }
 }
+
+/* ================= 歌词页封面色场（Salt Player 式） =================
+   与上面的「多焦点合成」不同，这里要的是**封面本身的构图与配色**：
+   封面 cover-fit 缩放 → 画布内重度 blur 预烘焙 → 白色自适应叠加提亮去饱和。
+   模糊全部烘进小图 dataURL，上层只用 background-size:cover 拉伸，
+   不使用任何实时全屏 CSS filter（全屏 blur 并行栅格化是本项目历史卡顿根因）。 */
+
+type RGB = { r: number; g: number; b: number }
+
+export interface CoverField {
+  /** 预烘焙的模糊色场（PNG dataURL） */
+  url: string
+  /** 封面主色（保留色相，非灰度均值） */
+  main: RGB
+  /** 色场实际平均色：所有文字对比度计算以它为准（base 是压暗色，不能用来估算） */
+  bgEff: RGB
+}
+
+/** cover-fit 绘制：按目标画布等比放大填满，overscan 过扫描避免 blur 边缘透出底色 */
+function drawCoverFit(
+  ctx: CanvasRenderingContext2D,
+  img: ImageBitmap,
+  W: number,
+  H: number,
+  overscan: number,
+) {
+  const scale = Math.max(W / img.width, H / img.height) * overscan
+  const dw = img.width * scale
+  const dh = img.height * scale
+  ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh)
+}
+
+/** 画布平均色（成品采样，反映真正显示出来的底色） */
+function averageColor(ctx: CanvasRenderingContext2D, W: number, H: number): RGB {
+  const { data } = ctx.getImageData(0, 0, W, H)
+  let r = 0
+  let g = 0
+  let b = 0
+  const n = data.length / 4
+  for (let i = 0; i < data.length; i += 4) {
+    r += data[i]
+    g += data[i + 1]
+    b += data[i + 2]
+  }
+  return { r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) }
+}
+
+/**
+ * 主色：从分块焦点里挑「饱和度最高且亮度适中」的块。
+ * 不用全局均值——彩色封面被平均后会变成浊灰，失去色相。
+ */
+function pickMainColor(foci: Focus[]): RGB {
+  let best: RGB | null = null
+  let bestScore = -1
+  for (const f of foci) {
+    const max = Math.max(f.r, f.g, f.b)
+    const min = Math.min(f.r, f.g, f.b)
+    const sat = max === 0 ? 0 : (max - min) / max
+    const lum = (f.r + f.g + f.b) / 3
+    // 过滤近灰 / 近黑 / 近白：这些块没有可用的色相
+    if (sat < 0.12 || lum < 40 || lum > 235) continue
+    const score = sat * (1 - Math.abs(lum - 140) / 200)
+    if (score > bestScore) {
+      bestScore = score
+      best = { r: f.r, g: f.g, b: f.b }
+    }
+  }
+  return best ?? { r: 74, g: 70, b: 64 } // 灰阶/单色封面兜底：暖深灰
+}
+
+/**
+ * 烘焙封面色场。
+ * 输出尺寸按视口宽高比取（宽 256、高 144~256）——不用正方形：
+ * 正方形图 cover 到宽屏会只取中间横条，丢失上下部分的颜色。
+ */
+export async function buildCoverField(blob: Blob): Promise<CoverField> {
+  const { W, H, data, bitmap } = await sampleBitmap(blob)
+  try {
+    const { base, foci } = computeAmbient(data, W, H)
+    const main = pickMainColor(foci)
+    const OUT_W = 256
+    const ratio =
+      typeof window === 'object' && window.innerWidth > 0
+        ? window.innerHeight / window.innerWidth
+        : 0.5625
+    const OUT_H = Math.round(Math.min(256, Math.max(144, OUT_W * ratio)))
+    const canvas = document.createElement('canvas')
+    canvas.width = OUT_W
+    canvas.height = OUT_H
+    const ctx = canvas.getContext('2d')!
+    // 实底：blur 边缘不会透出透明
+    ctx.fillStyle = `rgb(${base.r},${base.g},${base.b})`
+    ctx.fillRect(0, 0, OUT_W, OUT_H)
+    ctx.save()
+    ctx.filter = 'blur(20px) saturate(0.7)'
+    drawCoverFit(ctx, bitmap, OUT_W, OUT_H, 1.12)
+    ctx.restore()
+    // 提亮：白色半透明叠加（比 brightness() 更能保住色相，暗封面也能抬起来）
+    const lum = (base.r + base.g + base.b) / 3
+    const whiteAlpha = Math.min(0.72, Math.max(0.4, 0.4 + (1 - lum / 255) * 0.34))
+    ctx.globalAlpha = whiteAlpha
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, OUT_W, OUT_H)
+    ctx.globalAlpha = 1
+    const bgEff = averageColor(ctx, OUT_W, OUT_H)
+    return { url: canvas.toDataURL('image/png'), main, bgEff }
+  } finally {
+    bitmap.close()
+  }
+}
+
+/* ---------- 配色派生：从主色生成一整套歌词页文字/控件色，并保证对比度 ---------- */
+
+const WHITE: RGB = { r: 255, g: 255, b: 255 }
+/** 目标对比度：当前行/标题/控件取严（大字号也清晰），其余正文取 WCAG AA */
+const CONTRAST_STRICT = 7
+const CONTRAST_BASE = 4.5
+
+function mix(a: RGB, b: RGB, t: number): RGB {
+  return {
+    r: Math.round(a.r + (b.r - a.r) * t),
+    g: Math.round(a.g + (b.g - a.g) * t),
+    b: Math.round(a.b + (b.b - a.b) * t),
+  }
+}
+
+/** WCAG 相对亮度 */
+function relLum({ r, g, b }: RGB): number {
+  const f = (c: number) => {
+    const v = c / 255
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+  }
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+}
+
+function contrast(a: RGB, b: RGB): number {
+  const l1 = relLum(a)
+  const l2 = relLum(b)
+  const hi = Math.max(l1, l2)
+  const lo = Math.min(l1, l2)
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+/** 朝黑按比例压暗（保持色相），直到与 bg 的对比度达标；压到极限仍不够则回落近黑 */
+function darkenTo(c: RGB, bg: RGB, target: number): RGB {
+  let k = 1
+  let out = c
+  while (contrast(out, bg) < target && k > 0.08) {
+    k *= 0.9
+    out = { r: Math.round(c.r * k), g: Math.round(c.g * k), b: Math.round(c.b * k) }
+  }
+  if (contrast(out, bg) >= target) return out
+  return { r: 26, g: 26, b: 28 }
+}
+
+/**
+ * 派生歌词页动态色令牌（写入 .lyrics-full 根元素内联样式，子元素自动继承）。
+ * 非当前歌词行本身有 opacity 递减（既有层次设计），这里只保证基础色达标。
+ */
+export function deriveLyricVars(main: RGB, bgEff: RGB): Record<string, string> {
+  const rgb = (c: RGB) => `rgb(${c.r},${c.g},${c.b})`
+  const rgba = (c: RGB, a: number) => `rgba(${c.r},${c.g},${c.b},${a})`
+  const active = darkenTo(main, bgEff, CONTRAST_STRICT)
+  const hover = darkenTo(main, bgEff, CONTRAST_STRICT + 1)
+  // 次要文字：主色与底色混出的浅 tint，但不低于 AA
+  const mid = (() => {
+    const t = darkenTo(mix(main, bgEff, 0.3), bgEff, CONTRAST_BASE)
+    return contrast(t, bgEff) >= CONTRAST_BASE ? t : active
+  })()
+  return {
+    '--lyric-bg': rgb(bgEff),
+    '--lyric-bg-deep': rgb(mix(bgEff, main, 0.1)),
+    // mask 用 alpha 通道，必须是**不透明**色，写成 rgba 会漏遮罩
+    '--lyric-mask': rgb(bgEff),
+    '--lyric-text-active': rgb(active),
+    '--lyric-text': rgb(mid),
+    '--lyric-text-sub': rgb(mid),
+    '--lyric-hint': rgb(mid),
+    '--lyric-time': rgb(mix(active, bgEff, 0.15)),
+    '--lyric-control': rgb(active),
+    '--lyric-control-hover': rgb(hover),
+    '--lyric-control-bg': rgba(main, 0.1),
+    '--lyric-play-icon': rgb(active),
+    '--lyric-play-bg-hover': rgba(main, 0.12),
+    '--lyric-ps-track': rgba(main, 0.18),
+    '--lyric-ps-fill': rgb(active),
+    '--lyric-ps-thumb': rgb(active),
+    '--lyric-ps-fill-hover': rgb(hover),
+    '--lyric-ps-track-hover': rgba(main, 0.28),
+    '--lyric-accent': rgb(active),
+    '--lyric-progress-bubble-bg': rgb(mix(main, WHITE, 0.86)),
+    '--lyric-progress-bubble-text': rgb(active),
+    '--lyric-shade': `linear-gradient(180deg, rgba(255,255,255,0.35), ${rgba(main, 0.04)})`,
+  }
+}

@@ -5,7 +5,7 @@ import AppSwitch from '@/components/AppSwitch.vue'
 import CoverImage from '@/components/CoverImage.vue'
 import { readLrcFile } from '@/services/fs'
 import { parseLrc, type LyricGroup } from '@/services/lyrics'
-import { extractBrightColors, renderAmbientUrl } from '@/services/palette'
+import { buildCoverField, deriveLyricVars } from '@/services/palette'
 import { getAudio } from '@/services/player'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
@@ -36,10 +36,10 @@ const FLY_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
 const ambientUrl = ref<string | null>(null)
 const ambientShown = ref(false)
-const ambientCache = new Map<string, string>()
-/** 流光圆斑颜色：从封面提取的明亮饱和色（浅色底的亮眼点缀） */
-const flowColors = ref<string[]>([])
-const flowCache = new Map<string, string[]>()
+/** 封面派生的动态色令牌（无封面/取色失败时为空对象 → 回落到 main.css 静态米白） */
+const coverPalette = ref<Record<string, string>>({})
+/** 色场缓存：烘焙图 + 派生令牌一起存，切回同一首歌零成本 */
+const fieldCache = new Map<string, { url: string; vars: Record<string, string> }>()
 
 function revealAmbient() {
   requestAnimationFrame(() => {
@@ -53,17 +53,14 @@ watch(
     if (!coverId) {
       ambientUrl.value = null
       ambientShown.value = false
-      flowColors.value = []
+      coverPalette.value = {}
       return
     }
-    const apply = (url: string) => {
-      ambientUrl.value = url
-      revealAmbient()
-    }
-    const cached = ambientCache.get(coverId)
+    const cached = fieldCache.get(coverId)
     if (cached) {
-      apply(cached)
-      flowColors.value = flowCache.get(coverId) ?? []
+      ambientUrl.value = cached.url
+      coverPalette.value = cached.vars
+      revealAmbient()
       return
     }
     try {
@@ -72,15 +69,16 @@ watch(
       // 走 <img> 解码 → canvas：比直接 fetch(blob URL) 在 HMR / 跨源 / 跨标签
       // 场景下更稳定（fetch blob URL 偶发 Failed to fetch）。
       const blob = await urlToBlob(url)
-      const baked = await renderAmbientUrl(blob)
-      ambientCache.set(coverId, baked)
-      apply(baked)
-      // 流光取色：与背景烘焙共用一次解码，失败不阻塞
-      const colors = await extractBrightColors(blob).catch(() => [] as string[])
-      flowCache.set(coverId, colors)
-      flowColors.value = colors
+      // 封面色场：封面缩放 + 重度模糊 + 自适应提亮（模糊已烘进图内，无实时全屏 blur）
+      const field = await buildCoverField(blob)
+      const vars = deriveLyricVars(field.main, field.bgEff)
+      fieldCache.set(coverId, { url: field.url, vars })
+      ambientUrl.value = field.url
+      coverPalette.value = vars
+      revealAmbient()
     } catch {
-      // 取色失败保持浅色底
+      // 取色失败保持浅色底（静态令牌）
+      coverPalette.value = {}
     }
   },
   { immediate: true },
@@ -579,12 +577,14 @@ watch(
   },
 )
 
-/** 歌词页根元素内联样式变量：字号/字重/对齐（设置面板调节即时生效） */
+/** 歌词页根元素内联样式变量：字号/字重/对齐（设置面板调节即时生效）
+    + 封面派生的动态色令牌（无封面时为空，回落到 main.css 静态值） */
 const lyricVars = computed(() => ({
   '--lyric-fs': `${settings.lyricFontPx}px`,
   '--lyric-fs-sub': `${settings.lyricSubPx}px`,
   '--lyric-fw': String(settings.lyricFontWeight),
   '--lyric-align': settings.lyricAlign,
+  ...coverPalette.value,
 }))
 
 function close() {
@@ -789,20 +789,13 @@ onMounted(() => {
     :style="lyricVars"
     @mousemove="onPageMouseMove"
   >
-    <!-- 背景：浅色暖调渐变 + 单层环境光（切歌直接换图，无过渡动画） + 封面明亮色流光圆斑 -->
+    <!-- 背景：封面色场（缩放+重度模糊+提亮去饱和，已烘进图内）+ 同色系实底兜底 -->
     <div class="bg" />
     <div
       v-if="ambientUrl"
       class="bg-ambient"
       :class="{ show: ambientShown }"
       :style="{ backgroundImage: `url(${ambientUrl})` }"
-    />
-    <div
-      v-for="(c, i) in flowColors.slice(0, 2)"
-      :key="i"
-      class="flow"
-      :class="`flow-${i}`"
-      :style="{ '--fc': c }"
     />
 
     <!-- 右上角工具组：歌词设置（字号/字重/对齐/模糊/控制样式） + 退出 -->
@@ -1012,14 +1005,19 @@ onMounted(() => {
   opacity: 0;
 }
 
-/* ---------- 背景：暖调浅色渐变 + 单层预烘焙环境光（低透明度，给每首歌一点自己的色调） ---------- */
+/* ---------- 背景：封面色场（主导）+ 同色系实底（色场未加载/淡入中时垫底） ---------- */
 .bg {
   position: absolute;
   inset: 0;
-  background: linear-gradient(165deg, #fbf9f4 0%, var(--lyric-bg) 52%, var(--lyric-bg-deep) 100%);
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--lyric-bg) 60%, #ffffff) 0%,
+    var(--lyric-bg) 52%,
+    var(--lyric-bg-deep) 100%
+  );
 }
 
-/* 单层环境光：多焦点已烘焙进图内（palette.renderAmbientUrl），低透明度叠在浅底上 */
+/* 封面色场：blur 已烘焙进图内（palette.buildCoverField），无实时全屏 filter */
 .bg-ambient {
   position: absolute;
   inset: 0;
@@ -1027,13 +1025,13 @@ onMounted(() => {
   background-position: center;
   opacity: 0;
   transform-origin: center center;
-  animation: ambient-breathe 12s ease-in-out infinite;
-  transition: opacity 280ms var(--ease-out);
+  animation: ambient-breathe 14s ease-in-out infinite;
+  transition: opacity 260ms var(--ease-out);
   will-change: transform, opacity;
 }
 
 .bg-ambient.show {
-  opacity: 0.16;
+  opacity: 1;
 }
 
 @keyframes ambient-breathe {
@@ -1042,7 +1040,7 @@ onMounted(() => {
     transform: scale(1);
   }
   50% {
-    transform: scale(1.06);
+    transform: scale(1.04);
   }
 }
 
@@ -1052,49 +1050,9 @@ onMounted(() => {
   animation-play-state: paused;
 }
 
-/* ---------- 封面明亮色流光：radial 柔光圆斑缓慢漂移（只动 transform，无 filter），
-   鼠标视差经独立的 translate 属性叠加，二者互不打架 ---------- */
-.flow {
-  position: absolute;
-  width: 40vw;
-  height: 40vw;
-  border-radius: 50%;
-  pointer-events: none;
-  background: radial-gradient(closest-side, var(--fc), transparent 70%);
-  opacity: 0.16;
-  will-change: transform;
-  translate: calc(var(--mx, 0) * 12px) calc(var(--my, 0) * 9px);
-}
+/* ---------- 封面明亮色流光已移除：色场本身已携带封面配色 ---------- */
 
-.flow-0 {
-  top: -14%;
-  left: -12%;
-  animation: flow-a 38s ease-in-out infinite alternate;
-}
-
-.flow-1 {
-  bottom: -20%;
-  right: -8%;
-  animation: flow-b 46s ease-in-out infinite alternate;
-}
-
-@keyframes flow-a {
-  from { transform: translate(0, 0) scale(1); }
-  to { transform: translate(9vw, 7vh) scale(1.18); }
-}
-
-@keyframes flow-b {
-  from { transform: translate(0, 0) scale(1.05); }
-  to { transform: translate(-8vw, -6vh) scale(0.92); }
-}
-
-/* 飞入/切歌过场期间暂停背景呼吸与流光漂移，避免动画叠加抢帧 */
-.lyrics-full.fly-active .flow,
-.lyrics-full.switching .flow {
-  animation-play-state: paused;
-}
-
-/* 底部稍压暗，保证迷你条与歌词可读 —— 已在 palette.renderAmbientUrl 烘焙进图内，无需单独压暗层 */
+/* 底部稍压暗，保证迷你条与歌词可读 —— 已在 palette.buildCoverField 烘焙进图内，无需单独压暗层 */
 
 /* ---------- 双栏主体：整组水平居中，两栏间距受控 ----------
    注意：这里不能设 align-items:center —— 两栏必须拉伸到全高，
@@ -1139,6 +1097,8 @@ onMounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* 切歌时主色令牌跟随背景 260ms 淡入一起过渡，避免文字硬切 */
+  transition: color 240ms var(--ease-out);
 }
 
 .track-artist {
@@ -1697,13 +1657,9 @@ onMounted(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .flow {
-    animation: none;
-    translate: none;
-    opacity: 0.22;
-  }
   .bg-ambient {
     animation: none;
+    transition: none;
   }
   .cover-main {
     translate: none;
