@@ -3,11 +3,11 @@ import { useLibraryStore } from '@/stores/library'
 import { useUiStore } from '@/stores/ui'
 
 /**
- * 添加文件夹时「封面被吸入黑洞」动画：
- * 扫描开始后，播放栏上方中央浮现一个旋转吸积盘的黑洞；
- * 每落库一批歌，对应封面（同专辑去重）从黑洞四周的随机环带上
- * 沿极坐标螺旋向心汇聚——越近转得越快、缩得越急、微微模糊，
- * 全部吸完后黑洞坍缩消失。像整批歌被建库引力收编。
+ * 添加文件夹时「封面随水流漩涡卷入播放器」动画：
+ * 扫描开始后，视口正中心浮现一个俯视水面的漩涡——深色漏斗口 + 缓慢旋转的
+ * 螺旋水纹 + 一道固定水面高光；每落库一批歌，对应封面（同专辑去重）从漩涡
+ * 四周的随机环带上沿极坐标螺旋向心汇聚（与水纹同向，像被水流带走），
+ * 全部卷入后漩涡抽空消失。
  *
  * 工程防线与 coverFlight 同构：reduced-motion / 页面过渡互斥（ui.dolly）/
  * 歌词页跳过 / 后台标签跳过；批与张双重限流防大库雪崩。
@@ -37,106 +37,95 @@ function reduced(): boolean {
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
-/* ================= 黑洞（悬浮建库涡旋） ================= */
+/* ================= 漩涡（俯视排水口） ================= */
 
 let bh: HTMLElement | null = null
-let bhDisk: HTMLElement | null = null
+let bhSwirl: HTMLElement | null = null
 let bhCollapsing = false
 
-/** 扫描会话内创建黑洞：视口正中心，多层吸积盘 + 光子环 + 事件视界 */
+/** 阿基米德螺旋采样点（124 画布，中心 62，2 圈）：水纹路径 */
+const SPIRAL_D =
+  'M68 62 L69 66 L67.1 70.8 L62 74.3 L54.8 74.4 L47.8 70.2 L43.5 62 L44.2 51.7 ' +
+  'L50.7 42.4 L62 37.2 L75.4 38.7 L87.1 47.5 L93 62 L90.7 78.6 L79.6 92.5 L62 99.3 ' +
+  'L42.3 96.1 L26.1 82.7 L18.5 62 L22.5 39.2 L38.1 20.7 L62 12.2 L87.9 17.1 L108.7 35 L118 62'
+
+/** 扫描会话内创建漩涡：视口正中心，深色漏斗口 + 旋转水纹 + 固定水面高光 */
 function ensureBlackHole(): HTMLElement | null {
   if (bhCollapsing) return null
   if (bh) return bh
   const el = document.createElement('div')
-  el.className = 'absorb-blackhole'
+  el.className = 'absorb-vortex'
   Object.assign(el.style, {
     position: 'fixed',
     left: `calc(50% - ${BH_SIZE / 2}px)`,
     top: `calc(50% - ${BH_SIZE / 2}px)`,
     width: `${BH_SIZE}px`,
     height: `${BH_SIZE}px`,
-    zIndex: '45', // 低于歌词页（50）：歌词页打开时黑洞被自然遮盖
+    zIndex: '45', // 低于歌词页（50）：歌词页打开时被自然遮盖
     pointerEvents: 'none',
   } as CSSStyleDeclaration)
 
-  /* 外层弥散光晕：纯径向渐变（不用 filter blur——旋转/呼吸动画会让 filter 每帧重算） */
+  /* 水面弥散：外围被搅动的水光（纯径向渐变，不用 filter blur） */
   const halo = document.createElement('div')
   Object.assign(halo.style, {
     position: 'absolute',
-    inset: '-86px',
+    inset: '-80px',
     borderRadius: '50%',
     background:
-      'radial-gradient(closest-side, color-mix(in srgb, var(--accent) 26%, transparent) 0%, color-mix(in srgb, var(--accent) 13%, transparent) 38%, color-mix(in srgb, var(--accent) 5%, transparent) 62%, transparent 78%)',
+      'radial-gradient(closest-side, color-mix(in srgb, var(--accent) 20%, transparent) 0%, color-mix(in srgb, var(--accent) 10%, transparent) 36%, color-mix(in srgb, var(--accent) 4%, transparent) 60%, transparent 76%)',
     willChange: 'transform, opacity',
   } as CSSStyleDeclaration)
 
-  /* 内辉光：贴盘的亮环底衬 */
-  const glow = document.createElement('div')
-  Object.assign(glow.style, {
-    position: 'absolute',
-    inset: '-14px',
-    borderRadius: '50%',
-    background:
-      'radial-gradient(closest-side, transparent 44%, color-mix(in srgb, var(--accent) 34%, transparent) 58%, transparent 74%)',
-  } as CSSStyleDeclaration)
-
-  /* 外吸积盘：多段 conic + 细密物质流条纹（repeating-conic），慢速正转。
-     conic 渐变本身连续，条纹提供丝状质感，无需 filter blur */
-  const diskOuter = document.createElement('div')
-  Object.assign(diskOuter.style, {
+  /* 螺旋水纹：两条对称的 accent 色水流线，慢速旋转（水面被搅动的方向） */
+  const swirl = document.createElement('div')
+  Object.assign(swirl.style, {
     position: 'absolute',
     inset: '0',
-    borderRadius: '50%',
-    backgroundImage:
-      'repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--accent) 22%, transparent) 0deg, transparent 2.4deg, transparent 6deg), ' +
-      'conic-gradient(from 20deg, transparent 0deg, color-mix(in srgb, var(--accent) 60%, transparent) 38deg, color-mix(in srgb, var(--accent) 18%, transparent) 80deg, transparent 118deg, color-mix(in srgb, var(--accent) 34%, transparent) 178deg, transparent 226deg, color-mix(in srgb, var(--accent) 50%, transparent) 292deg, transparent 360deg)',
-    maskImage: 'radial-gradient(closest-side, transparent 32%, #000 54%, #000 84%, transparent 100%)',
-    WebkitMaskImage:
-      'radial-gradient(closest-side, transparent 32%, #000 54%, #000 84%, transparent 100%)',
     willChange: 'transform',
-  } as unknown as CSSStyleDeclaration)
+  } as CSSStyleDeclaration)
+  swirl.innerHTML =
+    `<svg viewBox="0 0 124 124" width="100%" height="100%" aria-hidden="true">` +
+    `<g fill="none" stroke-linecap="round" style="stroke: var(--accent)">` +
+    `<path d="${SPIRAL_D}" stroke-width="1.8" opacity="0.5"/>` +
+    `<path d="${SPIRAL_D}" stroke-width="1.3" opacity="0.34" transform="rotate(180 62 62)"/>` +
+    `<path d="${SPIRAL_D}" stroke-width="1" opacity="0.2" transform="rotate(150 62 62)"/>` +
+    `</g></svg>`
 
-  /* 内吸积盘：更亮更细的段（含白热混色），反向快转——与外盘形成层次差 */
-  const diskInner = document.createElement('div')
-  Object.assign(diskInner.style, {
+  /* 漏斗口：由深到浅的排水口（比纯黑温和，且带主题色倾向） */
+  const funnel = document.createElement('div')
+  Object.assign(funnel.style, {
     position: 'absolute',
-    inset: '26px',
-    borderRadius: '50%',
-    backgroundImage:
-      'repeating-conic-gradient(from 0deg, color-mix(in srgb, #ffffff 14%, transparent) 0deg, transparent 1.6deg, transparent 5deg), ' +
-      'conic-gradient(from 200deg, transparent 0deg, color-mix(in srgb, var(--accent) 82%, transparent) 55deg, transparent 120deg, color-mix(in srgb, var(--accent) 52%, transparent) 210deg, transparent 275deg, color-mix(in srgb, #ffffff 34%, var(--accent)) 322deg, transparent 360deg)',
-    maskImage: 'radial-gradient(closest-side, transparent 22%, #000 48%, #000 86%, transparent 100%)',
-    WebkitMaskImage:
-      'radial-gradient(closest-side, transparent 22%, #000 48%, #000 86%, transparent 100%)',
-    willChange: 'transform',
-  } as unknown as CSSStyleDeclaration)
-
-  /* 光子环：贴视界的锐利亮环（白热→accent 渐变）+ 向外的辉光 */
-  const photon = document.createElement('div')
-  Object.assign(photon.style, {
-    position: 'absolute',
-    inset: '42px',
+    inset: '44px',
     borderRadius: '50%',
     background:
-      'radial-gradient(closest-side, transparent 54%, color-mix(in srgb, #ffffff 70%, var(--accent)) 61%, color-mix(in srgb, var(--accent) 78%, transparent) 68%, color-mix(in srgb, var(--accent) 26%, transparent) 76%, transparent 84%)',
+      'radial-gradient(circle, color-mix(in srgb, var(--accent) 78%, #000000) 0%, ' +
+      'color-mix(in srgb, var(--accent) 34%, #05070f) 58%, ' +
+      'color-mix(in srgb, var(--accent) 12%, #05070f) 82%, transparent 100%)',
   } as CSSStyleDeclaration)
 
-  /* 事件视界：纯黑核心 + 内缘微光（引力红移感） */
-  const core = document.createElement('div')
-  Object.assign(core.style, {
+  /* 口沿：水面张力的一圈细亮边 */
+  const rim = document.createElement('div')
+  Object.assign(rim.style, {
     position: 'absolute',
-    inset: '46px',
+    inset: '41px',
     borderRadius: '50%',
     background:
-      'radial-gradient(closest-side, #010206 0%, #04060e 58%, #090c1c 84%, rgba(9, 12, 28, 0.45) 95%, transparent 100%)',
-    boxShadow:
-      '0 0 40px color-mix(in srgb, var(--accent) 34%, transparent), 0 0 12px color-mix(in srgb, var(--accent) 22%, transparent), inset 0 0 16px rgba(0, 0, 0, 0.95), inset 0 1px 1px rgba(255, 255, 255, 0.06)',
+      'radial-gradient(closest-side, transparent 60%, color-mix(in srgb, #ffffff 42%, var(--accent)) 70%, transparent 80%)',
   } as CSSStyleDeclaration)
 
-  el.append(halo, glow, diskOuter, diskInner, photon, core)
+  /* 水面高光：斜上方打光，随水旋转不动（反光是固定的） */
+  const gloss = document.createElement('div')
+  Object.assign(gloss.style, {
+    position: 'absolute',
+    inset: '44px',
+    borderRadius: '50%',
+    background: 'linear-gradient(200deg, rgba(255, 255, 255, 0.26), transparent 46%)',
+  } as CSSStyleDeclaration)
+
+  el.append(halo, swirl, funnel, rim, gloss)
   document.body.appendChild(el)
   bh = el
-  bhDisk = diskOuter
+  bhSwirl = swirl
 
   // 浮现（Q 弹）
   el.animate(
@@ -146,23 +135,18 @@ function ensureBlackHole(): HTMLElement | null {
     ],
     { duration: 500, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', fill: 'both' },
   )
-  // 光晕呼吸
+  // 水面呼吸
   halo.animate(
     [
-      { opacity: 0.55, transform: 'scale(1)' },
-      { opacity: 1, transform: 'scale(1.07)' },
-      { opacity: 0.55, transform: 'scale(1)' },
+      { opacity: 0.6, transform: 'scale(1)' },
+      { opacity: 1, transform: 'scale(1.06)' },
+      { opacity: 0.6, transform: 'scale(1)' },
     ],
-    { duration: 4200, easing: 'ease-in-out', iterations: Infinity },
+    { duration: 4600, easing: 'ease-in-out', iterations: Infinity },
   )
-  // 双层吸积盘反向旋转（外慢内快，层次差）
-  diskOuter.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], {
-    duration: 11000,
-    easing: 'linear',
-    iterations: Infinity,
-  })
-  diskInner.animate([{ transform: 'rotate(360deg)' }, { transform: 'rotate(0deg)' }], {
-    duration: 6800,
+  // 水纹缓慢旋转（顺时针，与封面卷入同向）
+  swirl.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], {
+    duration: 14000,
     easing: 'linear',
     iterations: Infinity,
   })
@@ -175,15 +159,15 @@ function blackholeCenter(): { x: number; y: number } | null {
   return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
 }
 
-/** 封面触达时的黑洞脉动（吸入重量感） */
+/** 封面触达时的水面凹陷（被投入东西的凹陷感） */
 function pulseBlackHole(): void {
   bh?.animate(
     [
       { transform: 'scale(1)' },
-      { transform: 'scale(1.07)' },
+      { transform: 'scale(1.06)' },
       { transform: 'scale(1)' },
     ],
-    { duration: 240, easing: 'ease-out' },
+    { duration: 260, easing: 'ease-out' },
   )
 }
 
@@ -196,18 +180,23 @@ async function waitUntilIdle(maxWaitMs = 2600): Promise<void> {
   await wait(90) // 让最后一张的落点脉动走完一小拍
 }
 
-/** 扫描会话收尾：吸积盘加速 + 整体坍缩消失 */
+/** 扫描会话收尾：水被抽空——漩涡加速旋转并旋出消失 */
 function collapseBlackHole(): void {
   const el = bh
   if (!el) return
   bhCollapsing = true
   bh = null
+  // 水纹在坍缩时加速旋转（水被抽走）
+  bhSwirl?.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(120deg)' }], {
+    duration: 420,
+    easing: 'ease-in',
+  })
   el.animate(
     [
-      { transform: 'scale(1) rotate(0deg)', opacity: 1 },
-      { transform: 'scale(0.22) rotate(150deg)', opacity: 0 },
+      { transform: 'scale(1)', opacity: 1 },
+      { transform: 'scale(0.28)', opacity: 0 },
     ],
-    { duration: 460, easing: 'ease-in', fill: 'forwards' },
+    { duration: 440, easing: 'ease-in', fill: 'forwards' },
   )
     .finished.then(() => el.remove(), () => el.remove())
   window.setTimeout(() => {
@@ -379,8 +368,9 @@ function flyOne(src: string, isLast: boolean): void {
   const dy = from.y - c.y
   const r0 = Math.hypot(dx, dy)
   const θ0 = Math.atan2(dy, dx)
-  const dir = Math.random() < 0.5 ? -1 : 1
-  const spinTotal = (110 + Math.random() * 70) * dir
+  // 统一顺时针：与水纹旋转同向，像被水流带着走（反向会与水面视觉打架）
+  const dir = 1
+  const spinTotal = 110 + Math.random() * 70
 
   const offsets = [0, 0.18, 0.4, 0.62, 0.82, 1]
   const frames = offsets.map((t) => {
