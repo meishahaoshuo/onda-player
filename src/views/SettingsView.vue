@@ -25,7 +25,7 @@ const settings = useSettingsStore()
 const stats = useStatsStore()
 const hotkeyBindings = useHotkeyBindings()
 
-const emit = defineEmits<{ addFolder: [e?: MouseEvent] }>()
+const emit = defineEmits<{ addFolder: [] }>()
 
 type SectionId = 'appearance' | 'hotkeys' | 'folders' | 'data' | 'about'
 
@@ -240,7 +240,7 @@ function onRecordKeydown(e: KeyboardEvent) {
               <p class="panel-sub">已接入 {{ library.roots.length }} 个文件夹 · 共 {{ songCount }} 首歌曲</p>
             </div>
             <div class="section-actions">
-              <button class="mini-btn" @click="emit('addFolder', $event)"><AppIcon name="plus" :size="14" /> 添加</button>
+              <button class="mini-btn" @click="emit('addFolder')"><AppIcon name="plus" :size="14" /> 添加</button>
               <button
                 class="mini-btn"
                 :disabled="library.scanning || library.roots.length === 0"

@@ -10,7 +10,7 @@ import type { SongRecord } from '@/types'
 const library = useLibraryStore()
 const player = usePlayerStore()
 
-const emit = defineEmits<{ addFolder: [e?: MouseEvent] }>()
+const emit = defineEmits<{ addFolder: [] }>()
 
 const selectedRootId = defineModel<string | null>('selectedRoot')
 
@@ -68,7 +68,7 @@ function selectRoot(id: string) {
       </div>
       <p class="empty-title">还没有添加音乐文件夹</p>
       <p class="empty-hint">授权一个文件夹，ONDA 会自动扫描其中的音乐建库</p>
-      <button class="primary-btn" @click="emit('addFolder', $event)">
+      <button class="primary-btn" @click="emit('addFolder')">
         <AppIcon name="plus" :size="16" /> 添加文件夹
       </button>
     </div>
@@ -112,7 +112,7 @@ function selectRoot(id: string) {
           </button>
         </div>
         <div class="side-toolbar">
-          <button class="primary-btn" @click="emit('addFolder', $event)">
+          <button class="primary-btn" @click="emit('addFolder')">
             <AppIcon name="plus" :size="15" /> 添加
           </button>
           <button

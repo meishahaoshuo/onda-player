@@ -29,7 +29,7 @@ import { clearTransitionState } from '@/services/pageTransition'
 import { useSearchScope } from '@/composables/useSearchScope'
 import { installTrackSwapWatcher } from '@/services/coverFlight'
 import { installHotkeys } from '@/services/hotkeys'
-import { installAbsorbFlight, setOriginFromEvent } from '@/services/absorbFlight'
+import { installAbsorbFlight } from '@/services/absorbFlight'
 import { extractBrightColors } from '@/services/palette'
 import type { ViewId } from '@/types'
 
@@ -93,8 +93,7 @@ function onViewEnter(el: Element) {
   ;(el as HTMLElement).scrollTop = ui.recallScroll(scrollKey(ui.activeView, ui.detailKey))
 }
 
-function addFolder(e?: MouseEvent) {
-  setOriginFromEvent(e)
+function addFolder() {
   library.addFolder()
 }
 
