@@ -13,9 +13,11 @@ import { useUiStore } from '@/stores/ui'
  * 歌词页跳过 / 后台标签跳过；批与张双重限流防大库雪崩。
  */
 
-const FLIGHT_MS = 900
+const FLIGHT_MS = 860
 const STAGGER_MS = 130
 const JITTER_MS = 40
+/** 批间等待：按飞行时长比例，避免上一批未消失就叠下一批造成视觉拥挤与掉帧 */
+const BATCH_GAP = 420
 /** 飞行封面边长 */
 const START_SIZE = 72
 /** 每批最多起飞张数 */
@@ -24,7 +26,6 @@ const BATCH_CAP = 6
 const SESSION_CAP = 24
 /** 触达黑洞时刻占比 */
 const LAND_AT = 0.72
-const BLUR_MAX = 2.5
 /** coverUrl 等待上限：动画不拖扫描节奏 */
 const SOURCE_TIMEOUT = 300
 /** 黑洞容器边长（视口正中心） */
@@ -58,69 +59,81 @@ function ensureBlackHole(): HTMLElement | null {
     pointerEvents: 'none',
   } as CSSStyleDeclaration)
 
-  /* 外层柔光晕：呼吸的大范围 accent 弥散 */
+  /* 外层弥散光晕：纯径向渐变（不用 filter blur——旋转/呼吸动画会让 filter 每帧重算） */
   const halo = document.createElement('div')
   Object.assign(halo.style, {
     position: 'absolute',
-    inset: '-72px',
+    inset: '-86px',
     borderRadius: '50%',
     background:
-      'radial-gradient(closest-side, color-mix(in srgb, var(--accent) 20%, transparent) 0%, color-mix(in srgb, var(--accent) 8%, transparent) 46%, transparent 72%)',
-    filter: 'blur(6px)',
+      'radial-gradient(closest-side, color-mix(in srgb, var(--accent) 26%, transparent) 0%, color-mix(in srgb, var(--accent) 13%, transparent) 38%, color-mix(in srgb, var(--accent) 5%, transparent) 62%, transparent 78%)',
+    willChange: 'transform, opacity',
   } as CSSStyleDeclaration)
 
-  /* 外吸积盘：多段 conic，慢速正转 */
+  /* 内辉光：贴盘的亮环底衬 */
+  const glow = document.createElement('div')
+  Object.assign(glow.style, {
+    position: 'absolute',
+    inset: '-14px',
+    borderRadius: '50%',
+    background:
+      'radial-gradient(closest-side, transparent 44%, color-mix(in srgb, var(--accent) 34%, transparent) 58%, transparent 74%)',
+  } as CSSStyleDeclaration)
+
+  /* 外吸积盘：多段 conic + 细密物质流条纹（repeating-conic），慢速正转。
+     conic 渐变本身连续，条纹提供丝状质感，无需 filter blur */
   const diskOuter = document.createElement('div')
   Object.assign(diskOuter.style, {
     position: 'absolute',
     inset: '0',
     borderRadius: '50%',
-    background:
-      'conic-gradient(from 20deg, transparent 0deg, color-mix(in srgb, var(--accent) 58%, transparent) 38deg, color-mix(in srgb, var(--accent) 20%, transparent) 80deg, transparent 118deg, color-mix(in srgb, var(--accent) 30%, transparent) 178deg, transparent 226deg, color-mix(in srgb, var(--accent) 46%, transparent) 292deg, transparent 360deg)',
-    filter: 'blur(5px)',
-    maskImage: 'radial-gradient(closest-side, transparent 30%, #000 52%, #000 82%, transparent 100%)',
+    backgroundImage:
+      'repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--accent) 22%, transparent) 0deg, transparent 2.4deg, transparent 6deg), ' +
+      'conic-gradient(from 20deg, transparent 0deg, color-mix(in srgb, var(--accent) 60%, transparent) 38deg, color-mix(in srgb, var(--accent) 18%, transparent) 80deg, transparent 118deg, color-mix(in srgb, var(--accent) 34%, transparent) 178deg, transparent 226deg, color-mix(in srgb, var(--accent) 50%, transparent) 292deg, transparent 360deg)',
+    maskImage: 'radial-gradient(closest-side, transparent 32%, #000 54%, #000 84%, transparent 100%)',
     WebkitMaskImage:
-      'radial-gradient(closest-side, transparent 30%, #000 52%, #000 82%, transparent 100%)',
+      'radial-gradient(closest-side, transparent 32%, #000 54%, #000 84%, transparent 100%)',
+    willChange: 'transform',
   } as unknown as CSSStyleDeclaration)
 
-  /* 内吸积盘：更亮更细的段，反向快转——与外盘形成层次差 */
+  /* 内吸积盘：更亮更细的段（含白热混色），反向快转——与外盘形成层次差 */
   const diskInner = document.createElement('div')
   Object.assign(diskInner.style, {
     position: 'absolute',
     inset: '26px',
     borderRadius: '50%',
-    background:
-      'conic-gradient(from 200deg, transparent 0deg, color-mix(in srgb, var(--accent) 80%, transparent) 55deg, transparent 120deg, color-mix(in srgb, var(--accent) 55%, transparent) 210deg, transparent 275deg, color-mix(in srgb, #ffffff 30%, var(--accent)) 322deg, transparent 360deg)',
-    filter: 'blur(2px)',
-    maskImage: 'radial-gradient(closest-side, transparent 24%, #000 50%, #000 84%, transparent 100%)',
+    backgroundImage:
+      'repeating-conic-gradient(from 0deg, color-mix(in srgb, #ffffff 14%, transparent) 0deg, transparent 1.6deg, transparent 5deg), ' +
+      'conic-gradient(from 200deg, transparent 0deg, color-mix(in srgb, var(--accent) 82%, transparent) 55deg, transparent 120deg, color-mix(in srgb, var(--accent) 52%, transparent) 210deg, transparent 275deg, color-mix(in srgb, #ffffff 34%, var(--accent)) 322deg, transparent 360deg)',
+    maskImage: 'radial-gradient(closest-side, transparent 22%, #000 48%, #000 86%, transparent 100%)',
     WebkitMaskImage:
-      'radial-gradient(closest-side, transparent 24%, #000 50%, #000 84%, transparent 100%)',
+      'radial-gradient(closest-side, transparent 22%, #000 48%, #000 86%, transparent 100%)',
+    willChange: 'transform',
   } as unknown as CSSStyleDeclaration)
 
-  /* 光子环：贴视界的一圈锐利亮环（白热 + accent 过渡） */
+  /* 光子环：贴视界的锐利亮环（白热→accent 渐变）+ 向外的辉光 */
   const photon = document.createElement('div')
   Object.assign(photon.style, {
     position: 'absolute',
-    inset: '44px',
+    inset: '42px',
     borderRadius: '50%',
     background:
-      'radial-gradient(closest-side, transparent 58%, color-mix(in srgb, #ffffff 62%, var(--accent)) 64%, color-mix(in srgb, var(--accent) 72%, transparent) 71%, transparent 80%)',
-    filter: 'blur(0.5px)',
+      'radial-gradient(closest-side, transparent 54%, color-mix(in srgb, #ffffff 70%, var(--accent)) 61%, color-mix(in srgb, var(--accent) 78%, transparent) 68%, color-mix(in srgb, var(--accent) 26%, transparent) 76%, transparent 84%)',
   } as CSSStyleDeclaration)
 
-  /* 事件视界：纯黑核心，内缘带一圈极微弱透光 */
+  /* 事件视界：纯黑核心 + 内缘微光（引力红移感） */
   const core = document.createElement('div')
   Object.assign(core.style, {
     position: 'absolute',
-    inset: '48px',
+    inset: '46px',
     borderRadius: '50%',
     background:
-      'radial-gradient(closest-side, #02030a 0%, #05070f 62%, #0b0e20 86%, rgba(11, 14, 32, 0.4) 96%, transparent 100%)',
+      'radial-gradient(closest-side, #010206 0%, #04060e 58%, #090c1c 84%, rgba(9, 12, 28, 0.45) 95%, transparent 100%)',
     boxShadow:
-      '0 0 34px color-mix(in srgb, var(--accent) 30%, transparent), inset 0 0 14px rgba(0, 0, 0, 0.9)',
+      '0 0 40px color-mix(in srgb, var(--accent) 34%, transparent), 0 0 12px color-mix(in srgb, var(--accent) 22%, transparent), inset 0 0 16px rgba(0, 0, 0, 0.95), inset 0 1px 1px rgba(255, 255, 255, 0.06)',
   } as CSSStyleDeclaration)
 
-  el.append(halo, diskOuter, diskInner, photon, core)
+  el.append(halo, glow, diskOuter, diskInner, photon, core)
   document.body.appendChild(el)
   bh = el
   bhDisk = diskOuter
@@ -174,6 +187,15 @@ function pulseBlackHole(): void {
   )
 }
 
+/** 等最后一批封面真正吸完（不是固定时长），再看情况收尾 */
+async function waitUntilIdle(maxWaitMs = 2600): Promise<void> {
+  const t0 = Date.now()
+  while (inFlight > 0 && Date.now() - t0 < maxWaitMs) {
+    await wait(60)
+  }
+  await wait(90) // 让最后一张的落点脉动走完一小拍
+}
+
 /** 扫描会话收尾：吸积盘加速 + 整体坍缩消失 */
 function collapseBlackHole(): void {
   const el = bh
@@ -204,6 +226,8 @@ const flownCoverIds = new Set<string>()
 /** 待处理批队列 */
 let queue: string[][] = []
 let pumping = false
+/** 当前仍在飞行的封面数（每张 cleanup 时 -1）：用于精确判定「吸完了」而非固定等待 */
+let inFlight = 0
 let lastPulseAt = 0
 /** 扫描已结束：泵空后坍缩黑洞 */
 let sessionEnding = false
@@ -250,13 +274,14 @@ async function pump(): Promise<void> {
     while (queue.length > 0) {
       const ids = queue.shift()!
       await flyBatch(ids)
-      await wait(150) // 批间呼吸
+      // 批间留白：等上一批基本吸完再起下一批（避免堆叠拥挤与瞬时高负载）
+      await wait(BATCH_GAP)
+      await waitUntilIdle(flightMs)
     }
   } finally {
     pumping = false
     if (sessionEnding) {
-      // 等最后一批飞完再坍缩
-      await wait(flightMs + 320)
+      await waitUntilIdle()
       collapseBlackHole()
       sessionEnding = false
     }
@@ -332,7 +357,8 @@ function flyOne(src: string, isLast: boolean): void {
     borderRadius: '8px',
     zIndex: '70',
     pointerEvents: 'none',
-    willChange: 'transform, opacity, filter',
+    // 只提示 transform/opacity：filter 逐帧变化会让浏览器每帧重新光栅化（掉帧主因）
+    willChange: 'transform, opacity',
     boxShadow: 'var(--shadow-2)',
   } as CSSStyleDeclaration)
   const img = document.createElement('img')
@@ -365,13 +391,14 @@ function flyOne(src: string, isLast: boolean): void {
     const y = c.y + Math.sin(th) * r
     const scale = 0.92 - 0.78 * t
     return {
+      // 不含 filter：模糊逐帧插值是掉帧主因，"被卷入"靠螺旋收敛 + 透明度收束表达
       transform: `translate(${(x - from.x).toFixed(1)}px, ${(y - from.y).toFixed(1)}px) scale(${scale.toFixed(3)}) rotate(${rot.toFixed(1)}deg)`,
-      opacity: t === 0 ? 0 : t < 0.15 ? t / 0.15 : 1 - Math.max(0, (t - 0.62) / 0.38),
-      filter: `blur(${(BLUR_MAX * t * t).toFixed(2)}px)`,
+      opacity: t === 0 ? 0 : t < 0.15 ? t / 0.15 : 1 - Math.max(0, (t - 0.58) / 0.42),
       offset: t,
       easing: 'cubic-bezier(0.45, 0, 0.75, 0.6)',
     }
   })
+  inFlight++
   const anim = el.animate(frames, { duration: flightMs, fill: 'both' })
 
   // 触达时刻黑洞脉动（吸入重量感，节流）
@@ -384,9 +411,18 @@ function flyOne(src: string, isLast: boolean): void {
   // 批末张落定：黑洞吃撑了多脉一下
   if (isLast) window.setTimeout(() => pulseBlackHole(), Math.round(flightMs * 0.88))
 
-  const cleanup = () => el.remove()
+  let cleaned = false
+  const cleanup = () => {
+    if (cleaned) return
+    cleaned = true
+    el.remove()
+    inFlight--
+    if (inFlight < 0) inFlight = 0
+  }
   anim.finished.then(cleanup, cleanup)
   window.setTimeout(cleanup, flightMs + 400)
+  // 尾段提前移除：最后 15% 已不可见，早撤早让出图层（视觉无差别）
+  window.setTimeout(cleanup, Math.round(flightMs * 0.92))
 }
 
 /** App onMounted 调用一次：订阅扫描批次 + 会话收尾 */
@@ -412,7 +448,7 @@ export function installAbsorbFlight(): void {
         sessionFlights = 0
         sessionEnding = true
         if (!pumping) {
-          wait(flightMs + 320).then(() => {
+          void waitUntilIdle().then(() => {
             collapseBlackHole()
             sessionEnding = false
           })
