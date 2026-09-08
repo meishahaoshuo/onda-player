@@ -483,7 +483,19 @@ function onCoverMouseLeave() {
 onBeforeUnmount(() => {
   cancelAnimationFrame(lyricRaf)
   cancelAnimationFrame(parallaxRaf)
+  window.removeEventListener('keydown', onZoomKeydown)
 })
+
+/* 切歌时大图若在展开态：瞬间收起（旧封面已无意义，不做反向飞行） */
+watch(
+  () => player.currentPath,
+  () => {
+    if (coverExpanded.value) {
+      coverZoomInstant = true
+      coverExpanded.value = false
+    }
+  },
+)
 
 /* ---------- 左栏小按钮行：播放模式 / 音量 / 字号 ---------- */
 const MODE_META: { mode: PlayMode; icon: 'order' | 'repeat' | 'repeatOne' | 'shuffle'; label: string }[] = [
@@ -731,6 +743,12 @@ async function closeWithFade() {
   if (closing.value) return
   closing.value = true
 
+  // 大图展开中：先瞬间收起并交还真实封面，否则飞回播放条的源封面是隐藏态
+  if (coverExpanded.value) {
+    coverZoomInstant = true
+    coverExpanded.value = false
+  }
+
   // 「从哪里来，回哪里去」：大封面 FLIP 反向飞回播放条小封面。
   // 飞行层挂在 body 上，不随 lyrics-full 销毁 —— 页面淡出后封面继续飞完最后一段。
   const srcEl = document.querySelector<HTMLElement>('.cover-main')
@@ -783,7 +801,169 @@ async function closeWithFade() {
   }, 240)
 }
 
+/* ---------- 封面大图「水波绽放」（双击封面展开） ----------
+   双击封面：高清大图从封面矩形 Q 弹放大至视口中心，两圈水波从封面边缘
+   同步荡开（与品牌「澜」同源），背景色场压暗聚焦；点击覆盖层/ESC 收起，
+   大图反向飞回封面矩形。reduced-motion 退化为纯淡入淡出。 */
+const coverExpanded = ref(false)
+const expandedSrc = ref('')
+let coverZoomBusy = false
+/** 歌曲切换/关闭页面时跳过收起动画，直接落位 */
+let coverZoomInstant = false
+
+function reducedMotion(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+async function expandCoverZoom() {
+  if (coverZoomBusy || coverExpanded.value) return
+  if (flyActive.value || closing.value || switching.value) return
+  const coverEl = document.querySelector<HTMLElement>('.cover-main')
+  if (!coverEl || !player.current) return
+  coverZoomBusy = true
+  // 高清图竞速 420ms：没赶上先用现有封面进场，就位后再无感替换
+  const coverId = player.current.coverId
+  const curSrc =
+    document.querySelector<HTMLImageElement>('.cover-main img')?.getAttribute('src') ?? ''
+  const hiPromise = library.coverUrlHi(coverId).catch(() => null)
+  const first = await Promise.race([
+    hiPromise,
+    new Promise<string | null>((r) => window.setTimeout(() => r(curSrc), 420)),
+  ])
+  expandedSrc.value = first ?? curSrc
+  coverExpanded.value = true
+  coverZoomBusy = false
+  // 迟到的高清图：预载完成后无感换源（大图 80vmin 用 256px 缩略图会糊）
+  void hiPromise.then((u) => {
+    if (!coverExpanded.value || !u || u === expandedSrc.value) return
+    void preloadImage(u).then(() => {
+      if (coverExpanded.value) expandedSrc.value = u
+    })
+  })
+}
+
+function collapseCoverZoom() {
+  if (!coverExpanded.value) return
+  coverExpanded.value = false
+}
+
+function onZoomKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && coverExpanded.value) collapseCoverZoom()
+}
+
+/** 进场：大图从封面矩形 Q 弹放大 + 两圈水波同步荡开（WAAPI，fill:both 交给 leave 反向） */
+function onZoomEnter(el: Element, done: () => void) {
+  const root = el as HTMLElement
+  const stage = root.querySelector<HTMLElement>('.zoom-stage')
+  const coverEl = document.querySelector<HTMLElement>('.cover-main')
+  let finished = false
+  const finish = () => {
+    if (finished) return
+    finished = true
+    done()
+  }
+  if (!stage || !coverEl) {
+    finish()
+    return
+  }
+  // 藏起真实封面，避免与飞行大图重叠
+  const realCover = coverEl.matches('img')
+    ? coverEl
+    : coverEl.querySelector<HTMLElement>('img, .cover-fallback')
+  if (realCover) realCover.style.opacity = '0'
+
+  if (reducedMotion()) {
+    root.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, fill: 'both' }).onfinish =
+      finish
+    window.setTimeout(finish, 240)
+    return
+  }
+
+  const s = coverEl.getBoundingClientRect()
+  const d = stage.getBoundingClientRect()
+  if (s.width < 1 || d.width < 1) {
+    finish()
+    return
+  }
+  const scale0 = s.width / d.width
+  const dx = s.left + s.width / 2 - (d.left + d.width / 2)
+  const dy = s.top + s.height / 2 - (d.top + d.height / 2)
+  const anim = stage.animate(
+    [
+      { transform: `translate(${dx}px, ${dy}px) scale(${scale0})` },
+      { transform: 'translate(0px, 0px) scale(1)' },
+    ],
+    { duration: 640, easing: 'cubic-bezier(0.3, 1.36, 0.5, 1)', fill: 'both' },
+  )
+  // 两圈水波：从封面尺寸同步荡向 1.85 倍并淡出，第二圈延迟跟出
+  root.querySelectorAll<HTMLElement>('.zoom-ring').forEach((ring, i) => {
+    ring.animate(
+      [
+        { transform: `scale(${scale0})`, opacity: 0 },
+        { opacity: 0.55, offset: 0.22 },
+        { transform: 'scale(1.85)', opacity: 0 },
+      ],
+      {
+        duration: 1200,
+        delay: 140 + i * 170,
+        easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
+        fill: 'both',
+      },
+    )
+  })
+  anim.onfinish = finish
+  window.setTimeout(finish, 940) // 兜底：onfinish 偶发不触发
+}
+
+/** 收起：大图反向飞回封面矩形，落位瞬间交还真实封面（无感交接） */
+function onZoomLeave(el: Element, done: () => void) {
+  const root = el as HTMLElement
+  const stage = root.querySelector<HTMLElement>('.zoom-stage')
+  const coverEl = document.querySelector<HTMLElement>('.cover-main')
+  const finish = () => {
+    const realCover = coverEl?.matches('img')
+      ? coverEl
+      : coverEl?.querySelector<HTMLElement>('img, .cover-fallback')
+    if (realCover) realCover.style.opacity = ''
+    done()
+  }
+  if (coverZoomInstant || !stage || !coverEl) {
+    coverZoomInstant = false
+    finish()
+    return
+  }
+  if (reducedMotion()) {
+    root.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: 'both' })
+    window.setTimeout(finish, 180)
+    return
+  }
+  const s = coverEl.getBoundingClientRect()
+  const d = stage.getBoundingClientRect()
+  if (s.width < 1 || d.width < 1) {
+    finish()
+    return
+  }
+  const scale0 = s.width / d.width
+  const dx = s.left + s.width / 2 - (d.left + d.width / 2)
+  const dy = s.top + s.height / 2 - (d.top + d.height / 2)
+  root.querySelector<HTMLElement>('.zoom-dim')?.animate([{ opacity: 1 }, { opacity: 0 }], {
+    duration: 260,
+    easing: 'ease-out',
+    fill: 'both',
+  })
+  const anim = stage.animate(
+    [
+      { transform: 'translate(0px, 0px) scale(1)' },
+      { transform: `translate(${dx}px, ${dy}px) scale(${scale0})` },
+    ],
+    { duration: 440, easing: 'cubic-bezier(0.5, 0, 0.72, 0.4)', fill: 'both' },
+  )
+  anim.onfinish = finish
+  window.setTimeout(finish, 700) // 兜底
+}
+
 onMounted(() => {
+  window.addEventListener('keydown', onZoomKeydown)
   flyIn()
 })
 </script>
@@ -891,6 +1071,8 @@ onMounted(() => {
           <div
             class="cover-main"
             v-if="player.current"
+            title="双击查看大图"
+            @dblclick="expandCoverZoom"
             @mousemove="onCoverMouseMove"
             @mouseleave="onCoverMouseLeave"
           >
@@ -992,6 +1174,25 @@ onMounted(() => {
         </div>
       </section>
     </div>
+
+    <!-- 封面大图「水波绽放」覆盖层：双击封面展开，点击任意处/ESC 收起 -->
+    <Transition :css="false" @enter="onZoomEnter" @leave="onZoomLeave">
+      <div v-if="coverExpanded" class="cover-zoom" @click="collapseCoverZoom">
+        <div class="zoom-dim" aria-hidden="true" />
+        <div class="zoom-stage">
+          <div class="zoom-ring" aria-hidden="true" />
+          <div class="zoom-ring" aria-hidden="true" />
+          <img
+            v-if="expandedSrc"
+            class="zoom-img"
+            :src="expandedSrc"
+            alt="封面大图"
+            draggable="false"
+          />
+          <div v-else class="zoom-fallback" aria-hidden="true" />
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -1661,6 +1862,61 @@ onMounted(() => {
   color: var(--lyric-hint);
   font-size: 15px;
   transition: opacity 520ms var(--ease-out), transform 560ms var(--ease-out);
+}
+
+/* ---------- 封面大图「水波绽放」覆盖层 ---------- */
+.cover-zoom {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+
+.zoom-dim {
+  position: absolute;
+  inset: 0;
+  /* 背景色场压暗聚焦：深色基调用歌词深令牌混黑，保持同色系 */
+  background: color-mix(in srgb, #000000 46%, var(--lyric-bg-deep));
+  opacity: 0.92;
+}
+
+.zoom-stage {
+  position: relative;
+  width: min(80vmin, 720px);
+  aspect-ratio: 1;
+  will-change: transform;
+}
+
+.zoom-img,
+.zoom-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.5);
+  user-select: none;
+}
+
+.zoom-img {
+  object-fit: cover;
+}
+
+.zoom-fallback {
+  background: var(--lyric-accent);
+}
+
+/* 水波环：进/出场由 WAAPI 驱动（transform scale + opacity），初始不可见 */
+.zoom-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  border: 2px solid var(--lyric-accent);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
 }
 
 @media (prefers-reduced-motion: reduce) {
