@@ -42,16 +42,24 @@ function makeWav(seconds: number, freq: number, sampleRate = 8000): Blob {
  *  - 入库缩略图（256px）与按需高清图（1024px）的差异是否肉眼可辨
  *  - 飞入动画落地时是否用了正确的图源
  */
-async function makeMp3WithCover(): Promise<Blob> {
-  // 1) 封面：1200×1200 细条纹 + 圆环 + 小字，缩略后糊得一眼能看出来
+async function makeMp3WithCover(opts?: {
+  c1?: string
+  c2?: string
+  label?: string
+  album?: string
+}): Promise<Blob> {
+  // 1) 封面：1200×1200 渐变 + 圆环 + 小字，缩略后糊得一眼能看出来
+  const c1 = opts?.c1 ?? '#f5c98a'
+  const c2 = opts?.c2 ?? '#7a4bd0'
+  const label = opts?.label ?? 'ARIA 1200'
   const S = 1200
   const canvas = document.createElement('canvas')
   canvas.width = S
   canvas.height = S
   const ctx = canvas.getContext('2d')!
   const g = ctx.createLinearGradient(0, 0, S, S)
-  g.addColorStop(0, '#f5c98a')
-  g.addColorStop(1, '#7a4bd0')
+  g.addColorStop(0, c1)
+  g.addColorStop(1, c2)
   ctx.fillStyle = g
   ctx.fillRect(0, 0, S, S)
   ctx.strokeStyle = 'rgba(255,255,255,0.85)'
@@ -70,15 +78,26 @@ async function makeMp3WithCover(): Promise<Blob> {
   ctx.fillStyle = '#fff'
   ctx.font = 'bold 96px sans-serif'
   ctx.textAlign = 'center'
-  ctx.fillText('ARIA 1200', S / 2, S / 2 - 20)
+  ctx.fillText(label, S / 2, S / 2 - 20)
   ctx.font = 'bold 42px sans-serif'
   ctx.fillText('高清封面测试', S / 2, S / 2 + 60)
   const png = await new Promise<Blob>((resolve) =>
     canvas.toBlob((b) => resolve(b!), 'image/png'),
   )
   const pic = new Uint8Array(await png.arrayBuffer())
+  const album = opts?.album ?? ''
 
-  // 2) ID3v2.3 APIC 帧
+  // 2) ID3v2.3 帧：TALB（专辑名，可选）+ APIC
+  const textFrame = (id: string, text: string): number[] => {
+    const body = [0x00, ...[...text].map((c) => c.charCodeAt(0)), 0x00]
+    const size = body.length
+    return [
+      ...[...id].map((c) => c.charCodeAt(0)),
+      (size >> 24) & 0xff, (size >> 16) & 0xff, (size >> 8) & 0xff, size & 0xff,
+      0x00, 0x00,
+      ...body,
+    ]
+  }
   const mime = 'image/png'
   const body: number[] = [
     0x00, // 文本编码 ISO-8859-1
@@ -90,7 +109,7 @@ async function makeMp3WithCover(): Promise<Blob> {
   ]
   const frameSize = body.length
   const frameHeader = [0x41, 0x50, 0x49, 0x43, (frameSize >> 24) & 0xff, (frameSize >> 16) & 0xff, (frameSize >> 8) & 0xff, frameSize & 0xff, 0x00, 0x00]
-  const tagBody = [...frameHeader, ...body]
+  const tagBody = [...(album ? textFrame('TALB', album) : []), ...frameHeader, ...body]
   const tagSize = tagBody.length
   // synchsafe 整数：每字节只用低 7 位
   const synch = (n: number) => [(n >> 21) & 0x7f, (n >> 14) & 0x7f, (n >> 7) & 0x7f, n & 0x7f]
@@ -104,6 +123,19 @@ async function makeMp3WithCover(): Promise<Blob> {
     mpeg.push(...new Array(413).fill(0))
   }
   return new Blob([new Uint8Array([...tag, ...mpeg])], { type: 'audio/mpeg' })
+}
+
+/** HSL → #rrggbb（批量造不同色封面用） */
+function hslHex(h: number, s = 62, l = 52): string {
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12
+    const a = (s / 100) * Math.min(l / 100, 1 - l / 100)
+    const v = l / 100 - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)))
+    return Math.round(255 * v)
+      .toString(16)
+      .padStart(2, '0')
+  }
+  return `#${f(0)}${f(8)}${f(4)}`
 }
 
 async function ensureOpfsMusicDir(): Promise<FileSystemDirectoryHandle> {
@@ -179,6 +211,29 @@ export function installTestBridge() {
           .filter((s) => s.coverId)
           .map((s) => ({ title: s.title, coverId: s.coverId })),
       }
+    },
+    /** 额外写入 n 首带独立封面的 MP3（不同专辑 → 不同 coverId）并重扫：
+        8 首/批多批落库，供吸入动画验证（封面色相环取色，肉眼可辨） */
+    async addBulkSongs(n = 20) {
+      const dir = await ensureOpfsMusicDir()
+      for (let i = 0; i < n; i++) {
+        const idx = String(i).padStart(2, '0')
+        const hue = Math.round((360 / n) * i)
+        const fh = await dir.getFileHandle(`Bulk Song ${idx}.mp3`, { create: true })
+        const writable = await fh.createWritable()
+        await writable.write(
+          await makeMp3WithCover({
+            c1: hslHex(hue),
+            c2: hslHex((hue + 40) % 360),
+            label: `BULK ${idx}`,
+            album: `Bulk Album ${idx}`,
+          }),
+        )
+        await writable.close()
+      }
+      const library = useLibraryStore()
+      await library.rescan()
+      return library.songs.length
     },
     /** 压力测试：直接注入 n 张合成专辑（各 2 首、无封面），绕过扫描。
         用于自动化验证专辑网格「引力坍缩」过渡在连点/侧边栏抢断下不留残留。

@@ -25,7 +25,7 @@ const settings = useSettingsStore()
 const stats = useStatsStore()
 const hotkeyBindings = useHotkeyBindings()
 
-const emit = defineEmits<{ addFolder: [] }>()
+const emit = defineEmits<{ addFolder: [e?: MouseEvent] }>()
 
 type SectionId = 'appearance' | 'hotkeys' | 'folders' | 'data' | 'about'
 
@@ -63,14 +63,17 @@ const brandLogo = computed(() =>
 const songCount = computed(() => library.songs.length)
 
 /** 主题色预设（首项"默认"在模板单独渲染） */
-const ACCENT_PRESETS = [
-  '#0e9488',
-  '#2f7d5c',
-  '#c2841d',
-  '#c04a6e',
-  '#7a5cd0',
-  '#5b6470',
-  '#9a3b52',
+/* 现代鲜亮 8 色：明度/饱和度跨主题均衡（简单亮度 0.42~0.52，统一白字，
+   离 accent-text 派生阈值 0.62 均 ≥0.10 余量），色相覆盖全环 */
+const ACCENT_PRESETS: { c: string; name: string }[] = [
+  { c: '#5865f2', name: '靛蓝' },
+  { c: '#0284c7', name: '天青' },
+  { c: '#0ca678', name: '翡翠' },
+  { c: '#d97706', name: '琥珀' },
+  { c: '#ef5350', name: '珊瑚' },
+  { c: '#e64980', name: '玫红' },
+  { c: '#8b5cf6', name: '紫罗兰' },
+  { c: '#64748b', name: '石墨' },
 ]
 
 /* ---------- 数据：清空播放统计 ---------- */
@@ -170,15 +173,15 @@ function onRecordKeydown(e: KeyboardEvent) {
               <AppIcon v-if="settings.accentColor === ''" name="check" :size="15" />
             </button>
             <button
-              v-for="c in ACCENT_PRESETS"
-              :key="c"
+              v-for="p in ACCENT_PRESETS"
+              :key="p.c"
               class="accent-swatch"
-              :class="{ active: settings.accentColor === c }"
-              :style="{ background: c }"
-              :title="c"
-              @click="settings.setAccentColor(c)"
+              :class="{ active: settings.accentColor === p.c }"
+              :style="{ background: p.c }"
+              :title="p.name"
+              @click="settings.setAccentColor(p.c)"
             >
-              <AppIcon v-if="settings.accentColor === c" name="check" :size="15" />
+              <AppIcon v-if="settings.accentColor === p.c" name="check" :size="15" />
             </button>
             <label class="accent-custom" title="自定义颜色">
               <input
@@ -237,7 +240,7 @@ function onRecordKeydown(e: KeyboardEvent) {
               <p class="panel-sub">已接入 {{ library.roots.length }} 个文件夹 · 共 {{ songCount }} 首歌曲</p>
             </div>
             <div class="section-actions">
-              <button class="mini-btn" @click="emit('addFolder')"><AppIcon name="plus" :size="14" /> 添加</button>
+              <button class="mini-btn" @click="emit('addFolder', $event)"><AppIcon name="plus" :size="14" /> 添加</button>
               <button
                 class="mini-btn"
                 :disabled="library.scanning || library.roots.length === 0"

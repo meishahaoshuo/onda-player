@@ -227,6 +227,11 @@ export const useLibraryStore = defineStore('library', () => {
             scanProgress.value = p
           },
           scanTask,
+          (batch) => {
+            // 本批新入库歌曲的封面（同专辑共享 coverId，去重）→ 转发给吸入动画订阅者
+            const ids = [...new Set(batch.map((s) => s.coverId).filter(Boolean))] as string[]
+            if (ids.length > 0) scanBatchSink?.(ids)
+          },
         )
         // 扫描中实时并入新数据，列表即时可见
         songs.value = await db.getAllSongs()
@@ -235,6 +240,12 @@ export const useLibraryStore = defineStore('library', () => {
       scanning.value = false
       schedulePrewarm() // 扫描产生的新封面在空闲时补预热
     }
+  }
+
+  /** 扫描批次订阅槽：吸入动画（absorbFlight）经此接收每批新入库的封面 id，store 不依赖动画模块 */
+  let scanBatchSink: ((coverIds: string[]) => void) | null = null
+  function setScanBatchSink(fn: ((coverIds: string[]) => void) | null) {
+    scanBatchSink = fn
   }
 
   function cancelScan() {
@@ -329,6 +340,7 @@ export const useLibraryStore = defineStore('library', () => {
     albumKeyOf,
     artistNameOf,
     rescan,
+    setScanBatchSink,
     cancelScan,
     coverUrl,
     peekCoverUrl,

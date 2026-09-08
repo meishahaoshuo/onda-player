@@ -55,6 +55,7 @@ export async function scanRoot(
   handle: FileSystemDirectoryHandle,
   onProgress: (p: ScanProgress) => void,
   task: ScanTask,
+  onBatch?: (batch: SongRecord[]) => void,
 ): Promise<void> {
   const progress: ScanProgress = {
     phase: 'enumerating',
@@ -78,7 +79,9 @@ export async function scanRoot(
   // 先入库占位，扫描完成的批次再统一落库
   const flushWrites = async () => {
     if (pendingWrites.length === 0) return
-    await db.putSongs([...pendingWrites])
+    const batch = [...pendingWrites]
+    await db.putSongs(batch)
+    onBatch?.(batch) // 本批新入库的歌曲（skipped 的不在此列），供吸入动画等订阅
     pendingWrites.length = 0
   }
 
