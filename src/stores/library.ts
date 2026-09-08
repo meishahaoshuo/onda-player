@@ -214,6 +214,9 @@ export const useLibraryStore = defineStore('library', () => {
     if (scanning.value) return
     scanning.value = true
     scanTask = { cancelled: false }
+    // 重新扫描也触发吸入动画：封面取自全部文件夹的曲库（洗牌抽样），
+    // 与「新入库批次」走同一 sink，flownCoverIds 去重保证不重复起飞
+    emitRescanShow()
     try {
       for (const root of roots.value) {
         if (scanTask.cancelled) break
@@ -246,6 +249,25 @@ export const useLibraryStore = defineStore('library', () => {
   let scanBatchSink: ((coverIds: string[]) => void) | null = null
   function setScanBatchSink(fn: ((coverIds: string[]) => void) | null) {
     scanBatchSink = fn
+  }
+
+  /**
+   * 重扫演出：把全库封面洗牌抽样成最多 4 批投喂给吸入动画。
+   * 批间节奏由 absorbFlight 的队列泵控制（BATCH_GAP + 在飞等待），
+   * 这里一次性入队即可；setTimeout(0) 等 scanning watcher 先清场，避免旧
+   * flownCoverIds 残留误去重。重扫结束时未消费的批也会继续飞完再收漩涡。
+   */
+  function emitRescanShow() {
+    const ids = [...new Set(songs.value.map((s) => s.coverId).filter(Boolean))] as string[]
+    if (ids.length === 0) return
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[ids[i], ids[j]] = [ids[j], ids[i]]
+    }
+    window.setTimeout(() => {
+      const batches = Math.min(4, Math.ceil(ids.length / 6))
+      for (let b = 0; b < batches; b++) scanBatchSink?.(ids.slice(b * 6, b * 6 + 6))
+    }, 0)
   }
 
   function cancelScan() {

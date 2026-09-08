@@ -12,7 +12,6 @@ import {
   useHotkeyBindings,
   type HotkeyAction,
 } from '@/services/hotkeys'
-import { ABSORB_STYLES, previewAbsorbStyle, type AbsorbStyle } from '@/services/absorbFlight'
 import type { ThemeMode } from '@/types'
 import AppIcon from '@/components/AppIcon.vue'
 import AppSwitch from '@/components/AppSwitch.vue'
@@ -117,17 +116,6 @@ function onRecordKeydown(e: KeyboardEvent) {
   setBinding(recording.value!, combo)
   stopRecording()
 }
-
-/* ---------- 导入动画样式：选择 + 即时预览 ---------- */
-let previewSeq = 0
-async function pickAbsorbStyle(key: AbsorbStyle) {
-  settings.setAbsorbStyle(key)
-  const seq = ++previewSeq
-  // 等上一次的预览收尾，避免叠加
-  await new Promise<void>((r) => setTimeout(r, 180))
-  if (seq !== previewSeq) return
-  void previewAbsorbStyle(key)
-}
 </script>
 
 <template>
@@ -213,79 +201,6 @@ async function pickAbsorbStyle(key: AbsorbStyle) {
               <span class="opt-desc">内容区背景跟随当前播放封面的主色泛起淡淡光晕</span>
             </div>
             <AppSwitch :model-value="settings.ambientGlow" @update:model-value="settings.setAmbientGlow" />
-          </div>
-
-          <!-- 导入动画 -->
-          <p class="panel-sub accent-heading">导入动画</p>
-          <p class="absorb-hint">添加音乐文件夹时，封面随水流入漩涡的样式。点击即可预览。</p>
-          <div class="absorb-grid">
-            <button
-              v-for="s in ABSORB_STYLES"
-              :key="s.key"
-              class="absorb-card"
-              :class="{ active: settings.absorbStyle === s.key }"
-              :title="s.desc"
-              @click="pickAbsorbStyle(s.key)"
-            >
-              <span class="absorb-preview" :data-style="s.key" aria-hidden="true">
-                <svg viewBox="0 0 56 56" width="100%" height="100%">
-                  <defs>
-                    <radialGradient :id="`ap-${s.key}`" cx="50%" cy="50%" r="50%">
-                      <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.85" />
-                      <stop offset="55%" stop-color="var(--accent)" stop-opacity="0.32" />
-                      <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
-                    </radialGradient>
-                  </defs>
-                  <!-- 通用光晕底 -->
-                  <circle cx="28" cy="28" r="26" :fill="`url(#ap-${s.key})`" />
-                  <!-- 样式专属水纹（与 .absorb-vortex 各 builder 对齐的小尺寸版） -->
-                  <g v-if="s.key === 'drain'" fill="none" stroke="var(--accent)" stroke-linecap="round">
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke-width="1.4" opacity="0.55" />
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke-width="0.9" opacity="0.32" transform="rotate(180 28 28)" />
-                    <circle cx="28" cy="28" r="8" fill="var(--accent)" opacity="0.7" />
-                    <circle cx="28" cy="28" r="7" fill="#05070f" opacity="0.6" />
-                  </g>
-                  <g v-else-if="s.key === 'streamline'" fill="none" stroke="var(--accent)" stroke-linecap="round">
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke-width="1.1" opacity="0.7" />
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke-width="1.1" opacity="0.5" transform="rotate(120 28 28)" />
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke-width="1.1" opacity="0.35" transform="rotate(240 28 28)" />
-                  </g>
-                  <g v-else-if="s.key === 'ripple'" fill="none" stroke="var(--accent)" stroke-linecap="round">
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke-width="1.6" opacity="0.55" />
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke-width="1.6" opacity="0.55" transform="rotate(180 28 28)" />
-                    <circle cx="28" cy="28" r="14" fill="none" stroke="var(--accent)" stroke-width="0.7" opacity="0.45" />
-                    <circle cx="28" cy="28" r="9" fill="none" stroke="var(--accent)" stroke-width="0.7" opacity="0.35" />
-                    <circle cx="28" cy="28" r="6" fill="var(--accent)" opacity="0.5" />
-                  </g>
-                  <g v-else-if="s.key === 'band'" fill="none" stroke-linecap="round">
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke="var(--accent)" stroke-width="5" opacity="0.85" />
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke="#ffffff" stroke-width="2.6" opacity="0.55" />
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke="var(--accent)" stroke-width="5" opacity="0.85" transform="rotate(180 28 28)" />
-                    <circle cx="28" cy="28" r="7" fill="var(--accent)" opacity="0.7" />
-                  </g>
-                  <g v-else-if="s.key === 'glass'" fill="none" stroke-linecap="round">
-                    <circle cx="28" cy="28" r="22" fill="rgba(255,255,255,0.18)" />
-                    <circle cx="28" cy="28" r="22" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="0.6" />
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke="#ffffff" stroke-width="1.2" opacity="0.7" />
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke="#ffffff" stroke-width="1.2" opacity="0.7" transform="rotate(180 28 28)" />
-                    <circle cx="28" cy="28" r="6" fill="var(--accent)" opacity="0.55" />
-                  </g>
-                  <g v-else-if="s.key === 'ink'" fill="none" stroke="#7b88b3" stroke-linecap="round">
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke-width="3" opacity="0.22" />
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke-width="1.4" opacity="0.5" />
-                    <path d="M30 28 L31 31 L29.1 33.5 L26 35 L23 34 L21 31 L21.5 27.5 L24 24 L28 22.5 L32 23.5 L34.5 26.5" stroke-width="0.7" opacity="0.8" transform="rotate(150 28 28)" />
-                    <circle cx="28" cy="28" r="7" fill="var(--accent)" opacity="0.45" />
-                  </g>
-                </svg>
-              </span>
-              <span class="absorb-meta">
-                <span class="absorb-name">{{ s.name }}</span>
-                <span class="absorb-desc">{{ s.desc }}</span>
-              </span>
-              <span v-if="settings.absorbStyle === s.key" class="absorb-check">
-                <AppIcon name="check" :size="14" />
-              </span>
-            </button>
           </div>
         </section>
 
@@ -1052,106 +967,5 @@ async function pickAbsorbStyle(key: AbsorbStyle) {
   cursor: pointer;
 }
 
-/* ---------- 导入动画选择器 ---------- */
-.absorb-hint {
-  margin-top: 8px;
-  font-size: 11px;
-  color: var(--text-tertiary);
-  line-height: 1.5;
-}
-
-.absorb-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.absorb-card {
-  position: relative;
-  display: grid;
-  grid-template-columns: 44px 1fr;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--radius-item);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-hover);
-  text-align: left;
-  transition: border-color var(--dur-fast) var(--ease-out),
-    background var(--dur-fast) var(--ease-out),
-    transform var(--dur-fast) var(--ease-spring);
-}
-
-.absorb-card:hover {
-  border-color: var(--accent);
-  background: var(--bg-active);
-  transform: translateY(-1px);
-}
-
-.absorb-card.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.absorb-preview {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--accent) 14%, transparent) 0%,
-    transparent 70%
-  );
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.absorb-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.absorb-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.absorb-desc {
-  font-size: 10.5px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.absorb-check {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-text);
-}
-
-@media (max-width: 720px) {
-  .absorb-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
 
 </style>

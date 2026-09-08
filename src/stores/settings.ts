@@ -1,14 +1,12 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watchEffect } from 'vue'
 import type { ThemeMode } from '@/types'
-import type { AbsorbStyle } from '@/services/absorbFlight'
 
 const STORAGE_KEY = 'settings.themeMode'
 const LYRIC_FS_KEY = 'settings.lyricFontSize'
 const LYRIC_FW_KEY = 'settings.lyricFontWeight'
 const LYRIC_ALIGN_KEY = 'settings.lyricAlign'
 const LYRIC_BLUR_KEY = 'settings.lyricBlur'
-const ABSORB_STYLE_KEY = 'settings.absorbStyle'
 const media = window.matchMedia('(prefers-color-scheme: dark)')
 
 function loadMode(): ThemeMode {
@@ -83,12 +81,8 @@ function loadAmbient(): boolean {
   return localStorage.getItem(AMBIENT_KEY) !== '0'
 }
 
-/** 文件夹扫描批次导入动画样式：默认俯视排水口 */
-const VALID_ABSORB_STYLES: AbsorbStyle[] = ['drain', 'streamline', 'ripple', 'band', 'glass', 'ink']
-function loadAbsorbStyle(): AbsorbStyle {
-  const raw = localStorage.getItem(ABSORB_STYLE_KEY) as AbsorbStyle | null
-  return raw && VALID_ABSORB_STYLES.includes(raw) ? raw : 'drain'
-}
+// 遗留清理：导入动画样式选择器已下线（固定液态玻璃），清掉旧键
+localStorage.removeItem('settings.absorbStyle')
 
 /**
  * 主题设置：跟随系统 / 深色 / 浅色，切换即时生效并持久化。
@@ -108,8 +102,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const accentColor = ref(loadAccent())
   /** 封面氛围光：主内容区背景跟随当前播放封面取色发光 */
   const ambientGlow = ref(loadAmbient())
-  /** 文件夹扫描批次导入动画样式（俯视排水口 / 极简流线 / 涟漪漩涡 / 双层水带 / 液态玻璃 / 水墨漩涡） */
-  const absorbStyle = ref<AbsorbStyle>(loadAbsorbStyle())
 
   // 实际生效的主题（system 模式下随系统实时变化）
   const resolvedTheme = ref<'dark' | 'light'>(media.matches ? 'dark' : 'light')
@@ -202,12 +194,6 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(AMBIENT_KEY, v ? '1' : '0')
   }
 
-  function setAbsorbStyle(s: AbsorbStyle) {
-    const v = VALID_ABSORB_STYLES.includes(s) ? s : 'drain'
-    absorbStyle.value = v
-    localStorage.setItem(ABSORB_STYLE_KEY, v)
-  }
-
   return {
     themeMode,
     resolvedTheme,
@@ -229,7 +215,5 @@ export const useSettingsStore = defineStore('settings', () => {
     setAccentColor,
     ambientGlow,
     setAmbientGlow,
-    absorbStyle,
-    setAbsorbStyle,
   }
 })

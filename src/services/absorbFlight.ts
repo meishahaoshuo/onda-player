@@ -1,11 +1,10 @@
 import { watch } from 'vue'
 import { useLibraryStore } from '@/stores/library'
-import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 
 /**
- * 添加文件夹时「封面随水流漩涡卷入播放器」动画：
- * 扫描开始后，视口正中心浮现一个漩涡（六种样式可选，设置里可切换并预览）；
+ * 「封面随液态玻璃漩涡卷入播放器」动画（添加文件夹 / 重新扫描时触发）：
+ * 扫描开始后，视口正中心浮现液态玻璃漩涡（半透水膜 + 白色平滑螺旋 + 深核）；
  * 每落库一批歌，对应封面（同专辑去重）从漩涡四周的随机环带上沿极坐标螺旋
  * 向心汇聚（与水纹同向，像被水流带走），全部卷入后漩涡抽空消失。
  *
@@ -13,25 +12,13 @@ import { useUiStore } from '@/stores/ui'
  * 歌词页跳过 / 后台标签跳过；批与张双重限流防大库雪崩。
  */
 
-export type AbsorbStyle = 'drain' | 'streamline' | 'ripple' | 'band' | 'glass' | 'ink'
-
-/** 样式清单（设置页展示与预览用） */
-export const ABSORB_STYLES: { key: AbsorbStyle; name: string; desc: string }[] = [
-  { key: 'drain', name: '俯视排水口', desc: '漏斗口 + 螺旋水纹' },
-  { key: 'streamline', name: '极简流线', desc: '三条细流线，最克制' },
-  { key: 'ripple', name: '涟漪漩涡', desc: '螺旋 + 内收涟漪环' },
-  { key: 'band', name: '双层水带', desc: '粗水臂，水量感强' },
-  { key: 'glass', name: '液态玻璃', desc: '半透水膜 + 高光' },
-  { key: 'ink', name: '水墨漩涡', desc: '墨色晕染，呼应澜' },
-]
-
 const FLIGHT_MS = 860
 const STAGGER_MS = 130
 const JITTER_MS = 40
 /** 批间等待：避免上一批未消失就叠下一批造成视觉拥挤与掉帧 */
 const BATCH_GAP = 420
 /** 飞行封面边长 */
-const START_SIZE = 104
+const START_SIZE = 128
 /** 每批最多起飞张数 */
 const BATCH_CAP = 6
 /** 单次扫描会话累计起飞上限（大库防雪崩） */
@@ -41,7 +28,7 @@ const LAND_AT = 0.72
 /** coverUrl 等待上限：动画不拖扫描节奏 */
 const SOURCE_TIMEOUT = 300
 /** 漩涡容器边长（视口正中心） */
-const BH_SIZE = 176
+const BH_SIZE = 216
 
 function reduced(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -49,15 +36,30 @@ function reduced(): boolean {
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
-/* ================= 漩涡样式构建 ================= */
+/* ================= 漩涡构建（液态玻璃） ================= */
 
-/** 阿基米德螺旋采样点（124 画布，中心 62，2 圈） */
-const SPIRAL_D =
-  'M68 62 L69 66 L67.1 70.8 L62 74.3 L54.8 74.4 L47.8 70.2 L43.5 62 L44.2 51.7 ' +
-  'L50.7 42.4 L62 37.2 L75.4 38.7 L87.1 47.5 L93 62 L90.7 78.6 L79.6 92.5 L62 99.3 ' +
-  'L42.3 96.1 L26.1 82.7 L18.5 62 L22.5 39.2 L38.1 20.7 L62 12.2 L87.9 17.1 L108.7 35 L118 62'
+/**
+ * 平滑阿基米德螺旋路径：密采样（170 点）代替手绘折线，
+ * 肉眼完全圆滑无棱角。画布 124×124，中心 62。
+ */
+function spiralPath(turns = 2.05, points = 170): string {
+  const cx = 62
+  const cy = 62
+  const rStart = 4
+  const rEnd = 57
+  let d = ''
+  for (let i = 0; i <= points; i++) {
+    const t = i / points
+    const a = t * turns * Math.PI * 2
+    const r = rStart + (rEnd - rStart) * t
+    const x = cx + Math.cos(a) * r
+    const y = cy + Math.sin(a) * r
+    d += (i === 0 ? 'M' : 'L') + x.toFixed(2) + ' ' + y.toFixed(2)
+  }
+  return d
+}
 
-let gradientSeq = 0
+const SPIRAL_D = spiralPath()
 
 function layer(style: Record<string, string>): HTMLElement {
   const el = document.createElement('div')
@@ -65,32 +67,19 @@ function layer(style: Record<string, string>): HTMLElement {
   return el
 }
 
-/** 螺旋水纹 SVG：paths 描述每条水纹的粗细/透明度/旋转角 */
-function spiral(opts: {
-  arms: { w: number; op: number; rot?: number }[]
-  color?: string
-  gradient?: boolean
-}): HTMLElement {
-  const box = document.createElement('div')
-  Object.assign(box.style, {
+/** 白色平滑螺旋水纹（三条 120° 对称臂，粗细一致、透明度递减） */
+function spiralLayer(): HTMLElement {
+  const box = layer({
     position: 'absolute',
     inset: '0',
     willChange: 'transform',
-  } as CSSStyleDeclaration)
-  const color = opts.color ?? 'var(--accent)'
-  let defs = ''
-  let stroke = color
-  if (opts.gradient) {
-    const id = `absArm${++gradientSeq}`
-    defs =
-      `<defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">` +
-      `<stop offset="0%" style="stop-color:#ffffff;stop-opacity:.9"/>` +
-      `<stop offset="55%" style="stop-color:${color}"/>` +
-      `<stop offset="100%" style="stop-color:${color};stop-opacity:.15"/>` +
-      `</linearGradient></defs>`
-    stroke = `url(#${id})`
-  }
-  const paths = opts.arms
+  })
+  const arms = [
+    { w: 2.2, op: 0.68, rot: 0 },
+    { w: 2.2, op: 0.52, rot: 120 },
+    { w: 2.2, op: 0.36, rot: 240 },
+  ]
+  const paths = arms
     .map(
       (a) =>
         `<path d="${SPIRAL_D}" stroke-width="${a.w}" opacity="${a.op}"${
@@ -99,199 +88,9 @@ function spiral(opts: {
     )
     .join('')
   box.innerHTML =
-    `<svg viewBox="0 0 124 124" width="100%" height="100%" aria-hidden="true">${defs}` +
-    `<g fill="none" stroke-linecap="round" style="stroke:${stroke}">${paths}</g></svg>`
+    `<svg viewBox="0 0 124 124" width="100%" height="100%" aria-hidden="true">` +
+    `<g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">${paths}</g></svg>`
   return box
-}
-
-interface VortexBuilt {
-  layers: HTMLElement[]
-  /** 旋转层（顺时针为默认，与水/封面同向） */
-  spin: { el: HTMLElement; duration: number }[]
-  halo?: HTMLElement
-  /** 内收涟漪环（ripple 样式专用） */
-  inhale?: HTMLElement[]
-}
-
-const BUILDERS: Record<AbsorbStyle, () => VortexBuilt> = {
-  /* A 俯视排水口：深色漏斗 + 三条水纹 + 口沿 + 固定高光 */
-  drain: () => ({
-    halo: layer({
-      position: 'absolute',
-      inset: '-80px',
-      borderRadius: '50%',
-      background:
-        'radial-gradient(closest-side, color-mix(in srgb, var(--accent) 20%, transparent) 0%, color-mix(in srgb, var(--accent) 10%, transparent) 36%, color-mix(in srgb, var(--accent) 4%, transparent) 60%, transparent 76%)',
-      willChange: 'transform, opacity',
-    }),
-    layers: [
-      spiral({ arms: [{ w: 1.8, op: 0.5 }, { w: 1.3, op: 0.34, rot: 180 }, { w: 1, op: 0.2, rot: 150 }] }),
-      layer({
-        position: 'absolute',
-        inset: '44px',
-        borderRadius: '50%',
-        background:
-          'radial-gradient(circle, color-mix(in srgb, var(--accent) 78%, #000000) 0%, color-mix(in srgb, var(--accent) 34%, #05070f) 58%, color-mix(in srgb, var(--accent) 12%, #05070f) 82%, transparent 100%)',
-      }),
-      layer({
-        position: 'absolute',
-        inset: '41px',
-        borderRadius: '50%',
-        background:
-          'radial-gradient(closest-side, transparent 60%, color-mix(in srgb, #ffffff 42%, var(--accent)) 70%, transparent 80%)',
-      }),
-      layer({
-        position: 'absolute',
-        inset: '44px',
-        borderRadius: '50%',
-        background: 'linear-gradient(200deg, rgba(255, 255, 255, 0.26), transparent 46%)',
-      }),
-    ],
-    spin: [],
-  }),
-
-  /* B 极简流线：三条细流线，无实体核 */
-  streamline: () => ({
-    halo: layer({
-      position: 'absolute',
-      inset: '-72px',
-      borderRadius: '50%',
-      background:
-        'radial-gradient(closest-side, color-mix(in srgb, var(--accent) 12%, transparent) 0%, transparent 70%)',
-      willChange: 'transform, opacity',
-    }),
-    layers: [
-      spiral({ arms: [{ w: 1.4, op: 0.7 }, { w: 1.4, op: 0.5, rot: 120 }, { w: 1.4, op: 0.35, rot: 240 }] }),
-      layer({
-        position: 'absolute',
-        inset: '56px',
-        borderRadius: '50%',
-        background:
-          'radial-gradient(circle, color-mix(in srgb, var(--accent) 26%, transparent) 0%, transparent 76%)',
-      }),
-    ],
-    spin: [],
-  }),
-
-  /* C 涟漪漩涡：螺旋 + 向内收缩的涟漪环（与封面卷入同向） */
-  ripple: () => ({
-    halo: layer({
-      position: 'absolute',
-      inset: '-78px',
-      borderRadius: '50%',
-      background:
-        'radial-gradient(closest-side, color-mix(in srgb, var(--accent) 16%, transparent) 0%, transparent 72%)',
-      willChange: 'transform, opacity',
-    }),
-    layers: [
-      spiral({ arms: [{ w: 2, op: 0.55 }, { w: 2, op: 0.55, rot: 180 }] }),
-      layer({
-        position: 'absolute',
-        inset: '50px',
-        borderRadius: '50%',
-        background:
-          'radial-gradient(circle, color-mix(in srgb, var(--accent) 72%, #000000) 0%, color-mix(in srgb, var(--accent) 28%, #05070f) 70%, transparent 100%)',
-      }),
-    ],
-    spin: [],
-    inhale: [0, 1.15, 2.3].map((delay) =>
-      layer({
-        position: 'absolute',
-        inset: '10px',
-        borderRadius: '50%',
-        border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)',
-        opacity: '0',
-        willChange: 'transform, opacity',
-        animation: `absorb-inhale 3.4s ${delay}s ease-in infinite`,
-      }),
-    ),
-  }),
-
-  /* D 双层水带：两条粗渐变水臂 */
-  band: () => ({
-    halo: layer({
-      position: 'absolute',
-      inset: '-78px',
-      borderRadius: '50%',
-      background:
-        'radial-gradient(closest-side, color-mix(in srgb, var(--accent) 15%, transparent) 0%, transparent 70%)',
-      willChange: 'transform, opacity',
-    }),
-    layers: [
-      spiral({ arms: [{ w: 8, op: 0.85 }, { w: 8, op: 0.85, rot: 180 }], gradient: true }),
-      layer({
-        position: 'absolute',
-        inset: '46px',
-        borderRadius: '50%',
-        background:
-          'radial-gradient(circle, color-mix(in srgb, var(--accent) 82%, #000000) 0%, color-mix(in srgb, var(--accent) 30%, #05070f) 66%, transparent 100%)',
-      }),
-    ],
-    spin: [],
-  }),
-
-  /* E 液态玻璃：半透明水膜 + 白色细螺旋 + 小深核 */
-  glass: () => ({
-    halo: layer({
-      position: 'absolute',
-      inset: '-70px',
-      borderRadius: '50%',
-      background:
-        'radial-gradient(closest-side, color-mix(in srgb, var(--accent) 10%, transparent) 0%, transparent 72%)',
-      willChange: 'transform, opacity',
-    }),
-    layers: [
-      layer({
-        position: 'absolute',
-        inset: '6px',
-        borderRadius: '50%',
-        background:
-          'radial-gradient(closest-side, color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,.5)) 0%, color-mix(in srgb, var(--accent) 10%, transparent) 62%, transparent 78%)',
-        boxShadow: 'inset 0 1px 1px color-mix(in srgb, #ffffff 70%, transparent)',
-      }),
-      spiral({ arms: [{ w: 1.6, op: 0.6 }, { w: 1.6, op: 0.6, rot: 180 }], color: '#ffffff' }),
-      layer({
-        position: 'absolute',
-        inset: '52px',
-        borderRadius: '50%',
-        background:
-          'radial-gradient(circle, color-mix(in srgb, var(--accent) 70%, #05070f) 0%, transparent 74%)',
-      }),
-      layer({
-        position: 'absolute',
-        inset: '6px',
-        borderRadius: '50%',
-        background: 'linear-gradient(190deg, rgba(255, 255, 255, 0.3), transparent 38%)',
-      }),
-    ],
-    spin: [],
-  }),
-
-  /* F 水墨漩涡：三层墨色晕染（由淡到浓） */
-  ink: () => ({
-    halo: layer({
-      position: 'absolute',
-      inset: '-76px',
-      borderRadius: '50%',
-      background:
-        'radial-gradient(closest-side, color-mix(in srgb, var(--accent) 12%, transparent) 0%, transparent 68%)',
-      willChange: 'transform, opacity',
-    }),
-    layers: [
-      spiral({
-        arms: [{ w: 6, op: 0.18 }, { w: 2.5, op: 0.5 }, { w: 1.2, op: 0.8, rot: 150 }],
-        color: 'color-mix(in srgb, var(--accent) 45%, #1b2340)',
-      }),
-      layer({
-        position: 'absolute',
-        inset: '48px',
-        borderRadius: '50%',
-        background:
-          'radial-gradient(circle, color-mix(in srgb, var(--accent) 55%, #05070f) 0%, transparent 72%)',
-      }),
-    ],
-    spin: [],
-  }),
 }
 
 /* ================= 漩涡生命周期 ================= */
@@ -300,24 +99,12 @@ let vortex: HTMLElement | null = null
 let vortexSwirl: HTMLElement | null = null
 let bhCollapsing = false
 
-/** 一次性注入涟漪内收关键帧（ripple 样式用） */
-function ensureKeyframes(): void {
-  if (document.getElementById('absorb-kf')) return
-  const st = document.createElement('style')
-  st.id = 'absorb-kf'
-  st.textContent =
-    '@keyframes absorb-inhale{0%{transform:scale(1);opacity:0}25%{opacity:.7}100%{transform:scale(.3);opacity:0}}'
-  document.head.appendChild(st)
-}
-
-function ensureVortex(style: AbsorbStyle = useSettingsStore().absorbStyle): HTMLElement | null {
+/** 液态玻璃漩涡：水光 halo → 半透水膜 → 白螺旋 → 深核 → 固定高光 */
+function ensureVortex(): HTMLElement | null {
   if (bhCollapsing) return null
   if (vortex) return vortex
-  ensureKeyframes()
-  const built = BUILDERS[style]()
   const el = document.createElement('div')
   el.className = 'absorb-vortex'
-  el.dataset.style = style
   Object.assign(el.style, {
     position: 'fixed',
     left: `calc(50% - ${BH_SIZE / 2}px)`,
@@ -327,13 +114,42 @@ function ensureVortex(style: AbsorbStyle = useSettingsStore().absorbStyle): HTML
     zIndex: '45', // 低于歌词页（50）：歌词页打开时被自然遮盖
     pointerEvents: 'none',
   } as CSSStyleDeclaration)
-  const all = built.halo ? [built.halo, ...built.layers] : built.layers
-  if (built.inhale) all.push(...built.inhale)
-  el.append(...all)
+
+  const halo = layer({
+    position: 'absolute',
+    inset: '-88px',
+    borderRadius: '50%',
+    background:
+      'radial-gradient(closest-side, color-mix(in srgb, var(--accent) 12%, transparent) 0%, transparent 72%)',
+    willChange: 'transform, opacity',
+  })
+  const film = layer({
+    position: 'absolute',
+    inset: '8px',
+    borderRadius: '50%',
+    background:
+      'radial-gradient(closest-side, color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,.5)) 0%, color-mix(in srgb, var(--accent) 10%, transparent) 62%, transparent 78%)',
+    boxShadow: 'inset 0 1px 1px color-mix(in srgb, #ffffff 70%, transparent)',
+  })
+  const spiral = spiralLayer()
+  const core = layer({
+    position: 'absolute',
+    inset: '64px',
+    borderRadius: '50%',
+    background:
+      'radial-gradient(circle, color-mix(in srgb, var(--accent) 70%, #05070f) 0%, transparent 74%)',
+  })
+  const gloss = layer({
+    position: 'absolute',
+    inset: '8px',
+    borderRadius: '50%',
+    background: 'linear-gradient(190deg, rgba(255, 255, 255, 0.3), transparent 38%)',
+  })
+
+  el.append(halo, film, spiral, core, gloss)
   document.body.appendChild(el)
   vortex = el
-  // 第一个带螺旋 SVG 的层作为水纹（用于坍缩时加速旋转）
-  vortexSwirl = built.layers.find((l) => l.querySelector('svg')) ?? null
+  vortexSwirl = spiral
 
   el.animate(
     [
@@ -342,7 +158,7 @@ function ensureVortex(style: AbsorbStyle = useSettingsStore().absorbStyle): HTML
     ],
     { duration: 500, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', fill: 'both' },
   )
-  built.halo?.animate(
+  halo.animate(
     [
       { opacity: 0.6, transform: 'scale(1)' },
       { opacity: 1, transform: 'scale(1.06)' },
@@ -351,7 +167,7 @@ function ensureVortex(style: AbsorbStyle = useSettingsStore().absorbStyle): HTML
     { duration: 4600, easing: 'ease-in-out', iterations: Infinity },
   )
   vortexSwirl?.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], {
-    duration: 14000,
+    duration: 16000,
     easing: 'linear',
     iterations: Infinity,
   })
@@ -428,7 +244,6 @@ function reportDebug(): void {
     sessionFlights,
     flown: flownCoverIds.size,
     vortex: !!vortex,
-    style: vortex?.dataset.style ?? null,
   })
 }
 
@@ -506,14 +321,14 @@ function pickRingOrigin(c: { x: number; y: number }): { x: number; y: number } {
   const clampY = (v: number) => Math.min(window.innerHeight - margin, Math.max(margin, v))
   const θ = Math.random() * Math.PI * 2
   for (let i = 0; i < 8; i++) {
-    const r = 280 + Math.random() * 190
+    const r = 320 + Math.random() * 220
     const x = c.x + Math.cos(θ + (Math.random() - 0.5) * 0.5) * r
     const y = c.y + Math.sin(θ + (Math.random() - 0.5) * 0.5) * r
     if (x > margin && x < window.innerWidth - margin && y > margin && y < window.innerHeight - margin) {
       return { x, y }
     }
   }
-  const r = 150 + Math.random() * 110
+  const r = 170 + Math.random() * 120
   return { x: clampX(c.x + Math.cos(θ) * r), y: clampY(c.y + Math.sin(θ) * r) }
 }
 
@@ -530,7 +345,7 @@ function flyOne(src: string | null, isLast: boolean): void {
     top: `${from.y - START_SIZE / 2}px`,
     width: `${START_SIZE}px`,
     height: `${START_SIZE}px`,
-    borderRadius: '10px',
+    borderRadius: '12px',
     zIndex: '70',
     pointerEvents: 'none',
     willChange: 'transform, opacity',
@@ -548,7 +363,7 @@ function flyOne(src: string | null, isLast: boolean): void {
     } as CSSStyleDeclaration)
     el.appendChild(img)
   } else {
-    // 无封面（预览且曲库为空）：accent 渐变色块代替
+    // 无封面：accent 渐变色块代替
     el.style.background =
       'linear-gradient(145deg, color-mix(in srgb, var(--accent) 85%, #ffffff), var(--accent))'
   }
@@ -599,41 +414,6 @@ function flyOne(src: string | null, isLast: boolean): void {
   window.setTimeout(cleanup, Math.round(flightMs * 0.92))
 }
 
-/* ================= 设置页预览 ================= */
-
-/** 预览某一样式：直接演出一次「浮现 → 几张封面卷入 → 抽空消失」，无需扫描 */
-export async function previewAbsorbStyle(style: AbsorbStyle): Promise<void> {
-  if (reduced() || document.hidden) return
-  const ui = useUiStore()
-  if (ui.lyricsOpen || ui.dolly !== 'idle') return
-  if (vortex) {
-    // 已有演出（扫描或上一次预览）：立即收掉，避免叠加
-    collapseVortex()
-    await wait(200)
-  }
-  if (!ensureVortex(style)) return
-
-  // 素材：曲库里已有的封面（最多 4 张），没有就用色块
-  const lib = useLibraryStore()
-  const ids = [...new Set(lib.songs.map((s) => s.coverId).filter(Boolean))].slice(0, 4) as string[]
-  const srcs = await Promise.all(
-    (ids.length ? ids : [null, null, null]).map((id) =>
-      id
-        ? Promise.race([
-            Promise.resolve(lib.peekCoverUrl(id) ?? lib.coverUrl(id).catch(() => null)),
-            wait(SOURCE_TIMEOUT).then(() => null),
-          ])
-        : Promise.resolve(null),
-    ),
-  )
-  const last = srcs.length - 1
-  srcs.forEach((src, i) => {
-    window.setTimeout(() => flyOne(src, i === last), i * 150)
-  })
-  await waitUntilIdle(flightMs + 900)
-  collapseVortex()
-}
-
 /** App onMounted 调用一次：订阅扫描批次 + 会话收尾 */
 export function installAbsorbFlight(): void {
   if (sinkInstalled) return
@@ -651,14 +431,17 @@ export function installAbsorbFlight(): void {
         return
       }
       if (was && !on) {
-        queue = []
         sessionFlights = 0
         sessionEnding = true
+        // 不清 queue：重扫演出/慢落库的批要继续飞完，泵抽空后漩涡才收
         if (!pumping) {
-          void waitUntilIdle().then(() => {
-            collapseVortex()
-            sessionEnding = false
-          })
+          if (queue.length > 0) void pump()
+          else {
+            void waitUntilIdle().then(() => {
+              collapseVortex()
+              sessionEnding = false
+            })
+          }
         }
       }
     },
