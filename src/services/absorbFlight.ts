@@ -31,7 +31,7 @@ const JITTER_MS = 40
 /** 批间等待：避免上一批未消失就叠下一批造成视觉拥挤与掉帧 */
 const BATCH_GAP = 420
 /** 飞行封面边长 */
-const START_SIZE = 72
+const START_SIZE = 104
 /** 每批最多起飞张数 */
 const BATCH_CAP = 6
 /** 单次扫描会话累计起飞上限（大库防雪崩） */
