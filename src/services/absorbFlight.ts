@@ -17,7 +17,7 @@ const FLIGHT_MS = 900
 const STAGGER_MS = 130
 const JITTER_MS = 40
 /** 飞行封面边长 */
-const START_SIZE = 40
+const START_SIZE = 72
 /** 每批最多起飞张数 */
 const BATCH_CAP = 6
 /** 单次扫描会话累计起飞上限（大库防雪崩，超出只做脉动提示） */
@@ -27,6 +27,8 @@ const LAND_AT = 0.72
 const BLUR_MAX = 2.5
 /** coverUrl 等待上限：动画不拖扫描节奏 */
 const SOURCE_TIMEOUT = 300
+/** 黑洞容器边长（视口正中心） */
+const BH_SIZE = 176
 
 function reduced(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -40,65 +42,114 @@ let bh: HTMLElement | null = null
 let bhDisk: HTMLElement | null = null
 let bhCollapsing = false
 
-/** 扫描会话内创建黑洞：播放栏上方中央，accent 色吸积盘旋转 + 暗核 */
+/** 扫描会话内创建黑洞：视口正中心，多层吸积盘 + 光子环 + 事件视界 */
 function ensureBlackHole(): HTMLElement | null {
   if (bhCollapsing) return null
   if (bh) return bh
-  const bar = document.querySelector<HTMLElement>('.player-bar')
-  if (!bar) return null
   const el = document.createElement('div')
   el.className = 'absorb-blackhole'
   Object.assign(el.style, {
     position: 'fixed',
-    left: '50%',
-    bottom: `${Math.round(bar.getBoundingClientRect().height + 28)}px`,
-    width: '76px',
-    height: '76px',
-    marginLeft: '-38px',
-    zIndex: '45', // 低于歌词页（50）：歌词页打开时黑洞被自然盖住
+    left: `calc(50% - ${BH_SIZE / 2}px)`,
+    top: `calc(50% - ${BH_SIZE / 2}px)`,
+    width: `${BH_SIZE}px`,
+    height: `${BH_SIZE}px`,
+    zIndex: '45', // 低于歌词页（50）：歌词页打开时黑洞被自然遮盖
     pointerEvents: 'none',
   } as CSSStyleDeclaration)
 
-  // 吸积盘：accent 色 conic 渐变环，无限旋转
-  const disk = document.createElement('div')
-  Object.assign(disk.style, {
+  /* 外层柔光晕：呼吸的大范围 accent 弥散 */
+  const halo = document.createElement('div')
+  Object.assign(halo.style, {
     position: 'absolute',
-    inset: '-9px',
+    inset: '-72px',
     borderRadius: '50%',
     background:
-      'conic-gradient(from 0deg, transparent 0deg, color-mix(in srgb, var(--accent) 62%, transparent) 42deg, transparent 100deg, color-mix(in srgb, var(--accent) 26%, transparent) 175deg, transparent 235deg, color-mix(in srgb, var(--accent) 48%, transparent) 305deg, transparent 360deg)',
-    filter: 'blur(3px)',
-    maskImage: 'radial-gradient(closest-side, transparent 32%, #000 56%, #000 76%, transparent 100%)',
+      'radial-gradient(closest-side, color-mix(in srgb, var(--accent) 20%, transparent) 0%, color-mix(in srgb, var(--accent) 8%, transparent) 46%, transparent 72%)',
+    filter: 'blur(6px)',
+  } as CSSStyleDeclaration)
+
+  /* 外吸积盘：多段 conic，慢速正转 */
+  const diskOuter = document.createElement('div')
+  Object.assign(diskOuter.style, {
+    position: 'absolute',
+    inset: '0',
+    borderRadius: '50%',
+    background:
+      'conic-gradient(from 20deg, transparent 0deg, color-mix(in srgb, var(--accent) 58%, transparent) 38deg, color-mix(in srgb, var(--accent) 20%, transparent) 80deg, transparent 118deg, color-mix(in srgb, var(--accent) 30%, transparent) 178deg, transparent 226deg, color-mix(in srgb, var(--accent) 46%, transparent) 292deg, transparent 360deg)',
+    filter: 'blur(5px)',
+    maskImage: 'radial-gradient(closest-side, transparent 30%, #000 52%, #000 82%, transparent 100%)',
     WebkitMaskImage:
-      'radial-gradient(closest-side, transparent 32%, #000 56%, #000 76%, transparent 100%)',
+      'radial-gradient(closest-side, transparent 30%, #000 52%, #000 82%, transparent 100%)',
   } as unknown as CSSStyleDeclaration)
 
-  // 暗核：事件视界
+  /* 内吸积盘：更亮更细的段，反向快转——与外盘形成层次差 */
+  const diskInner = document.createElement('div')
+  Object.assign(diskInner.style, {
+    position: 'absolute',
+    inset: '26px',
+    borderRadius: '50%',
+    background:
+      'conic-gradient(from 200deg, transparent 0deg, color-mix(in srgb, var(--accent) 80%, transparent) 55deg, transparent 120deg, color-mix(in srgb, var(--accent) 55%, transparent) 210deg, transparent 275deg, color-mix(in srgb, #ffffff 30%, var(--accent)) 322deg, transparent 360deg)',
+    filter: 'blur(2px)',
+    maskImage: 'radial-gradient(closest-side, transparent 24%, #000 50%, #000 84%, transparent 100%)',
+    WebkitMaskImage:
+      'radial-gradient(closest-side, transparent 24%, #000 50%, #000 84%, transparent 100%)',
+  } as unknown as CSSStyleDeclaration)
+
+  /* 光子环：贴视界的一圈锐利亮环（白热 + accent 过渡） */
+  const photon = document.createElement('div')
+  Object.assign(photon.style, {
+    position: 'absolute',
+    inset: '44px',
+    borderRadius: '50%',
+    background:
+      'radial-gradient(closest-side, transparent 58%, color-mix(in srgb, #ffffff 62%, var(--accent)) 64%, color-mix(in srgb, var(--accent) 72%, transparent) 71%, transparent 80%)',
+    filter: 'blur(0.5px)',
+  } as CSSStyleDeclaration)
+
+  /* 事件视界：纯黑核心，内缘带一圈极微弱透光 */
   const core = document.createElement('div')
   Object.assign(core.style, {
     position: 'absolute',
-    inset: '9px',
+    inset: '48px',
     borderRadius: '50%',
-    background: 'radial-gradient(closest-side, #04050b 0%, #0e1126 52%, rgba(14, 17, 38, 0) 76%)',
-    boxShadow: '0 0 26px color-mix(in srgb, var(--accent) 32%, transparent)',
+    background:
+      'radial-gradient(closest-side, #02030a 0%, #05070f 62%, #0b0e20 86%, rgba(11, 14, 32, 0.4) 96%, transparent 100%)',
+    boxShadow:
+      '0 0 34px color-mix(in srgb, var(--accent) 30%, transparent), inset 0 0 14px rgba(0, 0, 0, 0.9)',
   } as CSSStyleDeclaration)
 
-  el.append(disk, core)
+  el.append(halo, diskOuter, diskInner, photon, core)
   document.body.appendChild(el)
   bh = el
-  bhDisk = disk
+  bhDisk = diskOuter
 
   // 浮现（Q 弹）
   el.animate(
     [
-      { transform: 'scale(0.4)', opacity: 0 },
+      { transform: 'scale(0.45)', opacity: 0 },
       { transform: 'scale(1)', opacity: 1 },
     ],
-    { duration: 420, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', fill: 'both' },
+    { duration: 500, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', fill: 'both' },
   )
-  // 吸积盘无限旋转
-  disk.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], {
-    duration: 5200,
+  // 光晕呼吸
+  halo.animate(
+    [
+      { opacity: 0.55, transform: 'scale(1)' },
+      { opacity: 1, transform: 'scale(1.07)' },
+      { opacity: 0.55, transform: 'scale(1)' },
+    ],
+    { duration: 4200, easing: 'ease-in-out', iterations: Infinity },
+  )
+  // 双层吸积盘反向旋转（外慢内快，层次差）
+  diskOuter.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], {
+    duration: 11000,
+    easing: 'linear',
+    iterations: Infinity,
+  })
+  diskInner.animate([{ transform: 'rotate(360deg)' }, { transform: 'rotate(0deg)' }], {
+    duration: 6800,
     easing: 'linear',
     iterations: Infinity,
   })
@@ -246,22 +297,22 @@ async function flyBatch(ids: string[]): Promise<void> {
 
 /**
  * 起飞点：黑洞四周的随机环带（四面八方汇聚）。
- * 半径 230~410px，尝试多次保证起点落在视口内；全部失败则缩小半径钳进视口。
+ * 半径 280~470px，尝试多次保证起点落在视口内；全部失败则缩小半径钳进视口。
  */
 function pickRingOrigin(c: { x: number; y: number }): { x: number; y: number } {
-  const margin = 34
+  const margin = 44
   const clampX = (v: number) => Math.min(window.innerWidth - margin, Math.max(margin, v))
   const clampY = (v: number) => Math.min(window.innerHeight - margin, Math.max(margin, v))
   const θ = Math.random() * Math.PI * 2
   for (let i = 0; i < 8; i++) {
-    const r = 230 + Math.random() * 180
+    const r = 280 + Math.random() * 190
     const x = c.x + Math.cos(θ + (Math.random() - 0.5) * 0.5) * r
     const y = c.y + Math.sin(θ + (Math.random() - 0.5) * 0.5) * r
     if (x > margin && x < window.innerWidth - margin && y > margin && y < window.innerHeight - margin) {
       return { x, y }
     }
   }
-  const r = 120 + Math.random() * 90
+  const r = 150 + Math.random() * 110
   return { x: clampX(c.x + Math.cos(θ) * r), y: clampY(c.y + Math.sin(θ) * r) }
 }
 
