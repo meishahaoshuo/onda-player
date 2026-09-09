@@ -141,6 +141,9 @@
   --lyric-ps-fill-hover: #000;
   --lyric-ps-track-hover: rgba(0, 0, 0, 0.18);
   --lyric-accent: #172554;
+  /* 特效专用（水波/光晕）：封面主色提亮版，非文字对比色 */
+  --lyric-wave: #4c6ef5;
+  --lyric-wave-soft: rgba(76, 110, 245, 0.55);
   --lyric-progress-bubble-bg: rgba(255, 255, 255, 0.92);
   --lyric-progress-bubble-text: #1d1d1f;
 

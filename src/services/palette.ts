@@ -452,6 +452,10 @@ export function deriveLyricVars(main: RGB, bgEff: RGB): Record<string, string> {
     '--lyric-ps-fill-hover': rgb(hover),
     '--lyric-ps-track-hover': rgba(main, 0.28),
     '--lyric-accent': rgb(active),
+    // 特效专用：--lyric-accent 是朝黑压暗到对比度达标的**文字**色，直接拿去做
+    // 水波/光晕会发黑。这里取封面主色向白提亮的原色派生态，在压暗背景上才好看。
+    '--lyric-wave': rgb(mix(main, WHITE, 0.28)),
+    '--lyric-wave-soft': rgba(mix(main, WHITE, 0.5), 0.55),
     '--lyric-progress-bubble-bg': rgb(mix(main, WHITE, 0.86)),
     '--lyric-progress-bubble-text': rgb(active),
     '--lyric-shade': `linear-gradient(180deg, rgba(255,255,255,0.35), ${rgba(main, 0.04)})`,

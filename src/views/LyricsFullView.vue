@@ -895,22 +895,38 @@ function onZoomEnter(el: Element, done: () => void) {
     ],
     { duration: 640, easing: 'cubic-bezier(0.3, 1.36, 0.5, 1)', fill: 'both' },
   )
-  // 两圈水波：从封面尺寸同步荡向 1.85 倍并淡出，第二圈延迟跟出
+  // 水波：三层涟漪依次荡开，形状从封面圆角渐变到正圆（脱离源头后自然变圆），
+  // 颜色取封面原色提亮令牌（--lyric-accent 是压暗的文字色，做特效发黑）
+  const ripples = [
+    { scale: 1.44, dur: 980, delay: 80, op: 0.5 },
+    { scale: 1.8, dur: 1180, delay: 195, op: 0.32 },
+    { scale: 2.16, dur: 1380, delay: 320, op: 0.18 },
+  ]
   root.querySelectorAll<HTMLElement>('.zoom-ring').forEach((ring, i) => {
+    const cfg = ripples[i] ?? ripples[ripples.length - 1]
     ring.animate(
       [
-        { transform: `scale(${scale0})`, opacity: 0 },
-        { opacity: 0.55, offset: 0.22 },
-        { transform: 'scale(1.85)', opacity: 0 },
+        { transform: `scale(${scale0})`, opacity: 0, borderRadius: '18px' },
+        { opacity: cfg.op, offset: 0.26, borderRadius: '34%' },
+        { transform: `scale(${cfg.scale})`, opacity: 0, borderRadius: '50%' },
       ],
       {
-        duration: 1200,
-        delay: 140 + i * 170,
-        easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
+        duration: cfg.dur,
+        delay: cfg.delay,
+        easing: 'cubic-bezier(0.16, 0.72, 0.3, 1)',
         fill: 'both',
       },
     )
   })
+  // 色场光晕：封面主色柔光炸开一层，把水波和大图在色场上串起来
+  root.querySelector<HTMLElement>('.zoom-bloom')?.animate(
+    [
+      { transform: `scale(${scale0 * 0.92})`, opacity: 0 },
+      { opacity: 0.5, offset: 0.3 },
+      { transform: 'scale(1.55)', opacity: 0 },
+    ],
+    { duration: 1100, delay: 50, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)', fill: 'both' },
+  )
   anim.onfinish = finish
   window.setTimeout(finish, 940) // 兜底：onfinish 偶发不触发
 }
@@ -1180,6 +1196,8 @@ onMounted(() => {
       <div v-if="coverExpanded" class="cover-zoom" @click="collapseCoverZoom">
         <div class="zoom-dim" aria-hidden="true" />
         <div class="zoom-stage">
+          <div class="zoom-bloom" aria-hidden="true" />
+          <div class="zoom-ring" aria-hidden="true" />
           <div class="zoom-ring" aria-hidden="true" />
           <div class="zoom-ring" aria-hidden="true" />
           <img
@@ -1908,12 +1926,26 @@ onMounted(() => {
   background: var(--lyric-accent);
 }
 
-/* 水波环：进/出场由 WAAPI 驱动（transform scale + opacity），初始不可见 */
+/* 水波环：三层涟漪，进/出场由 WAAPI 驱动（scale + opacity + 圆角），初始不可见。
+   颜色用 --lyric-wave（封面主色提亮）—— --lyric-accent 是压暗过的文字对比色，做特效发黑。 */
 .zoom-ring {
   position: absolute;
   inset: 0;
   border-radius: 18px;
-  border: 2px solid var(--lyric-accent);
+  border: 1.5px solid var(--lyric-wave);
+  /* 边缘柔光带：用渐变而非 box-shadow，避免大范围阴影随 scale 反复重绘 */
+  background: radial-gradient(closest-side, transparent 74%, var(--lyric-wave-soft) 100%);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* 色场光晕：跟随封面主色，把水波与大图在色场上串成一体 */
+.zoom-bloom {
+  position: absolute;
+  inset: -6%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--lyric-wave-soft), transparent 72%);
   opacity: 0;
   pointer-events: none;
   will-change: transform, opacity;

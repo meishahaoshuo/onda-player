@@ -12,17 +12,29 @@ import { useUiStore } from '@/stores/ui'
  * 歌词页跳过 / 后台标签跳过；批与张双重限流防大库雪崩。
  */
 
-const FLIGHT_MS = 860
+const FLIGHT_MS = 780
 const STAGGER_MS = 130
 const JITTER_MS = 40
 /** 批间等待：避免上一批未消失就叠下一批造成视觉拥挤与掉帧 */
-const BATCH_GAP = 420
+const BATCH_GAP = 240
 /** 飞行封面边长 */
 const START_SIZE = 128
 /** 每批最多起飞张数 */
 const BATCH_CAP = 6
 /** 单次扫描会话累计起飞上限（大库防雪崩） */
 const SESSION_CAP = 24
+/**
+ * 「库存演出」（全库已有封面）的会话起飞上限。
+ * 与实际新入库的批次分账，避免全库封面占满 SESSION_CAP 后把新歌封面挤掉，
+ * 也能防止大库重扫时演出没完没了（进度条走完动画还在飞）。
+ */
+const SHOW_CAP = 12
+/**
+ * 飞行轨迹采样数：极坐标螺旋是曲线，采样太稀（旧版仅 6 点）时
+ * 段间线性插值会出现折线感与速度突变（肉眼「一顿一顿」）。
+ * 密采样 + 缓动烘焙进采样点、整体 linear 插值，速度天然连续。
+ */
+const TRAIL_SAMPLES = 32
 /** 触达漩涡时刻占比 */
 const LAND_AT = 0.72
 /** coverUrl 等待上限：动画不拖扫描节奏 */
@@ -223,10 +235,22 @@ function collapseVortex(): void {
 
 /* ================= 封面飞行：四面八方螺旋向心 ================= */
 
+/**
+ * 批次来源：`fresh` = 本次扫描真正新入库的封面（用户刚加的歌，优先演），
+ * `show` = 全库已有封面的库存演出（让动画看到「所有文件夹」的封面）。
+ */
+type BatchKind = 'fresh' | 'show'
+interface Batch {
+  ids: string[]
+  kind: BatchKind
+}
+
 let sinkInstalled = false
 let sessionFlights = 0
+/** 库存演出已起飞张数（与 SHOW_CAP 分账，防挤掉新歌封面 / 防拖场） */
+let sessionShow = 0
 const flownCoverIds = new Set<string>()
-let queue: string[][] = []
+let queue: Batch[] = []
 let pumping = false
 let inFlight = 0
 let lastPulseAt = 0
@@ -242,12 +266,13 @@ function reportDebug(): void {
     queueLen: queue.length,
     flying: document.querySelectorAll('.absorb-flight').length,
     sessionFlights,
+    sessionShow,
     flown: flownCoverIds.size,
     vortex: !!vortex,
   })
 }
 
-function enqueue(coverIds: string[]): void {
+function enqueue(coverIds: string[], kind: BatchKind = 'fresh'): void {
   if (reduced() || document.hidden) return
   const ui = useUiStore()
   if (ui.dolly !== 'idle') return
@@ -256,11 +281,40 @@ function enqueue(coverIds: string[]): void {
   if (clearFlownOnNextEnqueue) {
     flownCoverIds.clear()
     sessionFlights = 0
+    sessionShow = 0
     clearFlownOnNextEnqueue = false
   }
   if (!ensureVortex()) return
-  queue.push(coverIds)
+  queue.push({ ids: coverIds, kind })
   void pump()
+}
+
+/** 取下一批：新入库批次优先（用户刚加的歌先演），没有才按入队顺序取库存演出 */
+function takeNextBatch(): Batch | undefined {
+  if (queue.length === 0) return undefined
+  let idx = queue.findIndex((b) => b.kind === 'fresh')
+  if (idx < 0) idx = 0
+  return queue.splice(idx, 1)[0]
+}
+
+/**
+ * 扫描结束裁剪队列：最多保留「1 批新入库 + 1 批全库演出」，其余丢弃。
+ * 大库扫描会持续入批，不裁剪就会出现「进度条走完动画还在飞很久」；
+ * 但必须给库存演出留一批——小库扫描几十毫秒就结束，若只保新入库批，
+ * 全库那批还没来得及起飞就被裁掉，用户就永远看不到其他文件夹的封面。
+ */
+function trimQueueForFinish(): void {
+  // 已经在飞的算一批：队列预算 = 2 - 在飞，否则扫描结束后还会飞 3 批（≈4s），
+  // 体感上就是「进度条走完了动画还在继续」。
+  const budget = inFlight > 0 ? 1 : 2
+  if (queue.length <= budget) return
+  const freshIdx = queue.findIndex((b) => b.kind === 'fresh')
+  const showIdx = queue.findIndex((b) => b.kind === 'show')
+  const keep: Batch[] = []
+  if (freshIdx >= 0) keep.push(queue[freshIdx])
+  if (showIdx >= 0 && keep.length < budget) keep.push(queue[showIdx])
+  if (keep.length === 0) keep.push(queue[0])
+  queue = keep.slice(0, budget)
 }
 
 async function pump(): Promise<void> {
@@ -268,8 +322,8 @@ async function pump(): Promise<void> {
   pumping = true
   try {
     while (queue.length > 0) {
-      const ids = queue.shift()!
-      await flyBatch(ids)
+      const batch = takeNextBatch()!
+      await flyBatch(batch)
       await wait(BATCH_GAP)
       await waitUntilIdle(flightMs)
     }
@@ -283,13 +337,18 @@ async function pump(): Promise<void> {
   }
 }
 
-async function flyBatch(ids: string[]): Promise<void> {
+async function flyBatch(b: Batch): Promise<void> {
   if (sessionFlights >= SESSION_CAP) {
     pulseVortex()
     return
   }
+  // 库存演出有独立额度：不与新入库封面抢 SESSION_CAP
+  if (b.kind === 'show' && sessionShow >= SHOW_CAP) {
+    pulseVortex()
+    return
+  }
   const picks: string[] = []
-  for (const id of ids) {
+  for (const id of b.ids) {
     if (flownCoverIds.has(id)) continue
     flownCoverIds.add(id)
     picks.push(id)
@@ -297,6 +356,7 @@ async function flyBatch(ids: string[]): Promise<void> {
   }
   if (picks.length === 0) return
   sessionFlights += picks.length
+  if (b.kind === 'show') sessionShow += picks.length
 
   const lib = useLibraryStore()
   const srcs = await Promise.all(
@@ -369,28 +429,54 @@ function flyOne(src: string | null, isLast: boolean): void {
   }
   document.body.appendChild(el)
 
-  const dx = from.x - c.x
-  const dy = from.y - c.y
-  const r0 = Math.hypot(dx, dy)
-  const θ0 = Math.atan2(dy, dx)
+  const r0 = Math.hypot(from.x - c.x, from.y - c.y)
+  const θ0 = Math.atan2(from.y - c.y, from.x - c.x)
   // 统一顺时针：与水纹同向
   const spinTotal = 110 + Math.random() * 70
 
-  const offsets = [0, 0.18, 0.4, 0.62, 0.82, 1]
-  const frames = offsets.map((t) => {
-    const rot = spinTotal * t * t
-    const th = θ0 + (rot * Math.PI) / 180
-    const r = Math.max(6, r0 * (1 - t * t))
-    const x = c.x + Math.cos(th) * r
-    const y = c.y + Math.sin(th) * r
-    const scale = 0.92 - 0.78 * t
-    return {
-      transform: `translate(${(x - from.x).toFixed(1)}px, ${(y - from.y).toFixed(1)}px) scale(${scale.toFixed(3)}) rotate(${rot.toFixed(1)}deg)`,
-      opacity: t === 0 ? 0 : t < 0.15 ? t / 0.15 : 1 - Math.max(0, (t - 0.58) / 0.42),
+  /** 螺旋上参数 s∈[0,1] 处的点：半径收缩 + 角度旋进（s=0 即起飞点） */
+  const pointAt = (s: number) => {
+    const r = Math.max(4, r0 * (1 - s * s))
+    const th = θ0 + (spinTotal * s * s * Math.PI) / 180
+    return { x: c.x + Math.cos(th) * r, y: c.y + Math.sin(th) * r }
+  }
+  /** 位置缓动：起步即带速度（被水流带走），越近漩涡越快，末段自然收束 */
+  const easePos = (t: number) => 0.12 * t + 0.88 * t * t
+  /** 轨迹切线朝向（数值差分）：封面像叶子一样顺着水流方向被卷入 */
+  const EPS = 0.008
+  const tangentAt = (s: number) => {
+    const a = pointAt(Math.max(0, s - EPS))
+    const b = pointAt(Math.min(1, s + EPS))
+    return Math.atan2(b.y - a.y, b.x - a.x)
+  }
+  const tan0 = tangentAt(0)
+
+  const frames: Keyframe[] = []
+  for (let i = 0; i <= TRAIL_SAMPLES; i++) {
+    const t = i / TRAIL_SAMPLES
+    const s = easePos(t)
+    const p = pointAt(s)
+    // 朝向 = 切线方向变化量（展开到 ±180 内避免跳变）+ 少量自转表现翻滚
+    let dRot = ((tangentAt(s) - tan0) * 180) / Math.PI
+    while (dRot > 180) dRot -= 360
+    while (dRot < -180) dRot += 360
+    const rot = dRot + spinTotal * 0.14 * s
+    const shrink = 0.94 - 0.8 * s
+    // 沿切线拉伸、垂直压缩：水流拖拽的形变（中段最明显，首尾回归）
+    const drag = 0.48 * s * (1 - s)
+    const sx = shrink * (1 + drag)
+    const sy = shrink / (1 + drag)
+    frames.push({
+      // scale 写在 rotate 之后：拉伸轴即螺旋切线方向
+      transform:
+        `translate(${(p.x - from.x).toFixed(1)}px, ${(p.y - from.y).toFixed(1)}px) ` +
+        `rotate(${rot.toFixed(1)}deg) scale(${sx.toFixed(3)}, ${sy.toFixed(3)})`,
+      opacity: t === 0 ? 0 : t < 0.14 ? t / 0.14 : 1 - 0.95 * Math.max(0, (t - 0.66) / 0.34),
       offset: t,
-      easing: 'cubic-bezier(0.45, 0, 0.75, 0.6)',
-    }
-  })
+    })
+  }
+  // 缓动已烘焙进采样点，整体 linear 插值：段间速度连续（旧版 6 点 + 每段独立
+  // ease-in 缓动，每段末尾减速、下段起点又减速，是「一顿一顿」的根因）
   const anim = el.animate(frames, { duration: flightMs, fill: 'both' })
   inFlight++
 
@@ -427,13 +513,15 @@ export function installAbsorbFlight(): void {
       if (!was && on) {
         flownCoverIds.clear()
         sessionFlights = 0
+        sessionShow = 0
         sessionEnding = false
         return
       }
       if (was && !on) {
-        sessionFlights = 0
         sessionEnding = true
-        // 不清 queue：重扫演出/慢落库的批要继续飞完，泵抽空后漩涡才收
+        // 只留最后一批再收尾：大库扫描会持续入批，不裁剪就会出现
+        // 「进度条加载完了动画还在飞很久」。保留的批优先新入库封面。
+        trimQueueForFinish()
         if (!pumping) {
           if (queue.length > 0) void pump()
           else {

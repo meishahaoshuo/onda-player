@@ -245,17 +245,24 @@ export const useLibraryStore = defineStore('library', () => {
     }
   }
 
-  /** 扫描批次订阅槽：吸入动画（absorbFlight）经此接收每批新入库的封面 id，store 不依赖动画模块 */
-  let scanBatchSink: ((coverIds: string[]) => void) | null = null
-  function setScanBatchSink(fn: ((coverIds: string[]) => void) | null) {
+  /**
+   * 扫描批次订阅槽：吸入动画（absorbFlight）经此接收每批封面 id，store 不依赖动画模块。
+   * kind：`fresh` = 本次新入库（默认，优先演）；`show` = 全库库存演出。
+   */
+  let scanBatchSink: ((coverIds: string[], kind?: 'fresh' | 'show') => void) | null = null
+  function setScanBatchSink(
+    fn: ((coverIds: string[], kind?: 'fresh' | 'show') => void) | null,
+  ) {
     scanBatchSink = fn
   }
 
   /**
-   * 重扫演出：把全库封面洗牌抽样成最多 4 批投喂给吸入动画。
-   * 批间节奏由 absorbFlight 的队列泵控制（BATCH_GAP + 在飞等待），
-   * 这里一次性入队即可；setTimeout(0) 等 scanning watcher 先清场，避免旧
-   * flownCoverIds 残留误去重。重扫结束时未消费的批也会继续飞完再收漩涡。
+   * 全库演出：把**所有文件夹**的封面洗牌抽样成最多 2 批投喂给吸入动画，
+   * 让动画看到整个曲库而不只是本次新增的文件（添加文件夹与重新扫描都要有全库封面）。
+   * 批间节奏由 absorbFlight 的队列泵控制（BATCH_GAP + 在飞等待），这里一次性入队；
+   * setTimeout(0) 等 scanning watcher 先清场，避免旧 flownCoverIds 残留误去重。
+   * 标记 `show` 与新入库批次分账（SHOW_CAP），不会把新歌封面挤掉；
+   * 扫描结束时 absorbFlight 会把队列裁剪到最后一批，不会拖长收尾。
    */
   function emitRescanShow() {
     const ids = [...new Set(songs.value.map((s) => s.coverId).filter(Boolean))] as string[]
@@ -265,8 +272,8 @@ export const useLibraryStore = defineStore('library', () => {
       ;[ids[i], ids[j]] = [ids[j], ids[i]]
     }
     window.setTimeout(() => {
-      const batches = Math.min(4, Math.ceil(ids.length / 6))
-      for (let b = 0; b < batches; b++) scanBatchSink?.(ids.slice(b * 6, b * 6 + 6))
+      const batches = Math.min(2, Math.ceil(ids.length / 6))
+      for (let b = 0; b < batches; b++) scanBatchSink?.(ids.slice(b * 6, b * 6 + 6), 'show')
     }, 0)
   }
 
