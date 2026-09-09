@@ -212,10 +212,12 @@ onMounted(() => {
     .finished.catch(() => {})
 })
 
-/* ---------- 胶囊进度弧线：沿胶囊顶部微微弯曲的进度线，点击/拖拽 seek ---------- */
+/* ---------- 胶囊进度弧线：沿胶囊边框轮廓走的进度描边，点击/拖拽 seek ---------- */
 
-/** 弧线路径：两端沿胶囊顶部圆角方向微微下垂（中间几乎贴顶），不再是一条笔直线 */
-const CP_PATH = 'M2,11.5 C120,11.5 200,3.5 352,3.5 C504,3.5 584,11.5 702,11.5'
+/** 弧线路径：与胶囊顶部轮廓同心（viewBox 0 0 760 26，胶囊 760 宽圆角 33）。
+    中段几乎贴着顶边（内缩 2.5px），两端顺着左右圆角曲线向下延伸一点——
+    像描着胶囊边框走的一条线，而不是悬空的拱桥 */
+const CP_PATH = 'M 2,24 C 2,9.5 10,4.5 26,4.5 L 734,4.5 C 750,4.5 758,9.5 758,24'
 
 const ringDragging = ref(false)
 const progressLineEl = ref<HTMLElement | null>(null)
@@ -285,7 +287,7 @@ function onRingPointerUp() {
       :class="{ dragging: ringDragging }"
       @pointerdown="onRingPointerDown"
     >
-      <svg class="cp-svg" viewBox="0 0 704 14" preserveAspectRatio="none" aria-hidden="true">
+      <svg class="cp-svg" viewBox="0 0 760 26" preserveAspectRatio="none" aria-hidden="true">
         <defs>
           <linearGradient id="cp-grad" x1="0" y1="0" x2="1" y2="0">
             <stop offset="0" stop-color="var(--accent-strong)" />
@@ -454,7 +456,12 @@ function onRingPointerUp() {
 
 <style scoped>
 .player-bar {
-  position: relative;
+  /* 悬浮玻璃条：absolute 贴底（不再占布局流），列表内容从玻璃后面滚过——
+     有内容可透，blur/白纱的液态玻璃才真正可见（与胶囊同一段材质即可生效） */
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   /* 高于 .detail-layer(5)：进度条悬浮时间气泡会冒出播放栏顶部，不能被详情覆盖层盖住；
      低于歌词全屏页(50)与菜单/弹窗(100) */
   z-index: 6;
@@ -462,7 +469,6 @@ function onRingPointerUp() {
   grid-template-columns: minmax(180px, 1fr) minmax(320px, 2fr) minmax(180px, 1fr);
   align-items: center;
   height: 80px;
-  flex-shrink: 0;
   padding: 0 20px;
   gap: 20px;
   /* 入场动画由 onMounted 的 WAAPI 播放（样式切换的 FLIP 形变也由 WAAPI 接管） */
@@ -502,9 +508,10 @@ function onRingPointerUp() {
 }
 
 /* ---------- 浮动胶囊播放条（悬浮于内容上方，材质可在设置中切换） ---------- */
-/* 材质一（默认）：液态玻璃 —— 低模糊高折射，背景内容透出最清晰 */
+/* 材质一（默认）：液态玻璃 —— 低模糊高折射，背景内容透出最清晰。
+   定位在标准条基础上收窄居中（app-shell 已是定位基准，无需 fixed） */
 .player-bar.capsule {
-  position: fixed;
+  right: auto;
   left: 50%;
   bottom: 16px;
   transform: translateX(-50%);
@@ -513,16 +520,6 @@ function onRingPointerUp() {
   gap: 14px;
   padding: 0 18px;
   border-radius: 999px;
-  /* 悬浮于列表内容上方；低于歌词页(50)与菜单/弹窗(100) */
-  z-index: 40;
-  background: linear-gradient(
-    120deg,
-    rgba(255, 255, 255, 0.06),
-    rgba(255, 255, 255, 0.03) 55%,
-    rgba(255, 255, 255, 0.05)
-  );
-  backdrop-filter: blur(18px) saturate(3) brightness(1.16);
-  -webkit-backdrop-filter: blur(18px) saturate(3) brightness(1.16);
   border: 1px solid rgba(255, 255, 255, 0.3);
   box-shadow:
     inset 0 1.5px 1px rgba(255, 255, 255, 0.55),
@@ -530,8 +527,6 @@ function onRingPointerUp() {
     inset 0 -1px 0 rgba(0, 0, 0, 0.22),
     0 22px 54px rgba(0, 0, 0, 0.5),
     0 4px 16px rgba(0, 0, 0, 0.2);
-  transition: background 420ms var(--ease-out), box-shadow 420ms var(--ease-out),
-    backdrop-filter 420ms var(--ease-out), border-color 420ms var(--ease-out);
 }
 
 /* 浅色主题变体：纯白列表上白色低透明底会完全隐形，
@@ -555,15 +550,16 @@ function onRingPointerUp() {
 }
 
 /* 顶部进度弧线：平时几乎不可见，悬停胶囊时显现。
-   SVG 曲线两端沿胶囊顶部圆角方向微微下垂（见 CP_PATH），
-   viewBox 固定 + preserveAspectRatio:none 随胶囊宽度伸缩，
-   non-scaling-stroke 保证描边宽度不随拉伸变形 */
+   SVG 与胶囊同宽（left/right:0），viewBox 760×26 与胶囊轮廓同心；
+   preserveAspectRatio:none 随胶囊宽度伸缩（窗口窄于 760 时水平压缩），
+   non-scaling-stroke 保证描边宽度不随拉伸变形。
+   热区高度 26px（=曲线视觉高），top:-2 对齐胶囊顶缘 */
 .capsule-progress {
   position: absolute;
   top: -2px;
-  left: 32px;
-  right: 32px;
-  height: 18px; /* 热区高度（曲线视觉高 14px） */
+  left: 0;
+  right: 0;
+  height: 26px;
   opacity: 0;
   transition: opacity var(--dur-med) var(--ease-out);
   cursor: pointer;

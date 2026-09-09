@@ -170,14 +170,19 @@ onBeforeUnmount(() => {
   }
 }
 
-/* 尺寸交给 .cover-wrap（width/height 属性只是默认表现，CSS 覆盖即可；
-   fallback 是行内样式，必须 !important 才压得住）；
-   display:block 消除 inline 图片的基线行盒空隙（height:100% 精确解析） */
-.album-cover :deep(img),
-.album-cover :deep(.cover-fallback) {
+/* 关键：class="album-cover" 直接落在 CoverImage 的根元素上（img 自身就是 .album-cover），
+   后代选择器（.album-cover img）永远不命中——必须以 .cover-wrap 为祖先起手。
+   .cover-wrap .album-cover (0,3,0) 恒胜 CoverImage 内部的 .cover-img[data-v] (0,2,0)，
+   不依赖打包顺序。
+   尺寸交给 .cover-wrap（width/height 属性只是默认表现）；
+   contain 完整显示非正方封面（竖版/横版不再被裁切），空出的边由底色填充；
+   display:block 消除 inline 图片的基线行盒空隙。 */
+.cover-wrap .album-cover {
   display: block;
-  width: 100% !important;
+  width: 100% !important; /* fallback 是行内样式，必须 !important */
   height: 100% !important;
+  object-fit: contain;
+  background: var(--bg-hover);
   border-radius: 8px;
 }
 

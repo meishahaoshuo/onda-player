@@ -57,13 +57,10 @@ const title = computed(() => viewTitles[ui.activeView])
 const sectionEl = ref<HTMLElement | null>(null)
 
 /**
- * 浮动胶囊模式下，滚动内容末尾预留胶囊高度，避免页面底部内容被悬浮胶囊遮挡。
- * 全站已统一为「外层滚动」架构：所有视图内容都是自然文档流，
- * 容器 padding 即安全空间，不会再压短 height:100% 的内层列表（旧架构的隔断根源已移除）。
- * 例外是文件夹页右列 .main 与详情覆盖层——它们自身是滚动宿主，
- * 同样吃这份 padding（内容盒缩进，胶囊落在缩进出的空白上）。
+ * 底部安全空间：两种播放条形态（标准/胶囊）都是悬浮于内容上方的液态玻璃条
+ * （标准条 absolute 贴底、胶囊 fixed 居中），滚动内容都会从玻璃后面穿过，
+ * 因此 view-body 与详情覆盖层一律预留 96px 底部 padding，不再按形态区分。
  */
-const viewCapsulePad = computed(() => settings.playerStyle === 'capsule')
 
 /** 是否有搜索关键词（内容区被搜索结果接管） */
 const searching = computed(() => ui.searchQuery.trim().length > 0)
@@ -207,7 +204,6 @@ watch(
             ref="sectionEl"
             :key="ui.activeView"
             class="view-body scroll-host"
-            :class="{ 'capsule-pad': viewCapsulePad }"
           >
             <!-- 搜索优先：有关键词时内容区显示搜索结果 -->
             <!-- 注意：这条 v-if / v-else-if 链必须从 SongsView 一路连通到 PlaceholderView。
@@ -246,14 +242,12 @@ watch(
           v-if="ui.activeView === 'albums' && ui.detailKey && !searching"
           :album-key="ui.detailKey"
           class="detail-layer scroll-host"
-          :class="{ 'capsule-pad': viewCapsulePad }"
         />
         <!-- 艺术家详情：与专辑详情同架构（覆盖层 + 引力坍缩过渡） -->
         <ArtistDetailView
           v-else-if="ui.activeView === 'artists' && ui.detailKey && !searching"
           :artist-name="ui.detailKey"
           class="detail-layer scroll-host"
-          :class="{ 'capsule-pad': viewCapsulePad }"
         />
       </main>
     </div>
@@ -265,6 +259,7 @@ watch(
 
 <style scoped>
 .app-shell {
+  position: relative; /* 播放条（悬浮玻璃条）的定位基准 */
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -355,7 +350,7 @@ watch(
   z-index: 5;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0 24px 24px;
+  padding: 0 24px 96px;
   background: var(--bg-base);
 }
 
@@ -424,19 +419,14 @@ watch(
   color: var(--text-primary);
 }
 
+/* 底部 padding 即播放条悬浮后的安全空间：标准条与胶囊都是悬浮玻璃条，
+   滚动内容会从玻璃后面穿过（这正是液态玻璃可见性的来源），
+   一律预留 96px，不再按播放条形态区分 */
 .view-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0 24px 24px;
-}
-
-/* 浮动胶囊模式：滚动内容末尾预留胶囊高度（防遮底部内容）。
-   外层滚动架构下所有视图内容都是自然文档流，容器 padding 即安全空间；
-   详情覆盖层同样是滚动宿主，跟随此规则。 */
-.view-body.capsule-pad,
-.detail-layer.capsule-pad {
-  padding-bottom: 96px;
+  padding: 0 24px 96px;
 }
 </style>

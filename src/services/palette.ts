@@ -165,7 +165,9 @@ export async function extractBrightColors(blob: Blob): Promise<string[]> {
         const lum = (r + g + b) / 3
         if (lum < 40) continue // 近黑
         const sat = max === 0 ? 0 : (max - min) / max
-        if (sat < 0.08 && lum > 230) continue // 近白
+        // 低饱和灰调一律不要：灰色氛围光斑在浅色主题上就是一条「脏灰颜色断层」，
+        // 深色主题上也只会发灰发闷。氛围光只取有色彩倾向的颜色。
+        if (sat < 0.15) continue
         cands.push({ score: sat * 0.7 + (lum / 255) * 0.3, r, g, b })
       }
     }

@@ -13,7 +13,6 @@ import { usePlayerStore } from '@/stores/player'
 import { usePlaylistStore } from '@/stores/playlist'
 import { useFavoritesStore } from '@/stores/favorites'
 import { useStatsStore } from '@/stores/stats'
-import { useSettingsStore } from '@/stores/settings'
 import { useSongActions } from '@/composables/useSongActions'
 import { useStaggerReveal } from '@/composables/useStaggerReveal'
 import { flyToPlayerFromRow } from '@/services/coverFlight'
@@ -30,7 +29,6 @@ const player = usePlayerStore()
 const playlistStore = usePlaylistStore()
 const favorites = useFavoritesStore()
 const stats = useStatsStore()
-const settings = useSettingsStore()
 const { openSongMenu } = useSongActions()
 const ui = useUiStore()
 
@@ -394,7 +392,7 @@ function confirmRemove() {
 <template>
   <div class="playlists-root">
   <!-- 歌单详情：覆盖层，网格常驻其下 -->
-  <div v-if="current" ref="detailEl" class="playlist-detail" :class="{ 'capsule-pad': settings.playerStyle === 'capsule' }">
+  <div v-if="current" ref="detailEl" class="playlist-detail">
     <!-- 歌单间切换的过渡：与顶部板块切换同款动向（key 变化触发 out-in）；
          打开/关闭由外层 v-if 走引力坍缩编排，初始挂载不播 enter，不会双重动画 -->
     <Transition name="view" mode="out-in">
@@ -695,13 +693,14 @@ function confirmRemove() {
 
 /* 详情覆盖层：负 inset 扩到滚动宿主（.view-body）的 padding 区外——
    滚动条贴视口右缘、底部无隔断（与专辑/艺术家详情 .detail-layer 一致的外层滚动观感）。
-   -24px 与 App.vue .view-body / .detail-layer 的 padding: 0 24px 24px 联动，改那边要同步这边。
+   -24px 与 App.vue .view-body / .detail-layer 的 padding: 0 24px 96px 联动，改那边要同步这边。
+   底部 96px 是播放条（悬浮玻璃条）的安全空间，两形态恒定。
    必须完全不透明：覆盖层与 body 之间夹着常驻的列表网格/封面，半透明就会穿透出来 */
 .playlist-detail {
   position: absolute;
   top: 0;
   right: -24px;
-  bottom: -24px;
+  bottom: -96px;
   left: -24px;
   z-index: 2;
   overflow-y: auto;
@@ -710,12 +709,7 @@ function confirmRemove() {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 0 24px 24px;
-}
-
-/* 浮动胶囊模式：底部预留胶囊安全空间（对齐 App.vue 的 capsule-pad 机制） */
-.playlist-detail.capsule-pad {
-  padding-bottom: 96px;
+  padding: 0 24px 96px;
 }
 
 /* 固定高度的纵向 flex 滚动容器里，子项默认可被压缩；
