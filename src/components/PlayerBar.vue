@@ -212,7 +212,10 @@ onMounted(() => {
     .finished.catch(() => {})
 })
 
-/* ---------- 胶囊进度环：沿胶囊边缘的进度描边，点击/拖拽 seek ---------- */
+/* ---------- 胶囊进度弧线：沿胶囊顶部微微弯曲的进度线，点击/拖拽 seek ---------- */
+
+/** 弧线路径：两端沿胶囊顶部圆角方向微微下垂（中间几乎贴顶），不再是一条笔直线 */
+const CP_PATH = 'M2,11.5 C120,11.5 200,3.5 352,3.5 C504,3.5 584,11.5 702,11.5'
 
 const ringDragging = ref(false)
 const progressLineEl = ref<HTMLElement | null>(null)
@@ -221,17 +224,25 @@ const ringPct = computed(() => {
   return dur > 0 ? Math.min(1, Math.max(0, player.currentTime / dur)) : 0
 })
 
-function seekFromClientX(cx: number) {
+/** 拖拽期间用本地 dragPct 即时跟手（纯视觉，60fps 不卡顿）；
+    音频 seek 只在按下（跳到点按处）与松手（落到最终位置）各执行一次 */
+const dragPct = ref(0)
+const displayPct = computed(() => (ringDragging.value ? dragPct.value : ringPct.value))
+const cpDash = computed(() => 1 - displayPct.value)
+/** 进度为 0 时隐藏填充线：round 线帽在 dash 长度为 0 时仍会画出一个小圆点 */
+const cpVisible = computed(() => displayPct.value > 0.004)
+
+function pctFromClientX(cx: number): number {
   const line = progressLineEl.value
-  if (!line) return
-  const dur = player.duration || player.current?.durationSec || 0
-  if (dur <= 0) return
+  if (!line) return 0
   const r = line.getBoundingClientRect()
-  const pct = Math.min(1, Math.max(0, (cx - r.left) / r.width))
-  player.seek(pct * dur)
+  if (r.width <= 0) return 0
+  return Math.min(1, Math.max(0, (cx - r.left) / r.width))
 }
 
 function onRingPointerDown(e: PointerEvent) {
+  const dur = player.duration || player.current?.durationSec || 0
+  if (dur <= 0) return
   ringDragging.value = true
   // 合成指针（自动化测试）没有活动 pointer id，capture 失败不应阻断 seek
   try {
@@ -239,14 +250,20 @@ function onRingPointerDown(e: PointerEvent) {
   } catch {
     /* 忽略 */
   }
-  seekFromClientX(e.clientX)
+  dragPct.value = pctFromClientX(e.clientX)
+  player.seek(dragPct.value * dur) // 按下即跳到点按处
 }
 
 function onRingPointerMove(e: PointerEvent) {
-  if (ringDragging.value) seekFromClientX(e.clientX)
+  if (!ringDragging.value) return
+  // 拖动中只推进视觉进度，不反复 seek（频繁跳音频是卡顿感来源）
+  dragPct.value = pctFromClientX(e.clientX)
 }
 
 function onRingPointerUp() {
+  if (!ringDragging.value) return
+  const dur = player.duration || player.current?.durationSec || 0
+  if (dur > 0) player.seek(dragPct.value * dur) // 松手落到最终位置
   ringDragging.value = false
 }
 </script>
@@ -260,7 +277,7 @@ function onRingPointerUp() {
     @pointerup="onRingPointerUp"
     @pointercancel="onRingPointerUp"
   >
-    <!-- 胶囊模式：顶部一条低调的进度细线，鼠标悬停胶囊时才显现；点击/拖拽 seek -->
+    <!-- 胶囊模式：顶部一条沿胶囊弧度微微弯曲的进度线，悬停胶囊时显现；点击/拖拽 seek -->
     <div
       v-if="localStyle === 'capsule'"
       ref="progressLineEl"
@@ -268,8 +285,31 @@ function onRingPointerUp() {
       :class="{ dragging: ringDragging }"
       @pointerdown="onRingPointerDown"
     >
-      <div class="cp-track" />
-      <div class="cp-fill" :style="{ width: `${ringPct * 100}%` }" />
+      <svg class="cp-svg" viewBox="0 0 704 14" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="cp-grad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="var(--accent-strong)" />
+            <stop offset="0.5" stop-color="var(--accent)" />
+            <stop offset="1" stop-color="var(--accent-strong)" />
+          </linearGradient>
+        </defs>
+        <!-- 轨道：低透明度弧线 -->
+        <path class="cp-track" :d="CP_PATH" />
+        <!-- 光晕底：粗一号的半透明主色，托出玻璃的「发光体」质感 -->
+        <path
+          class="cp-glow"
+          :d="CP_PATH"
+          pathLength="1"
+          :style="{ strokeDashoffset: cpDash, opacity: cpVisible ? '' : 0 }"
+        />
+        <!-- 填充：主色渐变细线，dashoffset 驱动进度 -->
+        <path
+          class="cp-fill"
+          :d="CP_PATH"
+          pathLength="1"
+          :style="{ strokeDashoffset: cpDash, opacity: cpVisible ? '' : 0 }"
+        />
+      </svg>
     </div>
     <!-- 左：曲目信息 -->
     <div class="track">
@@ -426,6 +466,39 @@ function onRingPointerUp() {
   padding: 0 20px;
   gap: 20px;
   /* 入场动画由 onMounted 的 WAAPI 播放（样式切换的 FLIP 形变也由 WAAPI 接管） */
+  /* 标准形态与悬浮胶囊同一套液态玻璃材质（覆盖全局 .glass 的默认材质）：
+     低模糊高折射，背景内容透出最清晰 */
+  background: linear-gradient(
+    120deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.03) 55%,
+    rgba(255, 255, 255, 0.05)
+  );
+  backdrop-filter: blur(18px) saturate(3) brightness(1.16);
+  -webkit-backdrop-filter: blur(18px) saturate(3) brightness(1.16);
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow:
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.55),
+    0 -8px 24px rgba(0, 0, 0, 0.22);
+  transition: background 420ms var(--ease-out), box-shadow 420ms var(--ease-out),
+    backdrop-filter 420ms var(--ease-out), border-color 420ms var(--ease-out);
+}
+
+/* 标准形态浅色主题变体：极薄白纱 + 深色细边区分条与背景（与胶囊浅色同配方） */
+:global([data-theme='light'] .player-bar) {
+  background: linear-gradient(
+    120deg,
+    rgba(255, 255, 255, 0.13),
+    rgba(255, 255, 255, 0.07) 55%,
+    rgba(255, 255, 255, 0.11)
+  );
+  backdrop-filter: blur(16px) saturate(2.4) brightness(1.03);
+  -webkit-backdrop-filter: blur(16px) saturate(2.4) brightness(1.03);
+  border-top-color: rgba(0, 0, 0, 0.09);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.45);
 }
 
 /* ---------- 浮动胶囊播放条（悬浮于内容上方，材质可在设置中切换） ---------- */
@@ -481,13 +554,16 @@ function onRingPointerUp() {
     0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
-/* 顶部进度细线：平时几乎不可见，悬停胶囊时显现 */
+/* 顶部进度弧线：平时几乎不可见，悬停胶囊时显现。
+   SVG 曲线两端沿胶囊顶部圆角方向微微下垂（见 CP_PATH），
+   viewBox 固定 + preserveAspectRatio:none 随胶囊宽度伸缩，
+   non-scaling-stroke 保证描边宽度不随拉伸变形 */
 .capsule-progress {
   position: absolute;
-  top: -1px;
-  left: 28px;
-  right: 28px;
-  height: 6px; /* 热区高度 */
+  top: -2px;
+  left: 32px;
+  right: 32px;
+  height: 18px; /* 热区高度（曲线视觉高 14px） */
   opacity: 0;
   transition: opacity var(--dur-med) var(--ease-out);
   cursor: pointer;
@@ -499,23 +575,54 @@ function onRingPointerUp() {
   opacity: 1;
 }
 
+.capsule-progress .cp-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
 .capsule-progress .cp-track,
+.capsule-progress .cp-glow,
 .capsule-progress .cp-fill {
-  position: absolute;
-  top: 2px;
-  left: 0;
-  height: 2.5px;
-  border-radius: 999px;
+  fill: none;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 1;
 }
 
 .capsule-progress .cp-track {
-  width: 100%;
-  background: color-mix(in srgb, var(--text-tertiary) 30%, transparent);
+  stroke: color-mix(in srgb, var(--text-tertiary) 32%, transparent);
+  stroke-width: 2.5;
+}
+
+/* 光晕底：粗一号的半透明主色，玻璃「发光体」质感（无 filter，纯叠加） */
+.capsule-progress .cp-glow {
+  stroke: var(--accent);
+  stroke-width: 7;
+  opacity: 0.28;
+  transition: stroke-dashoffset 160ms linear;
 }
 
 .capsule-progress .cp-fill {
-  background: var(--accent);
-  transition: width 140ms linear;
+  stroke: url(#cp-grad);
+  stroke-width: 2.5;
+  transition: stroke-dashoffset 160ms linear;
+}
+
+/* 拖拽中关闭过渡：进度 100% 跟手（松手恢复平滑跟随播放时钟） */
+.capsule-progress.dragging .cp-fill,
+.capsule-progress.dragging .cp-glow {
+  transition: none;
+}
+
+/* 浅色主题：轨道换深色细线（白底上白轨道不可见），光晕收敛 */
+:global([data-theme='light'] .capsule-progress .cp-track) {
+  stroke: rgba(0, 0, 0, 0.14);
+}
+
+:global([data-theme='light'] .capsule-progress .cp-glow) {
+  opacity: 0.2;
 }
 
 .capsule .track {

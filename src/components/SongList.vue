@@ -74,23 +74,24 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
                 <span class="title-text">{{ item.title }}</span>
               </span>
               <span class="subtitle-text">{{ item.artist }}</span>
+              <!-- 悬停快捷操作：锚在标题列右端空白（标题与艺术家列之间） -->
+              <span class="row-actions" @click.stop>
+                <button
+                  class="row-act"
+                  :class="{ active: favorites.has(item.path) }"
+                  :title="favorites.has(item.path) ? '取消收藏' : '收藏'"
+                  @click="favorites.toggle(item.path)"
+                >
+                  <AppIcon name="heart" :size="15" :class="{ filled: favorites.has(item.path) }" />
+                </button>
+                <button class="row-act" title="更多操作" @click="onRowMenu(item, $event)">
+                  <AppIcon name="more" :size="15" />
+                </button>
+              </span>
             </span>
             <span class="col-artist" :title="item.artist">{{ item.artist }}</span>
             <span class="col-album" :title="item.album">{{ item.album }}</span>
             <span class="col-duration">{{ formatDuration(item.durationSec) }}</span>
-            <span class="row-actions" @click.stop>
-              <button
-                class="row-act"
-                :class="{ active: favorites.has(item.path) }"
-                :title="favorites.has(item.path) ? '取消收藏' : '收藏'"
-                @click="favorites.toggle(item.path)"
-              >
-                <AppIcon name="heart" :size="15" :class="{ filled: favorites.has(item.path) }" />
-              </button>
-              <button class="row-act" title="更多操作" @click="onRowMenu(item, $event)">
-                <AppIcon name="more" :size="15" />
-              </button>
-            </span>
           </div>
         </template>
       </VirtualList>
@@ -173,6 +174,7 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
 
 .col-title {
   min-width: 0;
+  position: relative; /* row-actions 的定位基准：锚在标题列右端 */
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -222,12 +224,13 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
   font-variant-numeric: tabular-nums;
 }
 
-/* 悬停快捷操作：悬浮在专辑列与时长列之间的空白区（右侧让出 72px 时长列 + 12px 间距），
-   透明底与行背景融为一体；opacity + 位移过渡浮现 */
+/* 悬停快捷操作：悬浮在标题列右端的空白处（标题文本通常只占列左侧，
+   右侧空白正好在标题与艺术家列之间），透明底与行背景融为一体；
+   opacity + 位移过渡浮现 */
 .row-actions {
   position: absolute;
   top: 50%;
-  right: 84px;
+  right: 0;
   display: flex;
   align-items: center;
   gap: 2px;

@@ -117,7 +117,7 @@ onBeforeUnmount(() => {
       @click="openAlbum(album, $event)"
     >
       <span class="cover-wrap">
-        <CoverImage :cover-id="album.coverId" :size="140" class="album-cover" />
+        <CoverImage :cover-id="album.coverId" :size="256" class="album-cover" />
       </span>
       <div class="album-name" :title="album.name">{{ album.name }}</div>
       <div class="album-sub">
@@ -131,7 +131,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .album-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  /* 封面等比例放大后卡片随之变大（封面撑满卡片宽度） */
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 20px;
 }
 
@@ -152,6 +153,9 @@ onBeforeUnmount(() => {
 /* 播放态：标题转强调色（封面外圈的旋转光环已按需求移除） */
 .cover-wrap {
   position: relative;
+  /* 封面撑满卡片内容宽，等比例放大（ aspect-ratio 锁正方形） */
+  width: 100%;
+  aspect-ratio: 1;
 }
 
 .album-card.playing .album-name {
@@ -166,15 +170,14 @@ onBeforeUnmount(() => {
   }
 }
 
-.album-cover {
-  width: 140px;
-  height: 140px;
-}
-
+/* 尺寸交给 .cover-wrap（width/height 属性只是默认表现，CSS 覆盖即可；
+   fallback 是行内样式，必须 !important 才压得住）；
+   display:block 消除 inline 图片的基线行盒空隙（height:100% 精确解析） */
 .album-cover :deep(img),
 .album-cover :deep(.cover-fallback) {
-  width: 140px;
-  height: 140px;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
   border-radius: 8px;
 }
 

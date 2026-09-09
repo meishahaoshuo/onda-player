@@ -467,7 +467,8 @@ function selectRoot(id: string) {
   cursor: default;
 }
 
-/* 右：内容列（自身滚动宿主： SongList 的表头吸附与虚拟列表测量都挂在这里） */
+/* 右：内容列（自身滚动宿主： SongList 的表头吸附与虚拟列表测量都挂在这里）。
+   overflow-x:hidden 去掉多余的横向拖拽条——列表内容本不应横向溢出 */
 .main {
   flex: 1;
   min-width: 0;
@@ -475,6 +476,7 @@ function selectRoot(id: string) {
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .main-head {

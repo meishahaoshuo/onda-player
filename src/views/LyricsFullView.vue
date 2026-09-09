@@ -28,6 +28,8 @@ const settings = useSettingsStore()
 
 /** 飞行动画进行中：期间跳过歌词滚动、延后背景渐变，避免和动画抢主线程 */
 const flyActive = ref(false)
+/** 内容揭示开关：置 true 的那一帧歌词/控制器等组件与封面飞行同步出现（同时入场，不再等封面落地） */
+const contentIn = ref(false)
 /** 飞行时长与减速曲线：收尾干脆，不拖出一段几乎静止的尾巴 */
 const FLY_DURATION = 560
 const FLY_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
@@ -650,6 +652,7 @@ function waitForLyrics(timeout: number): Promise<void> {
 
 /** 落地后的收尾：恢复封面样式、清掉 flyActive、补上歌词定位 */
 function settleFly(dstEl: HTMLElement | null) {
+  contentIn.value = true // 兜底：任何收尾路径都必须保证组件可见
   if (dstEl) {
     dstEl.style.transition = 'none'
     dstEl.style.opacity = '1'
@@ -736,6 +739,8 @@ function flyIn() {
       ],
       { duration: FLY_DURATION, easing: FLY_EASING, fill: 'both' },
     )
+    // 与封面飞行同一帧揭示全部组件（歌词/控制器/进度条同时入场），不再等封面落地
+    contentIn.value = true
 
     let finished = false
     const finish = () => {
@@ -1023,7 +1028,7 @@ onMounted(() => {
   <div
     class="lyrics-full"
     ref="pageEl"
-    :class="{ closing, 'fly-active': flyActive, switching, 'blur-on': settings.lyricBlur }"
+    :class="{ closing, 'fly-active': flyActive, switching, 'blur-on': settings.lyricBlur, 'content-in': contentIn }"
     :style="lyricVars"
     @mousemove="onPageMouseMove"
   >
@@ -1246,9 +1251,11 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* ---------- 入场：封面飞入落地后，歌词与各组件按 --i 错峰上浮 ----------
-   飞行期间（.fly-active）统一藏起，落地即依次浮现，避免"只有封面飞进来，
-   其余组件凭空出现"的突兀感。animation both 保持终态，不影响后续交互。 */
+/* ---------- 入场：组件与封面飞行同步出现（同一帧开始，不再等封面落地） ----------
+   content-in 由 flyIn 在启动封面飞行的同一帧置 true：
+   歌名/歌词/进度条/控制器统一做一次 420ms 上浮淡入，与 560ms 封面飞行并行，
+   封面归位时全部组件已就位 —— 无「封面落定后组件才慢半拍冒出来」的拖泥带水。
+   animation both 保持终态，不影响后续交互。 */
 @keyframes enter-up {
   from {
     opacity: 0;
@@ -1260,13 +1267,12 @@ onMounted(() => {
   }
 }
 
-.lyrics-full.fly-active .enter-item {
+.lyrics-full:not(.content-in) .enter-item {
   opacity: 0;
 }
 
-.lyrics-full:not(.fly-active) .enter-item {
-  animation: enter-up 340ms cubic-bezier(0.25, 1, 0.4, 1) both;
-  animation-delay: calc(var(--i, 0) * 36ms);
+.lyrics-full.content-in .enter-item {
+  animation: enter-up 420ms cubic-bezier(0.25, 1, 0.4, 1) both;
 }
 
 .lyrics-full {
