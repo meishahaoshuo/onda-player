@@ -9,6 +9,7 @@ const LYRIC_ALIGN_KEY = 'settings.lyricAlign'
 const LYRIC_BLUR_KEY = 'settings.lyricBlur'
 const PLAYER_STYLE_KEY = 'settings.playerStyle'
 const MORPH_KEY = 'settings.barMorph'
+const BAR_MATERIAL_KEY = 'settings.barMaterial'
 const media = window.matchMedia('(prefers-color-scheme: dark)')
 
 function loadMode(): ThemeMode {
@@ -83,8 +84,7 @@ function loadAmbient(): boolean {
   return localStorage.getItem(AMBIENT_KEY) !== '0'
 }
 
-// 遗留清理：导入动画样式选择器已下线（固定液态玻璃）；交错滚动/歌词页音频可视化/
-// 磨砂玻璃材质已按反馈下线（胶囊固定液态玻璃）
+// 遗留清理：导入动画样式选择器已下线（固定液态玻璃）；交错滚动/歌词页音频可视化已下线
 localStorage.removeItem('settings.absorbStyle')
 localStorage.removeItem('settings.lyricStagger')
 localStorage.removeItem('settings.lyricViz')
@@ -103,6 +103,12 @@ function loadBarMorph(): BarMorph {
   return localStorage.getItem(MORPH_KEY) === 'slide' ? 'slide' : 'gather'
 }
 
+/** 播放条材质：liquid = 液态玻璃（高折射白纱 + 顶高光）；frosted = 普通磨砂（平整半透明 + 大模糊） */
+export type BarMaterial = 'liquid' | 'frosted'
+function loadBarMaterial(): BarMaterial {
+  return localStorage.getItem(BAR_MATERIAL_KEY) === 'frosted' ? 'frosted' : 'liquid'
+}
+
 /**
  * 主题设置：跟随系统 / 深色 / 浅色，切换即时生效并持久化。
  * 注：第 2 阶段 IndexedDB 就绪后仍保留 localStorage——主题需要在
@@ -117,6 +123,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const lyricBlur = ref(loadLyricBlur())
   const playerStyle = ref<PlayerStyle>(loadPlayerStyle())
   const barMorph = ref<BarMorph>(loadBarMorph())
+  const barMaterial = ref<BarMaterial>(loadBarMaterial())
   const autoRestoreQueue = ref(loadAutoRestore())
   const autoResume = ref(loadAutoResume())
   /** 自定义主题色：'' = 默认海军蓝 */
@@ -204,6 +211,11 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(MORPH_KEY, m)
   }
 
+  function setBarMaterial(m: BarMaterial) {
+    barMaterial.value = m
+    localStorage.setItem(BAR_MATERIAL_KEY, m)
+  }
+
   function setAutoRestoreQueue(v: boolean) {
     autoRestoreQueue.value = v
     localStorage.setItem(AUTO_RESTORE_KEY, v ? '1' : '0')
@@ -242,6 +254,8 @@ export const useSettingsStore = defineStore('settings', () => {
     setPlayerStyle,
     barMorph,
     setBarMorph,
+    barMaterial,
+    setBarMaterial,
     autoRestoreQueue,
     setAutoRestoreQueue,
     autoResume,

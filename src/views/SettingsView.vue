@@ -229,6 +229,28 @@ function onRecordKeydown(e: KeyboardEvent) {
           </div>
           <div class="opt-row">
             <div class="opt-text">
+              <span class="opt-name">材质</span>
+              <span class="opt-desc">液态玻璃折射通透，普通磨砂沉稳平整</span>
+            </div>
+            <div class="seg-choice">
+              <button
+                class="seg-choice-btn"
+                :class="{ on: settings.barMaterial === 'liquid' }"
+                @click="settings.setBarMaterial('liquid')"
+              >
+                液态玻璃
+              </button>
+              <button
+                class="seg-choice-btn"
+                :class="{ on: settings.barMaterial === 'frosted' }"
+                @click="settings.setBarMaterial('frosted')"
+              >
+                普通磨砂
+              </button>
+            </div>
+          </div>
+          <div class="opt-row">
+            <div class="opt-text">
               <span class="opt-name">切换动效</span>
               <span class="opt-desc">标准与浮动胶囊两种形态之间的过渡方式</span>
             </div>

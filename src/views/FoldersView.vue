@@ -31,13 +31,6 @@ const selectedRootName = computed(
   () => library.roots.find((r) => r.id === selectedRootId.value)?.name ?? '',
 )
 
-/** 扫描进度百分比（用于进度条宽度） */
-const scanPct = computed(() => {
-  const p = library.scanProgress
-  if (p.total === 0) return 0
-  return Math.round(((p.scanned + p.skipped) / p.total) * 100)
-})
-
 function onPlay(song: SongRecord) {
   void player.playSong(song, rootSongs.value)
 }
@@ -49,16 +42,13 @@ function selectRoot(id: string) {
 
 <template>
   <div class="folders-view">
-    <!-- 扫描进度：吸附在页顶 -->
+    <!-- 扫描状态：旋转图标 + 进度文字 + 取消（不再显示视觉进度条，保持简洁） -->
     <div v-if="library.scanning" class="scan-bar">
       <AppIcon name="scan" :size="14" class="scan-spin" />
       <span class="scan-text">
         正在扫描 {{ library.scanProgress.scanned + library.scanProgress.skipped }} /
         {{ library.scanProgress.total }}
       </span>
-      <div class="scan-track">
-        <div class="scan-fill" :style="{ width: `${scanPct}%` }" />
-      </div>
       <button class="scan-cancel" @click="library.cancelScan()">取消</button>
     </div>
 
@@ -186,21 +176,6 @@ function selectRoot(id: string) {
 .scan-text {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-}
-
-.scan-track {
-  flex: 1;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--border-subtle);
-  overflow: hidden;
-}
-
-.scan-fill {
-  height: 100%;
-  border-radius: 2px;
-  background: var(--accent);
-  transition: width 240ms var(--ease-out);
 }
 
 .scan-cancel {

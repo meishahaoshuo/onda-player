@@ -274,7 +274,7 @@ function onRingPointerUp() {
   <footer
     ref="barEl"
     class="player-bar glass"
-    :class="{ capsule: localStyle === 'capsule' }"
+    :class="{ capsule: localStyle === 'capsule', 'material-liquid': settings.barMaterial === 'liquid', 'material-frosted': settings.barMaterial === 'frosted' }"
     @pointermove="onRingPointerMove"
     @pointerup="onRingPointerUp"
     @pointercancel="onRingPointerUp"
@@ -457,7 +457,7 @@ function onRingPointerUp() {
 <style scoped>
 .player-bar {
   /* 悬浮玻璃条：absolute 贴底（不再占布局流），列表内容从玻璃后面滚过——
-     有内容可透，blur/白纱的液态玻璃才真正可见（与胶囊同一段材质即可生效） */
+     有内容可透，blur/白纱的玻璃才真正可见 */
   position: absolute;
   left: 0;
   right: 0;
@@ -471,9 +471,14 @@ function onRingPointerUp() {
   height: 80px;
   padding: 0 20px;
   gap: 20px;
-  /* 入场动画由 onMounted 的 WAAPI 播放（样式切换的 FLIP 形变也由 WAAPI 接管） */
-  /* 标准形态与悬浮胶囊同一套液态玻璃材质（覆盖全局 .glass 的默认材质）：
-     低模糊高折射，背景内容透出最清晰 */
+  /* 材质切换（液态玻璃 ⇄ 普通磨砂）由 material-liquid / material-frosted 提供；
+     此处统管过渡，使切换平滑。两种材质都覆盖全局 .glass 的默认面板材质 */
+  transition: background 420ms var(--ease-out), box-shadow 420ms var(--ease-out),
+    backdrop-filter 420ms var(--ease-out), border-color 420ms var(--ease-out);
+}
+
+/* 材质一：液态玻璃 —— 低模糊高折射白纱 + 顶高光，背景内容透出最清晰 */
+.player-bar.material-liquid {
   background: linear-gradient(
     120deg,
     rgba(255, 255, 255, 0.06),
@@ -487,12 +492,10 @@ function onRingPointerUp() {
   box-shadow:
     inset 0 1.5px 1px rgba(255, 255, 255, 0.55),
     0 -8px 24px rgba(0, 0, 0, 0.22);
-  transition: background 420ms var(--ease-out), box-shadow 420ms var(--ease-out),
-    backdrop-filter 420ms var(--ease-out), border-color 420ms var(--ease-out);
 }
 
-/* 标准形态浅色主题变体：极薄白纱 + 深色细边区分条与背景（与胶囊浅色同配方） */
-:global([data-theme='light'] .player-bar) {
+/* 材质一浅色主题：极薄白纱 + 深色细边区分条与背景 */
+:global([data-theme='light'] .player-bar.material-liquid) {
   background: linear-gradient(
     120deg,
     rgba(255, 255, 255, 0.13),
@@ -507,9 +510,32 @@ function onRingPointerUp() {
     inset 0 0 0 1px rgba(255, 255, 255, 0.45);
 }
 
+/* 材质二：普通磨砂 —— 平整半透明底色 + 大模糊，无高折射白纱，观感沉稳 */
+.player-bar.material-frosted {
+  background: rgba(22, 22, 24, 0.6);
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.16),
+    0 -8px 24px rgba(0, 0, 0, 0.28);
+}
+
+/* 材质二浅色主题：浅白底 + 深色细边 */
+:global([data-theme='light'] .player-bar.material-frosted) {
+  background: rgba(246, 246, 248, 0.66);
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  border-top-color: rgba(0, 0, 0, 0.08);
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.8),
+    0 -8px 24px rgba(0, 0, 0, 0.1);
+}
+
 /* ---------- 浮动胶囊播放条（悬浮于内容上方，材质可在设置中切换） ---------- */
-/* 材质一（默认）：液态玻璃 —— 低模糊高折射，背景内容透出最清晰。
-   定位在标准条基础上收窄居中（app-shell 已是定位基准，无需 fixed） */
+/* 此块只负责「形状」（圆角/尺寸/居中定位），材质底色由上方 material-* 提供，
+   边框与投影按材质在下方分别定义，避免 capsule 的边框覆盖掉磨砂材质 */
 .player-bar.capsule {
   right: auto;
   left: 50%;
@@ -520,6 +546,10 @@ function onRingPointerUp() {
   gap: 14px;
   padding: 0 18px;
   border-radius: 999px;
+}
+
+/* 胶囊 + 液态玻璃：全边框 + 更强立体投影 */
+.player-bar.capsule.material-liquid {
   border: 1px solid rgba(255, 255, 255, 0.3);
   box-shadow:
     inset 0 1.5px 1px rgba(255, 255, 255, 0.55),
@@ -529,22 +559,28 @@ function onRingPointerUp() {
     0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
-/* 浅色主题变体：纯白列表上白色低透明底会完全隐形，
-   用极薄白纱 + 深色细边 + 加深投影来区分胶囊与背景。
-   纱必须够薄——歌曲列表是白底黑字，白纱过厚会让透出的字影消失（「被隔断」观感）。 */
-:global([data-theme='light'] .player-bar.capsule) {
-  background: linear-gradient(
-    120deg,
-    rgba(255, 255, 255, 0.13),
-    rgba(255, 255, 255, 0.07) 55%,
-    rgba(255, 255, 255, 0.11)
-  );
-  backdrop-filter: blur(16px) saturate(2.4) brightness(1.03);
-  -webkit-backdrop-filter: blur(16px) saturate(2.4) brightness(1.03);
+:global([data-theme='light'] .player-bar.capsule.material-liquid) {
   border: 1px solid rgba(0, 0, 0, 0.09);
   box-shadow:
     inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
     inset 0 0 0 1px rgba(255, 255, 255, 0.45),
+    0 18px 46px rgba(0, 0, 0, 0.24),
+    0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* 胶囊 + 普通磨砂：全边框 + 大模糊投影（边框略弱于液态玻璃，观感更平） */
+.player-bar.capsule.material-frosted {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.16),
+    0 22px 54px rgba(0, 0, 0, 0.5),
+    0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+:global([data-theme='light'] .player-bar.capsule.material-frosted) {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.8),
     0 18px 46px rgba(0, 0, 0, 0.24),
     0 4px 16px rgba(0, 0, 0, 0.12);
 }
