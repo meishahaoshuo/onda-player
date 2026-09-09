@@ -7,6 +7,7 @@ const LYRIC_FS_KEY = 'settings.lyricFontSize'
 const LYRIC_FW_KEY = 'settings.lyricFontWeight'
 const LYRIC_ALIGN_KEY = 'settings.lyricAlign'
 const LYRIC_BLUR_KEY = 'settings.lyricBlur'
+const LYRIC_STAGGER_KEY = 'settings.lyricStagger'
 const media = window.matchMedia('(prefers-color-scheme: dark)')
 
 function loadMode(): ThemeMode {
@@ -37,6 +38,11 @@ function loadLyricAlign(): LyricAlign {
 /** 歌词景深模糊：非当前行按距离轻微模糊（Apple Music 式层次） */
 function loadLyricBlur(): boolean {
   return localStorage.getItem(LYRIC_BLUR_KEY) !== '0'
+}
+
+/** 歌词交错滚动：换行时波纹从当前行向两侧错开掠过，滚动不再整体刚性平移 */
+function loadLyricStagger(): boolean {
+  return localStorage.getItem(LYRIC_STAGGER_KEY) !== '0'
 }
 
 /** 启动时恢复上次队列（关闭则每次冷启动为空队列） */
@@ -96,6 +102,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const lyricFontWeight = ref(loadLyricWeight())
   const lyricAlign = ref<LyricAlign>(loadLyricAlign())
   const lyricBlur = ref(loadLyricBlur())
+  const lyricStagger = ref(loadLyricStagger())
   const autoRestoreQueue = ref(loadAutoRestore())
   const autoResume = ref(loadAutoResume())
   /** 自定义主题色：'' = 默认海军蓝 */
@@ -173,6 +180,11 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(LYRIC_BLUR_KEY, v ? '1' : '0')
   }
 
+  function setLyricStagger(v: boolean) {
+    lyricStagger.value = v
+    localStorage.setItem(LYRIC_STAGGER_KEY, v ? '1' : '0')
+  }
+
   function setAutoRestoreQueue(v: boolean) {
     autoRestoreQueue.value = v
     localStorage.setItem(AUTO_RESTORE_KEY, v ? '1' : '0')
@@ -207,6 +219,8 @@ export const useSettingsStore = defineStore('settings', () => {
     setLyricAlign,
     lyricBlur,
     setLyricBlur,
+    lyricStagger,
+    setLyricStagger,
     autoRestoreQueue,
     setAutoRestoreQueue,
     autoResume,

@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>封面大图 · 交互动效方案</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    background: radial-gradient(120% 120% at 50% 0%, #17171d 0%, #0a0a0e 62%);
+    color: #f5f5f7;
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 28px 20px 40px;
+  }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: .5px; }
+  .sub { color: #86868b; font-size: 13px; margin: 8px 0 22px; text-align: center; line-height: 1.6; }
+  .tabs { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 26px; }
+  .tab {
+    padding: 9px 18px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14);
+    background: rgba(255,255,255,.05); color: #d5d5da; font-size: 14px; cursor: pointer;
+    transition: all .25s ease; user-select: none;
+  }
+  .tab:hover { background: rgba(255,255,255,.1); color: #fff; }
+  .tab.on { background: #4c6ef5; border-color: transparent; color: #fff; box-shadow: 0 4px 18px rgba(76,110,245,.4); }
+  .stage {
+    position: relative; width: min(78vmin, 560px); aspect-ratio: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cover {
+    position: relative; width: 100%; height: 100%; border-radius: 22px; overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.08);
+    will-change: transform; transform-style: preserve-3d; cursor: crosshair;
+  }
+  .cover img, .cover .art { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .gloss { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .3s; }
+  .stage:hover .gloss { opacity: 1; }
+  canvas.fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .hint { margin-top: 24px; min-height: 44px; text-align: center; color: #a1a1a6; font-size: 14px; line-height: 1.7; max-width: 560px; }
+  .hint b { color: #fff; }
+  .meta { margin-top: 6px; color: #6e6e73; font-size: 12.5px; }
+</style>
+</head>
+<body>
+  <h1>封面大图 · 交互动效方案</h1>
+  <p class="sub">以下为展开大图上的悬停 / 点击 / 滚轮交互预览，点上方标签切换体验，选定后告诉我编号即可。</p>
+  <div class="tabs" id="tabs"></div>
+  <div class="stage">
+    <div class="cover" id="cover">
+      <canvas class="art" id="art"></canvas>
+      <div class="gloss" id="gloss"></div>
+      <canvas class="fx" id="fx"></canvas>
+    </div>
+  </div>
+  <div class="hint" id="hint"></div>
+  <div class="meta" id="meta"></div>
+
+<script>
+/* ---------- 封面绘制：海军蓝渐变 + 声波纹样（模拟真实封面） ---------- */
+const art = document.getElementById('art')
+const DPR = Math.min(2, devicePixelRatio || 1)
+function paintArt() {
+  const s = art.clientWidth
+  art.width = s * DPR; art.height = s * DPR
+  const c = art.getContext('2d'); c.scale(DPR, DPR)
+  const g = c.createLinearGradient(0, 0, s, s)
+  g.addColorStop(0, '#22305e'); g.addColorStop(.55, '#172554'); g.addColorStop(1, '#0b1230')
+  c.fillStyle = g; c.fillRect(0, 0, s, s)
+  // 三层声波
+  for (let k = 0; k < 3; k++) {
+    c.beginPath()
+    const amp = s * (0.16 - k * 0.04), base = s * 0.5, waves = 5 + k
+    for (let x = 0; x <= s; x += 2) {
+      const y = base + Math.sin((x / s) * waves * Math.PI * 2 + k * 1.3) * amp
+      x === 0 ? c.moveTo(x, y) : c.lineTo(x, y)
+    }
+    c.strokeStyle = `rgba(140,165,255,${0.5 - k * 0.13})`
+    c.lineWidth = s * 0.012; c.stroke()
+  }
+  // 高光
+  const rg = c.createRadialGradient(s * 0.28, s * 0.22, 0, s * 0.28, s * 0.22, s * 0.7)
+  rg.addColorStop(0, 'rgba(255,255,255,.14)'); rg.addColorStop(1, 'rgba(255,255,255,0)')
+  c.fillStyle = rg; c.fillRect(0, 0, s, s)
+}
+
+/* ---------- 方案定义 ---------- */
+const cover = document.getElementById('cover')
+const gloss = document.getElementById('gloss')
+const fx = document.getElementById('fx')
+const fctx = fx.getContext('2d')
+let mode = 'A'
+let rafId = 0
+let cleanup = () => {}
+
+/* 方案 A：悬浮视差 —— 3D 倾斜 + 高光随角度流动 */
+function bindTilt() {
+  const onMove = (e) => {
+    const r = cover.getBoundingClientRect()
+    const px = (e.clientX - r.left) / r.width - 0.5
+    const py = (e.clientY - r.top) / r.height - 0.5
+    cover.style.transform = `perspective(900px) rotateX(${(-py * 9).toFixed(2)}deg) rotateY(${(px * 11).toFixed(2)}deg) scale(1.015)`
+    gloss.style.background = `radial-gradient(circle at ${((px + 0.5) * 100).toFixed(1)}% ${((py + 0.5) * 100).toFixed(1)}%, rgba(255,255,255,.22), transparent 58%)`
+  }
+  const onLeave = () => {
+    cover.style.transition = 'transform .5s cubic-bezier(.22,1,.36,1)'
+    cover.style.transform = 'perspective(900px) rotateX(0deg) rotateY(0deg)'
+    gloss.style.opacity = '0'
+    setTimeout(() => (cover.style.transition = ''), 500)
+  }
+  const onEnter = () => { cover.style.transition = 'transform .12s ease-out'; gloss.style.opacity = '1' }
+  cover.addEventListener('mousemove', onMove)
+  cover.addEventListener('mouseleave', onLeave)
+  cover.addEventListener('mouseenter', onEnter)
+  cleanup = () => {
+    cover.removeEventListener('mousemove', onMove)
+    cover.removeEventListener('mouseleave', onLeave)
+    cover.removeEventListener('mouseenter', onEnter)
+    cover.style.transform = ''; gloss.style.background = ''; gloss.style.opacity = ''
+  }
+}
+
+/* 方案 B：触水生涟 —— 指针划过泛起封面色涟漪，交叠衰减 */
+function bindRipple() {
+  let ripples = []
+  let last = 0
+  const onMove = (e) => {
+    const now = performance.now()
+    if (now - last < 90) return
+    last = now
+    const r = cover.getBoundingClientRect()
+    ripples.push({ x: e.clientX - r.left, y: e.clientY - r.top, r0: 6, a: 0.85, hue: 222 + Math.random() * 30 })
+    if (ripples.length > 14) ripples.shift()
+  }
+  const onClick = (e) => {
+    const r = cover.getBoundingClientRect()
+    for (let k = 0; k < 3; k++)
+      ripples.push({ x: e.clientX - r.left, y: e.clientY - r.top, r0: 10 + k * 22, a: 0.9 - k * 0.22, hue: 222 + Math.random() * 30 })
+  }
+  const loop = () => {
+    const s = fx.clientWidth
+    fctx.clearRect(0, 0, s, s)
+    ripples = ripples.filter((p) => p.a > 0.02)
+    for (const p of ripples) {
+      p.r0 += 2.6; p.a *= 0.955
+      fctx.beginPath()
+      fctx.arc(p.x, p.y, p.r0, 0, Math.PI * 2)
+      fctx.strokeStyle = `hsla(${p.hue}, 85%, 72%, ${p.a})`
+      fctx.lineWidth = 2.2
+      fctx.stroke()
+      fctx.beginPath()
+      fctx.arc(p.x, p.y, p.r0 * 0.62, 0, Math.PI * 2)
+      fctx.strokeStyle = `hsla(${p.hue}, 90%, 85%, ${p.a * 0.5})`
+      fctx.lineWidth = 1.2
+      fctx.stroke()
+    }
+    rafId = requestAnimationFrame(loop)
+  }
+  cover.addEventListener('mousemove', onMove)
+  cover.addEventListener('click', onClick)
+  rafId = requestAnimationFrame(loop)
+  cleanup = () => {
+    cover.removeEventListener('mousemove', onMove)
+    cover.removeEventListener('click', onClick)
+    cancelAnimationFrame(rafId)
+    fctx.clearRect(0, 0, fx.clientWidth, fx.clientHeight)
+  }
+}
+
+/* 方案 C：光尘流溢 —— 指针划过散出封面色光尘，飘落消散 */
+function bindDust() {
+  let parts = []
+  const onMove = (e) => {
+    const r = cover.getBoundingClientRect()
+    const x = e.clientX - r.left, y = e.clientY - r.top
+    for (let k = 0; k < 3; k++)
+      parts.push({
+        x: x + (Math.random() - 0.5) * 14, y: y + (Math.random() - 0.5) * 14,
+        vx: (Math.random() - 0.5) * 0.9, vy: -0.25 - Math.random() * 0.7,
+        life: 1, size: 1.2 + Math.random() * 2.4, hue: 218 + Math.random() * 40,
+      })
+    if (parts.length > 220) parts.splice(0, parts.length - 220)
+  }
+  const loop = () => {
+    const s = fx.clientWidth
+    fctx.clearRect(0, 0, s, s)
+    parts = parts.filter((p) => p.life > 0.02)
+    for (const p of parts) {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.004; p.vx *= 0.985; p.life *= 0.965
+      fctx.beginPath()
+      fctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2)
+      fctx.fillStyle = `hsla(${p.hue}, 90%, 78%, ${p.life * 0.9})`
+      fctx.shadowColor = `hsla(${p.hue}, 90%, 70%, ${p.life})`
+      fctx.shadowBlur = 8
+      fctx.fill()
+      fctx.shadowBlur = 0
+    }
+    rafId = requestAnimationFrame(loop)
+  }
+  cover.addEventListener('mousemove', onMove)
+  rafId = requestAnimationFrame(loop)
+  cleanup = () => {
+    cover.removeEventListener('mousemove', onMove)
+    cancelAnimationFrame(rafId)
+    fctx.clearRect(0, 0, fx.clientWidth, fx.clientHeight)
+  }
+}
+
+/* 方案 D：惯性缩放 —— 滚轮无级缩放（带阻尼）+ 拖拽平移 + 双击复位 */
+function bindZoom() {
+  let scale = 1, target = 1, tx = 0, ty = 0, ttx = 0, tty = 0
+  let dragging = false, lx = 0, ly = 0
+  const apply = () => {
+    cover.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`
+  }
+  const loop = () => {
+    scale += (target - scale) * 0.14
+    tx += (ttx - tx) * 0.14; ty += (tty - ty) * 0.14
+    apply()
+    rafId = requestAnimationFrame(loop)
+  }
+  const onWheel = (e) => {
+    e.preventDefault()
+    target = Math.min(3, Math.max(0.85, target * (e.deltaY < 0 ? 1.12 : 0.89)))
+    if (target === 0.85) { ttx = 0; tty = 0 }
+  }
+  const onDown = (e) => { dragging = true; lx = e.clientX; ly = e.clientY; cover.style.cursor = 'grabbing' }
+  const onMove = (e) => {
+    if (!dragging || scale <= 1.01) return
+    ttx += e.clientX - lx; tty += e.clientY - ly
+    lx = e.clientX; ly = e.clientY
+  }
+  const onUp = () => { dragging = false; cover.style.cursor = 'crosshair' }
+  const onDbl = () => { target = 1; ttx = 0; tty = 0 }
+  cover.addEventListener('wheel', onWheel, { passive: false })
+  cover.addEventListener('pointerdown', onDown)
+  cover.addEventListener('pointermove', onMove)
+  cover.addEventListener('pointerup', onUp)
+  cover.addEventListener('pointercancel', onUp)
+  cover.addEventListener('dblclick', onDbl)
+  rafId = requestAnimationFrame(loop)
+  cleanup = () => {
+    cover.removeEventListener('wheel', onWheel); cover.removeEventListener('pointerdown', onDown)
+    cover.removeEventListener('pointermove', onMove); cover.removeEventListener('pointerup', onUp)
+    cover.removeEventListener('pointercancel', onUp); cover.removeEventListener('dblclick', onDbl)
+    cancelAnimationFrame(rafId); cover.style.transform = ''; cover.style.cursor = ''
+  }
+}
+
+/* ---------- 方案清单与切换 ---------- */
+const PLANS = [
+  { id: 'A', name: 'A · 悬浮视差', bind: bindTilt,
+    hint: '<b>移动鼠标</b>：大图像悬浮玻璃卡片一样 3D 倾斜，高光随角度在封面表面流动。<br>离开时优雅回正。气质：沉稳高级，Apple 风。',
+    meta: '实现成本：低 · 性能：纯 transform 合成 · 适合：所有场景' },
+  { id: 'B', name: 'B · 触水生涟', bind: bindRipple,
+    hint: '<b>划过封面</b>泛起细涟漪，<b>点击</b>炸开三圈水波——像指尖划过水面。<br>与「澜」品牌的水意象同根。气质：灵动有趣。',
+    meta: '实现成本：中 · 性能：单 canvas 叠加层 · 适合：与歌词页水波语言呼应' },
+  { id: 'C', name: 'C · 光尘流溢', bind: bindDust,
+    hint: '<b>划过封面</b>散出封面色光尘，缓缓飘落消散，像扰动了一束光里的尘埃。<br>气质：梦幻氛围感。',
+    meta: '实现成本：中 · 性能：粒子上限 220 · 适合：暗色沉浸场景' },
+  { id: 'D', name: 'D · 惯性缩放', bind: bindZoom,
+    hint: '<b>滚轮</b>无级缩放（0.85~3×，带阻尼惯性），<b>按住拖拽</b>平移，<b>双击</b>复位。<br>能真正看清封面细节：歌词本、厂牌小字。气质：实用工具感。',
+    meta: '实现成本：中高 · 性能：纯 transform · 适合：高清封面鉴赏' },
+]
+const tabsEl = document.getElementById('tabs')
+const hintEl = document.getElementById('hint')
+const metaEl = document.getElementById('meta')
+for (const p of PLANS) {
+  const b = document.createElement('button')
+  b.className = 'tab'; b.textContent = p.name
+  b.onclick = () => select(p.id)
+  b.dataset.id = p.id
+  tabsEl.appendChild(b)
+}
+function select(id) {
+  mode = id
+  cleanup(); cleanup = () => {}
+  const p = PLANS.find((x) => x.id === id)
+  p.bind()
+  hintEl.innerHTML = p.hint
+  metaEl.textContent = p.meta
+  for (const t of tabsEl.children) t.classList.toggle('on', t.dataset.id === id)
+}
+window.addEventListener('resize', () => { paintArt(); const s = fx.clientWidth; fx.width = s * DPR; fx.height = s * DPR; fctx.scale(DPR, DPR) })
+paintArt()
+fx.width = fx.clientWidth * DPR; fx.height = fx.clientHeight * DPR; fctx.scale(DPR, DPR)
+select('A')
+</script>
+</body>
+</html>

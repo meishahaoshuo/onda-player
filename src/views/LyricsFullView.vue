@@ -220,11 +220,10 @@ function setLineEl(i: number) {
   }
 }
 
-/* 自定义缓动滚动：out-quart。
-   时长按距离缩放（140-300ms）——顺次换行要跟手，seek 大跳要干脆。 */
-// Q 弹滚动：时长给足回弹空间（easeOutBack 需要时间展现过冲→回弹）
-const SCROLL_DURATION_MIN = 220
-const SCROLL_DURATION_MAX = 460
+/* 自定义缓动滚动：out-back（克制版）。
+   时长按距离缩放——顺次换行从容跟手，seek 大跳干脆利落。 */
+const SCROLL_DURATION_MIN = 280
+const SCROLL_DURATION_MAX = 560
 /** 超过该距离（约两屏以上，典型是 seek 跨段）直接定位，长距离动画只会显得拖沓 */
 const INSTANT_SCROLL_PX = 2400
 let scrollRaf = 0
@@ -252,8 +251,9 @@ function smoothScrollTo(container: HTMLElement, target: number) {
     SCROLL_DURATION_MIN + Math.abs(delta) / 30,
   )
   const t0 = performance.now()
-  // easeOutBack：越过目标再轻微回弹（Q 弹收尾），比纯减速曲线灵动
-  const c1 = 1.35
+  // easeOutBack（克制版 c1=1.2）：收尾保留轻微过冲的灵动感，又不会"荡"；
+  // 旧值 1.35 过冲偏大，小距离换行时回弹突兀（生硬感的来源之一）
+  const c1 = 1.2
   const c3 = c1 + 1
   const ease = (t: number) => {
     const u = t - 1
@@ -282,11 +282,41 @@ function scrollToActive(animate: boolean) {
   }
 }
 
+/**
+ * 交错滚动波纹：换行时以当前行为波源，向两侧按距离错开地轻微上浮/沉落。
+ * 只动 transform/opacity 且 |d|≤8，每次 ≤17 个短时 WAAPI 动画，开销可忽略；
+ * 效果上把「整体刚性平移」变成「逐行依次落位」的波浪感（可开关）。
+ */
+function staggerWave() {
+  if (!settings.lyricStagger) return
+  if (reducedMotion()) return
+  const active = activeIdx.value
+  if (active < 0) return
+  for (let d = 0; d <= 8; d++) {
+    const idxs = d === 0 ? [active] : [active - d, active + d]
+    for (const i of idxs) {
+      const el = lineEls.value[i]
+      if (!el) continue
+      // 波源行不位移（它有卡拉OK与放大），只让周围行错峰回应
+      const dir = i < active ? -1 : i > active ? 1 : 0
+      if (dir === 0) continue
+      el.animate(
+        [
+          { transform: `translateY(${dir * 7}px)`, opacity: 0.68 },
+          { transform: 'translateY(0px)', opacity: 1 },
+        ],
+        { duration: 430, delay: d * 34, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+      )
+    }
+  }
+}
+
 watch(activeIdx, async (idx, old) => {
   await nextTick()
   // 飞行动画期间不滚动：落地后由 flyIn 的收尾逻辑一次性直接定位。
   if (flyActive.value) return
-  // 用户手动滚动后让位 3 秒——但只针对顺次换行（±1 行）；
+  staggerWave()
+  // 用户手动滚动后暂停自动跟随（松手约 1.1s）——但只针对顺次换行（±1 行）；
   // seek 等大跨度跳变是明确意图，必须立即定位，不被冻结吞掉
   if (userScrolling.value && Math.abs(idx - old) <= 1) return
   scrollToActive(true)
@@ -302,7 +332,10 @@ function onLyricScroll() {
   window.clearTimeout(userScrollTimer)
   userScrollTimer = window.setTimeout(() => {
     userScrolling.value = false
-  }, 3000)
+    // 主动归位：旧实现只解除冻结、等下一次换行才滚回，若当前句持续数秒
+    // 就会显得"迟迟不归"。现在停手 1.1s 即平滑回到当前行。
+    scrollToActive(true)
+  }, 1100)
 }
 
 function lineClass(i: number) {
@@ -312,6 +345,17 @@ function lineClass(i: number) {
     active: d === 0,
     [`dim-${Math.min(d, 4)}`]: d > 0,
   }
+}
+
+/** 点击歌词行：跳到该句并播放（暂停态下点歌词 = 想从这句听起） */
+function onLineClick(g: { time: number }) {
+  if (g.time < 0) return
+  player.seek(g.time)
+  // seek 会同步 currentTime（触发歌词定位）；暂停态接着续播
+  if (!player.playing && player.current) player.togglePlay()
+  // 用户点击明确了位置意图：解除手动滚动冻结，立即归位到所点行
+  userScrolling.value = false
+  window.clearTimeout(userScrollTimer)
 }
 
 const hasLyrics = computed(() => groups.value.length > 0)
@@ -990,7 +1034,7 @@ onMounted(() => {
     />
 
     <!-- 右上角工具组：歌词设置（字号/字重/对齐/模糊/控制样式） + 退出 -->
-    <div class="top-tools">
+    <div class="top-tools enter-item" style="--i: 3">
       <div class="fs-picker" :class="{ open: fsOpen }">
         <button
           class="tool-btn"
@@ -1055,6 +1099,14 @@ onMounted(() => {
                 @update:model-value="settings.setLyricBlur"
               />
             </div>
+            <div class="fs-heading">交错滚动</div>
+            <div class="switch-row">
+              <span class="switch-desc">换行时歌词逐行错峰落位，如波纹掠过</span>
+              <AppSwitch
+                :model-value="settings.lyricStagger"
+                @update:model-value="settings.setLyricStagger"
+              />
+            </div>
           </div>
         </Transition>
       </div>
@@ -1067,7 +1119,7 @@ onMounted(() => {
     <div class="layout" :class="{ switching, 'fly-active': flyActive }">
       <aside class="info-col">
         <div class="stack">
-        <header class="track-head">
+        <header class="track-head enter-item" style="--i: 0">
           <h1 class="track-title">{{ player.current?.title ?? '未在播放' }}</h1>
           <div class="track-artist">{{ player.current?.artist ?? '' }}</div>
         </header>
@@ -1083,7 +1135,7 @@ onMounted(() => {
             <CoverImage :cover-id="player.current.coverId" :size="420" hires />
           </div>
 
-          <div class="progress-block" :class="{ 'is-dragging': progressDragging }">
+          <div class="progress-block enter-item" :class="{ 'is-dragging': progressDragging }" style="--i: 2">
             <div class="progress-edge">
               <div class="progress-fill" :style="{ width: displayPct + '%' }" />
               <div
@@ -1112,7 +1164,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="controls">
+          <div class="controls enter-item" style="--i: 3">
             <button class="ctrl-btn ghost" :title="modeMeta.label" @click="cycleMode">
               <AppIcon :name="modeMeta.icon" :size="20" />
             </button>
@@ -1149,7 +1201,7 @@ onMounted(() => {
       </aside>
 
       <section class="lyric-col">
-        <div v-if="hasLyrics" ref="scroller" class="lyric-scroll" @scroll.passive="onLyricScroll">
+        <div v-if="hasLyrics" ref="scroller" class="lyric-scroll enter-item" style="--i: 1" @scroll.passive="onLyricScroll">
           <div class="lyric-inner">
             <div
               v-for="(g, i) in groups"
@@ -1157,7 +1209,7 @@ onMounted(() => {
               :ref="setLineEl(i)"
               class="lyric-line"
               :class="lineClass(i)"
-              @click="player.seek(g.time)"
+              @click="onLineClick(g)"
             >
               <div
                 v-for="(text, j) in g.texts"
@@ -1173,7 +1225,7 @@ onMounted(() => {
             </div>
           </div>
         </div>
-        <div v-else class="no-lyrics-hint">
+        <div v-else class="no-lyrics-hint enter-item" style="--i: 1">
           {{ loading ? '正在加载歌词…' : player.current ? '当前歌曲没有歌词（需要与音频同目录的同名 .lrc 文件）' : '未在播放' }}
         </div>
       </section>
@@ -1199,6 +1251,29 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* ---------- 入场：封面飞入落地后，歌词与各组件按 --i 错峰上浮 ----------
+   飞行期间（.fly-active）统一藏起，落地即依次浮现，避免"只有封面飞进来，
+   其余组件凭空出现"的突兀感。animation both 保持终态，不影响后续交互。 */
+@keyframes enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lyrics-full.fly-active .enter-item {
+  opacity: 0;
+}
+
+.lyrics-full:not(.fly-active) .enter-item {
+  animation: enter-up 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
 .lyrics-full {
   position: fixed;
   inset: 0;
