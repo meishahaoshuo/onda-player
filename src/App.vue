@@ -192,12 +192,7 @@ watch(
           </div>
         </header>
         <Transition name="view" mode="out-in" @enter="onViewEnter">
-          <section
-            ref="sectionEl"
-            :key="ui.activeView"
-            class="view-body"
-            :class="{ 'capsule-pad': settings.playerStyle === 'capsule' }"
-          >
+          <section ref="sectionEl" :key="ui.activeView" class="view-body">
             <!-- 搜索优先：有关键词时内容区显示搜索结果 -->
             <!-- 注意：这条 v-if / v-else-if 链必须从 SongsView 一路连通到 PlaceholderView。
                  曾经 template v-if 与 SongsView 的 v-if 断开成两条链，
@@ -414,12 +409,8 @@ watch(
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0 24px 24px;
-  /* 浮动胶囊模式：滚动内容末尾留白（内容延伸到视口底、从胶囊后穿过，
-     滚到底时末项仍能完整露出）——悬浮感的来源，不能加在 body-row 上 */
-  scroll-padding-bottom: 84px;
-}
-
-.view-body.capsule-pad {
-  padding-bottom: 84px;
+  /* 注意：浮动胶囊模式下不能在这里加 padding-bottom——
+     SongList 的虚拟列表是 height:100%，会被压短，行在胶囊上缘处
+     截断（「上下白板隔断」）。尾部安全空间由 VirtualList 的 tail prop 提供。 */
 }
 </style>

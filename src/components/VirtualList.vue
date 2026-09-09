@@ -8,8 +8,8 @@ import { useUiStore } from '@/stores/ui'
  * persistKey：传入后滚动位置会记入 ui store 并在挂载/数据就绪时恢复。
  */
 const props = withDefaults(
-  defineProps<{ items: T[]; itemHeight: number; overscan?: number; persistKey?: string }>(),
-  { overscan: 6 },
+  defineProps<{ items: T[]; itemHeight: number; overscan?: number; persistKey?: string; tail?: number }>(),
+  { overscan: 6, tail: 0 },
 )
 
 const ui = useUiStore()
@@ -59,7 +59,9 @@ const visible = computed(() =>
 
 <template>
   <div ref="container" class="vlist" @scroll.passive="onScroll">
-    <div class="vlist-spacer" :style="{ height: `${items.length * itemHeight}px` }">
+    <!-- tail：滚动内容末尾的安全空间（如浮动胶囊高度），让最后一行能滚到悬浮层上方，
+         同时不压缩列表自身的可视高度（height:100% 容器若用容器 padding 会把行截短） -->
+    <div class="vlist-spacer" :style="{ height: `${items.length * itemHeight + props.tail}px` }">
       <div class="vlist-window" :style="{ transform: `translateY(${start * itemHeight}px)` }">
         <slot v-for="v in visible" :key="v.index" :item="v.item" :index="v.index" />
       </div>

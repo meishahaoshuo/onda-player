@@ -7,10 +7,14 @@ import AppIcon from '@/components/AppIcon.vue'
 import { formatDuration } from '@/utils/format'
 import { useSongActions } from '@/composables/useSongActions'
 import { useFavoritesStore } from '@/stores/favorites'
+import { useSettingsStore } from '@/stores/settings'
 import { flyToPlayerFromRow } from '@/services/coverFlight'
 import type { SongRecord } from '@/types'
 
 const props = defineProps<{ songs: SongRecord[]; currentPath?: string | null; persistKey?: string }>()
+
+/** 浮动胶囊悬浮于列表底部时，滚动末尾预留胶囊高度，最后一行可完整滚出悬浮层 */
+const settings = useSettingsStore()
 const emit = defineEmits<{ play: [song: SongRecord] }>()
 
 const ROW_HEIGHT = 56
@@ -48,7 +52,12 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
     </div>
 
     <div class="list-body">
-      <VirtualList :items="props.songs" :item-height="ROW_HEIGHT" :persist-key="props.persistKey">
+      <VirtualList
+        :items="props.songs"
+        :item-height="ROW_HEIGHT"
+        :persist-key="props.persistKey"
+        :tail="settings.playerStyle === 'capsule' ? 84 : 0"
+      >
         <template #default="{ item, index }">
           <div
             class="song-row"
