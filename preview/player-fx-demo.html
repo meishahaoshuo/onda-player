@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="zh-CN" data-page-node-id="hAEOwLB263DAlIEf4AB0O0">
+<head data-page-node-id="OwncIHjIEb1kZ99T094wvb">
+<meta charset="utf-8" data-page-node-id="qrSbmA6EmIigSAw11BPqAh">
+<meta name="viewport" content="width=device-width, initial-scale=1" data-page-node-id="RKFv0wekj84q2gBGHFHEZ9">
+<title>播放条 · 切换动效 与 玻璃质感 方案</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    background: radial-gradient(120% 120% at 50% 0%, #17171d 0%, #0a0a0e 62%);
+    color: #f5f5f7;
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 26px 20px 46px;
+  }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: .5px; }
+  .sub { color: #86868b; font-size: 13px; margin: 8px 0 18px; text-align: center; line-height: 1.6; max-width: 640px; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
+  .tab {
+    padding: 8px 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14);
+    background: rgba(255,255,255,.05); color: #d5d5da; font-size: 13.5px; cursor: pointer;
+    transition: all .22s ease; user-select: none;
+  }
+  .tab:hover { background: rgba(255,255,255,.1); color: #fff; }
+  .tab.on { background: #4c6ef5; border-color: transparent; color: #fff; box-shadow: 0 4px 18px rgba(76,110,245,.4); }
+  .hint { min-height: 46px; text-align: center; color: #a1a1a6; font-size: 13.5px; line-height: 1.7; max-width: 620px; margin-bottom: 16px; }
+  .hint b { color: #fff; }
+
+  /* ---------- 舞台：滚动列表背景 + 播放条 ---------- */
+  .stage {
+    position: relative; width: min(92vw, 860px); height: 340px;
+    border-radius: 20px; overflow: hidden;
+    background: linear-gradient(160deg, #262a38 0%, #14161f 70%);
+    box-shadow: 0 20px 60px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.06);
+  }
+  .scroll-list { position: absolute; inset: -20% 0; }
+  .scroll-list.animate { animation: bgScroll 14s linear infinite; }
+  @keyframes bgScroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+  .row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 26px; border-bottom: 1px solid rgba(255,255,255,.045);
+  }
+  .row .cv { width: 44px; height: 44px; border-radius: 8px; flex-shrink: 0; }
+  .row .tt { flex: 1; }
+  .row .t1 { font-size: 14px; color: rgba(255,255,255,.88); }
+  .row .t2 { font-size: 12px; color: rgba(255,255,255,.42); margin-top: 3px; }
+  .row .tm { font-size: 12px; color: rgba(255,255,255,.3); font-variant-numeric: tabular-nums; }
+
+  /* ---------- 通用播放条（演示内） ---------- */
+  .bar {
+    position: absolute; left: 50%; bottom: 22px;
+    width: min(86%, 700px); height: 66px;
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px;
+    padding: 0 16px 0 10px;
+    will-change: transform, opacity, width, height, border-radius;
+  }
+  .bar .btrack { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .bar .bcv { width: 44px; height: 44px; border-radius: 9px; flex-shrink: 0; }
+  .bar .bt1 { font-size: 13.5px; font-weight: 600; color: rgba(255,255,255,.92); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar .bt2 { font-size: 11.5px; color: rgba(255,255,255,.45); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar .bctl { display: flex; align-items: center; gap: 8px; }
+  .bar .bb {
+    width: 30px; height: 30px; border-radius: 50%; border: none; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,.1); color: #fff; font-size: 12px;
+  }
+  .bar .bb.play { width: 38px; height: 38px; background: #4c6ef5; box-shadow: 0 4px 14px rgba(76,110,245,.5); font-size: 13px; }
+  .bar .baux { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+  .bar .bvol { width: 64px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.18); position: relative; }
+  .bar .bvol::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 62%; border-radius: 2px; background: rgba(255,255,255,.75); }
+  /* 胶囊形态差异：圆角、内边距、内容精简 */
+  .bar.capsule { border-radius: 999px; height: 60px; padding: 0 10px 0 8px; }
+  .bar.capsule .baux .bb:not(.expand) { display: none; }
+  .bar.capsule .bvol { display: none; }
+  /* 顶部进度细线（胶囊） */
+  .bar .topline { position: absolute; top: 0; left: 30px; right: 30px; height: 2.5px; border-radius: 0 0 4px 4px; background: rgba(76,110,245,.75); opacity: 0; transition: opacity .25s; }
+  .bar.capsule:hover .topline { opacity: 1; }
+
+  /* 玻璃质感（JS 按 plan 注入） */
+
+  .foot { margin-top: 16px; color: #6e6e73; font-size: 12.5px; text-align: center; }
+  .sw { display: inline-flex; align-items: center; gap: 6px; color: #a1a1a6; font-size: 12.5px; margin-left: 14px; cursor: pointer; user-select: none; }
+  .sw i { width: 30px; height: 16px; border-radius: 8px; background: rgba(255,255,255,.18); position: relative; transition: background .2s; }
+  .sw i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: left .2s; }
+  .sw.on i { background: #4c6ef5; }
+  .sw.on i::after { left: 16px; }
+</style>
+</head>
+<body data-page-node-id="KGH6KD6SoNKuGkxu6hvPGL">
+  <h1 data-page-node-id="Olb3YeLzZA09NtjanYjWcf">播放条 · 切换动效 与 玻璃质感 方案</h1>
+  <p class="sub" data-page-node-id="BGQXtcKtf1SAW1PfsznXJE">舞台背景是缓慢滚动的歌曲列表——玻璃透不透、悬浮真不真，一眼可见。点标签切方案，<b data-page-node-id="2aQnZcjlabRRhulOM5ueAU">滚动开关</b>可暂停背景。</p>
+  <div class="tabs" id="tabs" data-page-node-id="nYJI6CWM2cwhKm74DAoJnG"></div>
+  <div class="hint" id="hint" data-page-node-id="Mjli61PTXMSHNiJH1NgpNz"></div>
+
+  <div class="stage" data-page-node-id="Y8cqAO47A5ycypplcjtkNr">
+    <div class="scroll-list animate" id="list" data-page-node-id="LRhiuwxg4PaaPhdWgpgAex"></div>
+    <div class="bar" id="bar" data-page-node-id="9nYQVs710q9rcjZPo7FiEK">
+      <div class="topline" data-page-node-id="msl6wq3j5ADtlCG5VKZm4g"></div>
+      <div class="btrack" data-page-node-id="WdeeKmXiOFsxt55RASy0xY">
+        <div class="bcv" id="bcv" data-page-node-id="Gt9UuMyhuqXDOjofVTI8sY"></div>
+        <div data-page-node-id="cEtYaxnZDWkpZJAPdh1zpA"><div class="bt1" data-page-node-id="NiOCBcCYYuBhNJNtX4GgMH">父亲</div><div class="bt2" data-page-node-id="yHpmKKd7d2Nuwz4QIjoTNA">筷子兄弟 · 父亲</div></div>
+      </div>
+      <div class="bctl" data-page-node-id="3OzjF90sDB1CCqVHR209RN">
+        <button class="bb" data-page-node-id="cHMxmctRj3A6AWfMFNKrHm">⇄</button>
+        <button class="bb" data-page-node-id="q6DtnDM6b3oiTTzcHIrgCe">⏮</button>
+        <button class="bb play" id="playBtn" data-page-node-id="6SWbOWFFfNb1TrgPoZB45w">▶</button>
+        <button class="bb" data-page-node-id="pEbDHuH3r0jOOwRf1quQAu">⏭</button>
+        <button class="bb" data-page-node-id="KOr9FD2CLbdABnATKZxx2I">☰</button>
+      </div>
+      <div class="baux" data-page-node-id="y2Bn1mMON6YrvPPej8TzUd">
+        <button class="bb" data-page-node-id="zdTW4CLTVwa2CtamfEleFF">♡</button>
+        <button class="bb expand" data-page-node-id="EoeSke8ojreZqFEUOWKIdd">⤢</button>
+        <div class="bvol" data-page-node-id="nQCZcQyimtHGqIowGzGcYu"></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot" data-page-node-id="ZgHWbubnO8JdWQRLwJzuzq">
+    <span class="sw on" id="scrollSw" data-page-node-id="mLruue1GHJDvJv1jpEpjqV"><i data-page-node-id="3TPKtJQDHLPkcfaue9yJIu"></i>背景滚动</span>
+    <span class="sw" id="morphSw" data-page-node-id="owo2V4DtC4xquQGuN6vEuP"><i data-page-node-id="BHKnkDfoXtBBxornNVHyS4"></i>触发一次切换（动效组）</span>
+  </div>
+
+<script>
+/* ---------- 背景列表 ---------- */
+const list = document.getElementById('list')
+const hues = [222, 268, 12, 158, 42, 200, 300, 88]
+for (let rep = 0; rep < 2; rep++) {
+  hues.forEach((h, i) => {
+    const r = document.createElement('div')
+    r.className = 'row'
+    r.innerHTML = `<div class="cv" style="background:linear-gradient(135deg,hsl(${h},55%,58%),hsl(${h + 40},60%,34%))"></div>
+      <div class="tt"><div class="t1">示例歌曲 ${i + 1}</div><div class="t2">示例歌手 · Album ${i + 1}</div></div>
+      <div class="tm">3:5${i}</div>`
+    list.appendChild(r)
+  })
+}
+
+/* ---------- 封面 ---------- */
+const bcv = document.getElementById('bcv')
+bcv.style.background = 'linear-gradient(135deg,#8b6f47,#3d2f1e)'
+
+/* ---------- 玻璃方案定义 ---------- */
+const GLASS = {
+  A: {
+    name: '玻璃 A · 高透亚克力',
+    css: `background:linear-gradient(120deg,rgba(255,255,255,.16),rgba(255,255,255,.09) 55%,rgba(255,255,255,.14));
+      backdrop-filter:blur(34px) saturate(1.8);-webkit-backdrop-filter:blur(34px) saturate(1.8);
+      border:1px solid rgba(255,255,255,.16);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 0 rgba(255,255,255,.06),0 18px 46px rgba(0,0,0,.42);`,
+    hint: '<b>高透亚克力</b>：底透明度约 15%，列表内容清晰地从条后穿过，blur 让透出的内容柔化但不失形。浅色主题下呈「白色高透玻璃」。最接近 Apple Music 悬浮条的气质。',
+  },
+  B: {
+    name: '玻璃 B · 液态玻璃（重折射）',
+    css: `background:linear-gradient(120deg,rgba(255,255,255,.1),rgba(255,255,255,.05) 55%,rgba(255,255,255,.09));
+      backdrop-filter:blur(20px) saturate(2.6) brightness(1.12);-webkit-backdrop-filter:blur(20px) saturate(2.6) brightness(1.12);
+      border:1px solid rgba(255,255,255,.22);
+      box-shadow:inset 0 1.5px 0 rgba(255,255,255,.45),inset 0 -8px 18px rgba(255,255,255,.08),inset 0 -1px 0 rgba(0,0,0,.18),0 18px 46px rgba(0,0,0,.45);`,
+    hint: '<b>液态玻璃（重折射）</b>：blur 收低、饱和度与亮度拉高——透过的内容被「折射」变形提亮，加上更强的内侧顶光与暗缘，模拟 iOS 26 Liquid Glass 的凸面感。玻璃感最强，背景透出最清晰。',
+  },
+  C: {
+    name: '玻璃 C · 磨砂玻璃',
+    css: `background:linear-gradient(120deg,rgba(30,32,40,.52),rgba(24,26,34,.42) 55%,rgba(30,32,40,.48));
+      backdrop-filter:blur(26px) saturate(1.6);-webkit-backdrop-filter:blur(26px) saturate(1.6);
+      border:1px solid rgba(255,255,255,.13);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 18px 46px rgba(0,0,0,.45);`,
+    hint: '<b>磨砂玻璃</b>：深色薄纱底 + 中度模糊，透出的内容只余色块光影。对比度最稳、文字可读性最好，但「悬浮透明感」弱于 A/B。',
+  },
+  D: {
+    name: '玻璃 D · 白昼高透（浅色主题预览）',
+    css: `background:linear-gradient(120deg,rgba(255,255,255,.5),rgba(255,255,255,.32) 55%,rgba(255,255,255,.44));
+      backdrop-filter:blur(34px) saturate(1.85);-webkit-backdrop-filter:blur(34px) saturate(1.85);
+      border:1px solid rgba(255,255,255,.55);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.85),inset 0 -1px 0 rgba(0,0,0,.05),0 18px 46px rgba(0,0,0,.38);`,
+    hint: '<b>白昼高透</b>：白色高透明底 + 白边高光——这是你截图里那种形态的「玻璃化」版本：在浅色内容上仍能看出透与悬浮。如果你常驻浅色主题，选它。',
+  },
+}
+
+/* ---------- 动效方案定义 ---------- */
+const bar = document.getElementById('bar')
+let isCapsule = false
+let busy = false
+
+function applyGlass(id) {
+  bar.style.cssText = bar.style.cssText.split(';').filter(s => !s.includes('background') && !s.includes('backdrop') && !s.includes('border') && !s.includes('box-shadow') && !s.includes('inset')).join(';')
+  GLASS[id].css.split(';').forEach(rule => { if (rule.trim()) bar.style.cssText += ';' + rule })
+  // 清理 applyGlass 误伤的定位属性
+  bar.style.position = 'absolute'
+  bar.style.left = '50%'
+  bar.style.transform = 'translateX(-50%)'
+}
+
+/* 动效 A：聚散 —— 旧形态向中心收缩溶解，新形态自中心绽放 */
+function fxGather(toCapsule) {
+  return new Promise((res) => {
+    bar.animate(
+      [{ opacity: 1, transform: 'translateX(-50%) scale(1)' }, { opacity: 0, transform: 'translateX(-50%) scale(0.62)' }],
+      { duration: 190, easing: 'cubic-bezier(0.4,0,1,1)', fill: 'forwards' },
+    ).finished.then(() => {
+      isCapsule = toCapsule
+      bar.classList.toggle('capsule', toCapsule)
+      bar.animate(
+        [{ opacity: 0, transform: 'translateX(-50%) scale(0.62)' }, { opacity: 1, transform: 'translateX(-50%) scale(1)' }],
+        { duration: 460, easing: 'cubic-bezier(0.3,1.3,0.4,1)' },
+      ).finished.then(res)
+    })
+  })
+}
+
+/* 动效 B：交叉滑移 —— 旧形态下滑淡出，新形态自下滑入 */
+function fxSlide(toCapsule) {
+  return new Promise((res) => {
+    bar.animate(
+      [{ opacity: 1, transform: 'translateX(-50%) translateY(0)' }, { opacity: 0, transform: 'translateX(-50%) translateY(46px)' }],
+      { duration: 200, easing: 'cubic-bezier(0.4,0,1,1)', fill: 'forwards' },
+    ).finished.then(() => {
+      isCapsule = toCapsule
+      bar.classList.toggle('capsule', toCapsule)
+      bar.animate(
+        [{ opacity: 0, transform: 'translateX(-50%) translateY(40px)' }, { opacity: 1, transform: 'translateX(-50%) translateY(0)' }],
+        { duration: 430, easing: 'cubic-bezier(0.22,1.2,0.36,1)' },
+      ).finished.then(res)
+    })
+  })
+}
+
+/* 动效 C：液态形变 —— 宽高/圆角连续插值，像水滴在两种形态间流动 */
+function fxFluid(toCapsule) {
+  isCapsule = toCapsule
+  bar.classList.toggle('capsule', toCapsule)
+  bar.animate(
+    [
+      { borderRadius: toCapsule ? '14px' : '999px', boxShadow: '0 8px 26px rgba(0,0,0,.4)' },
+      { borderRadius: toCapsule ? '60px' : '60px', offset: 0.45, easing: 'cubic-bezier(0.3,1.25,0.4,1)' },
+      { borderRadius: toCapsule ? '999px' : '14px' },
+    ],
+    { duration: 540, easing: 'cubic-bezier(0.5,0,0.2,1)' },
+  )
+  // 内容快速交叉淡化，形变为主体
+  bar.animate(
+    [{ opacity: 1 }, { opacity: 0.35, offset: 0.4 }, { opacity: 1 }],
+    { duration: 540, easing: 'ease-in-out' },
+  )
+  return new Promise((r) => setTimeout(r, 560))
+}
+
+/* 动效 D：圆形揭示 —— 新形态从播放键位置圆形扩散揭示 */
+function fxCircle(toCapsule) {
+  return new Promise((res) => {
+    const play = document.getElementById('playBtn')
+    const pr = play.getBoundingClientRect()
+    const sr = bar.getBoundingClientRect()
+    const cx = pr.left + pr.width / 2 - sr.left
+    const cy = pr.top + pr.height / 2 - sr.top
+    const R = Math.hypot(Math.max(cx, sr.width - cx), Math.max(cy, sr.height - cy))
+    isCapsule = toCapsule
+    bar.classList.toggle('capsule', toCapsule)
+    bar.animate(
+      [
+        { clipPath: `circle(0px at ${cx}px ${cy}px)` },
+        { clipPath: `circle(${R}px at ${cx}px ${cy}px)` },
+      ],
+      { duration: 520, easing: 'cubic-bezier(0.4,0,0.2,1)' },
+    ).finished.then(() => {
+      bar.animate([{ clipPath: 'none' }], { duration: 1 }).finished.then(res)
+    })
+  })
+}
+
+const PLANS = [
+  { id: 'A', name: '动效 A · 聚散', fx: fxGather,
+    hint: '<b>聚散</b>：当前条向中心收缩溶解，新形态自中心向外绽放——「从中间散开、向外围聚拢」。节奏干净，无中间拉扯。' },
+  { id: 'B', name: '动效 B · 交叉滑移', fx: fxSlide,
+    hint: '<b>交叉滑移</b>：旧形态下滑淡出、新形态从下方滑入。最朴素稳重，与全站页面过渡同语言。' },
+  { id: 'C', name: '动效 C · 液态形变', fx: fxFluid,
+    hint: '<b>液态形变</b>：不退出，圆角与轮廓像水滴一样连续流动成新形态（内容短暂淡化让位）。一体感最强，考验曲线调校。' },
+  { id: 'D', name: '动效 D · 圆形揭示', fx: fxCircle,
+    hint: '<b>圆形揭示</b>：新形态从播放键的位置圆形扩散展开，有明确的「源头」叙事。' },
+]
+
+const tabsEl = document.getElementById('tabs')
+const hintEl = document.getElementById('hint')
+let currentGlass = 'A'
+let currentFx = 'A'
+
+function renderTabs() {
+  tabsEl.innerHTML = ''
+  const section = document.getElementById('sectionName').textContent.includes('玻璃') ? 'glass' : 'fx'
+  if (section === 'glass') {
+    Object.entries(GLASS).forEach(([id, p]) => addTab(id, p.name, id === currentGlass))
+  } else {
+    PLANS.forEach((p) => addTab(p.id, p.name, p.id === currentFx))
+  }
+}
+function addTab(id, name, on) {
+  const b = document.createElement('button')
+  b.className = 'tab' + (on ? ' on' : '')
+  b.textContent = name
+  b.onclick = () => pick(id)
+  b.dataset.id = id
+  tabsEl.appendChild(b)
+}
+function pick(id) {
+  const section = document.getElementById('sectionName').textContent.includes('玻璃') ? 'glass' : 'fx'
+  if (section === 'glass') {
+    currentGlass = id
+    applyGlass(id)
+    hintEl.innerHTML = GLASS[id].hint
+  } else {
+    if (busy) return
+    busy = true
+    currentFx = id
+    PLANS.find(p => p.id === id).fx(!isCapsule).then(() => { busy = false })
+    hintEl.innerHTML = PLANS.find(p => p.id === id).hint + '<br>再点一次标签切换回另一形态体验反向过渡。'
+  }
+  renderTabs()
+}
+
+/* 顶部说明区（用于区分当前分组） */
+const sec = document.createElement('div')
+sec.innerHTML = '<div id="sectionName" style="text-align:center;color:#86868b;font-size:12px;margin-bottom:10px">第一组：玻璃质感</div>'
+document.querySelector('.sub').after(sec)
+
+/* 滚动开关 */
+document.getElementById('scrollSw').onclick = function () {
+  this.classList.toggle('on')
+  document.getElementById('list').classList.toggle('animate', this.classList.contains('on'))
+}
+
+/* 初始：玻璃 A + 舞台先展示玻璃（第一屏先给玻璃方案更直观） */
+applyGlass('A')
+hintEl.innerHTML = GLASS.A.hint
+/* 简化分组切换：两个按钮 */
+const grp = document.createElement('div')
+grp.style.cssText = 'display:flex;gap:8px;margin-bottom:12px'
+const g1 = document.createElement('button'); g1.className = 'tab on'; g1.textContent = '第一组：玻璃质感'
+const g2 = document.createElement('button'); g2.className = 'tab'; g2.textContent = '第二组：切换动效'
+g1.onclick = () => { document.getElementById('sectionName').textContent = '第一组：玻璃质感'; g1.classList.add('on'); g2.classList.remove('on'); renderTabs(); pick(currentGlass) }
+g2.onclick = () => { document.getElementById('sectionName').textContent = '第二组：样式切换动效'; g2.classList.add('on'); g1.classList.remove('on'); renderTabs(); hintEl.innerHTML = PLANS.find(p => p.id === currentFx).hint + '<br>点标签会在 标准⇄胶囊 之间切换一次，来回体验。' ; pickFxNoop() }
+function pickFxNoop() { renderTabs() }
+grp.append(g1, g2)
+sec.before(grp)
+
+/* 初始渲染玻璃标签 */
+Object.entries(GLASS).forEach(([id, p]) => {
+  const b = document.createElement('button')
+  b.className = 'tab' + (id === 'A' ? ' on' : '')
+  b.textContent = p.name
+  b.onclick = () => pick(id)
+  tabsEl.appendChild(b)
+})
+
+/* morph 演示开关：动效组下用「切换形态」按钮更直观 */
+const morphSw = document.getElementById('morphSw')
+morphSw.onclick = function () {
+  if (busy) return
+  busy = true
+  PLANS.find(p => p.id === currentFx).fx(!isCapsule).then(() => { busy = false })
+}
+</script>
+</body>
+</html>

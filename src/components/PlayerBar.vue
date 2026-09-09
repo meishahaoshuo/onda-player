@@ -146,39 +146,55 @@ watch(
       morphing = false
       return
     }
-    // FLIP first：旧形态几何
-    const f = bar.getBoundingClientRect()
-    const fRadius = getComputedStyle(bar).borderRadius
-    const wasCapsule = localStyle.value === 'capsule'
-    // 切换布局（同时禁用 CSS 入场动画，避免与形变叠加）
-    bar.style.animation = 'none'
-    localStyle.value = nv
-    await nextTick()
-    // FLIP last：新形态几何
-    const l = bar.getBoundingClientRect()
-    const lRadius = getComputedStyle(bar).borderRadius
-    const dx = f.left + f.width / 2 - (l.left + l.width / 2)
-    const dy = f.top + f.height / 2 - (l.top + l.height / 2)
-    const sx = f.width / l.width
-    const sy = f.height / l.height
+    const toCapsule = nv === 'capsule'
     // 胶囊形态的 CSS 定位含 translateX(-50%)，动画帧必须携带
     const anchor = nv === 'capsule' ? 'translateX(-50%) ' : ''
-    const wasAnchor = wasCapsule ? 'translateX(-50%) ' : ''
-    bar.animate(
-      [
-        {
-          transform: `${wasAnchor}translate(${dx}px, ${dy}px) scale(${sx.toFixed(3)}, ${sy.toFixed(3)})`,
-          borderRadius: fRadius,
-          opacity: 0.55,
-        },
-        {
-          transform: `${anchor}translate(0px, 0px) scale(1, 1)`,
-          borderRadius: lRadius,
-          opacity: 1,
-        },
-      ],
-      { duration: 480, easing: 'cubic-bezier(0.3, 1.16, 0.4, 1)' },
-    )
+    const wasAnchor = localStyle.value === 'capsule' ? 'translateX(-50%) ' : ''
+    const gather = settings.barMorph === 'gather'
+
+    if (gather) {
+      // 聚散：当前形态向中心收缩溶解，新形态自中心绽放
+      await bar
+        .animate(
+          [
+            { opacity: 1, transform: `${wasAnchor}scale(1)` },
+            { opacity: 0, transform: `${wasAnchor}scale(0.62)` },
+          ],
+          { duration: 190, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' },
+        )
+        .finished.catch(() => {})
+      localStyle.value = nv
+      await nextTick()
+      bar.getAnimations().forEach((a) => a.cancel())
+      bar.animate(
+        [
+          { opacity: 0, transform: `${anchor}scale(0.62)` },
+          { opacity: 1, transform: `${anchor}scale(1)` },
+        ],
+        { duration: 460, easing: 'cubic-bezier(0.3, 1.3, 0.4, 1)' },
+      )
+    } else {
+      // 交叉滑移：当前形态下滑淡出，新形态自下滑入
+      await bar
+        .animate(
+          [
+            { opacity: 1, transform: `${wasAnchor}translateY(0)` },
+            { opacity: 0, transform: `${wasAnchor}translateY(46px)` },
+          ],
+          { duration: 200, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' },
+        )
+        .finished.catch(() => {})
+      localStyle.value = nv
+      await nextTick()
+      bar.getAnimations().forEach((a) => a.cancel())
+      bar.animate(
+        [
+          { opacity: 0, transform: `${anchor}translateY(40px)` },
+          { opacity: 1, transform: `${anchor}translateY(0)` },
+        ],
+        { duration: 430, easing: 'cubic-bezier(0.22, 1.2, 0.36, 1)' },
+      )
+    }
     morphing = false
   },
 )
@@ -239,7 +255,10 @@ function onRingPointerUp() {
   <footer
     ref="barEl"
     class="player-bar glass"
-    :class="{ capsule: localStyle === 'capsule' }"
+    :class="{
+      capsule: localStyle === 'capsule',
+      'glass-frost': localStyle === 'capsule' && settings.capsuleGlass === 'frost',
+    }"
     @pointermove="onRingPointerMove"
     @pointerup="onRingPointerUp"
     @pointercancel="onRingPointerUp"
@@ -412,7 +431,8 @@ function onRingPointerUp() {
   /* 入场动画由 onMounted 的 WAAPI 播放（样式切换的 FLIP 形变也由 WAAPI 接管） */
 }
 
-/* ---------- 浮动胶囊播放条（Liquid Glass，真正悬浮于内容上方） ---------- */
+/* ---------- 浮动胶囊播放条（悬浮于内容上方，材质可在设置中切换） ---------- */
+/* 材质一（默认）：液态玻璃 —— 低模糊高折射，背景内容透出最清晰 */
 .player-bar.capsule {
   position: fixed;
   left: 50%;
@@ -425,22 +445,38 @@ function onRingPointerUp() {
   border-radius: 999px;
   /* 悬浮于列表内容上方；低于歌词页(50)与菜单/弹窗(100) */
   z-index: 40;
-  /* 液态玻璃：底比通栏更透，背景内容从胶囊后穿过时折射可见 */
   background: linear-gradient(
     120deg,
-    color-mix(in srgb, var(--glass-bg-c, #1c1c1e) 42%, transparent),
-    color-mix(in srgb, var(--glass-bg-c, #1c1c1e) 30%, transparent) 55%,
-    color-mix(in srgb, var(--glass-bg-c, #1c1c1e) 38%, transparent)
+    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0.05) 55%,
+    rgba(255, 255, 255, 0.09)
   );
-  backdrop-filter: blur(36px) saturate(1.9);
-  -webkit-backdrop-filter: blur(36px) saturate(1.9);
-  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px) saturate(2.6) brightness(1.12);
+  -webkit-backdrop-filter: blur(20px) saturate(2.6) brightness(1.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #ffffff 30%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, #ffffff 8%, transparent),
-    0 18px 48px rgba(0, 0, 0, 0.3),
-    0 4px 16px rgba(0, 0, 0, 0.14);
-  transition: background 420ms var(--ease-out), box-shadow 420ms var(--ease-out);
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -8px 18px rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    0 18px 46px rgba(0, 0, 0, 0.45);
+  transition: background 420ms var(--ease-out), box-shadow 420ms var(--ease-out),
+    backdrop-filter 420ms var(--ease-out), border-color 420ms var(--ease-out);
+}
+
+/* 材质二：磨砂玻璃 —— 深色薄纱 + 中度模糊，透出内容只余光影，可读性最稳 */
+.player-bar.capsule.glass-frost {
+  background: linear-gradient(
+    120deg,
+    rgba(30, 32, 40, 0.52),
+    rgba(24, 26, 34, 0.42) 55%,
+    rgba(30, 32, 40, 0.48)
+  );
+  backdrop-filter: blur(26px) saturate(1.6);
+  -webkit-backdrop-filter: blur(26px) saturate(1.6);
+  border-color: rgba(255, 255, 255, 0.13);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 18px 46px rgba(0, 0, 0, 0.45);
 }
 
 /* 顶部进度细线：平时几乎不可见，悬停胶囊时显现 */

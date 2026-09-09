@@ -8,6 +8,8 @@ const LYRIC_FW_KEY = 'settings.lyricFontWeight'
 const LYRIC_ALIGN_KEY = 'settings.lyricAlign'
 const LYRIC_BLUR_KEY = 'settings.lyricBlur'
 const PLAYER_STYLE_KEY = 'settings.playerStyle'
+const GLASS_KEY = 'settings.capsuleGlass'
+const MORPH_KEY = 'settings.barMorph'
 const media = window.matchMedia('(prefers-color-scheme: dark)')
 
 function loadMode(): ThemeMode {
@@ -93,6 +95,18 @@ function loadPlayerStyle(): PlayerStyle {
   return localStorage.getItem(PLAYER_STYLE_KEY) === 'capsule' ? 'capsule' : 'standard'
 }
 
+/** 浮动胶囊玻璃材质：liquid = 液态玻璃（重折射高透）；frost = 磨砂玻璃（深色薄纱） */
+export type CapsuleGlass = 'liquid' | 'frost'
+function loadCapsuleGlass(): CapsuleGlass {
+  return localStorage.getItem(GLASS_KEY) === 'frost' ? 'frost' : 'liquid'
+}
+
+/** 标准⇄胶囊切换动效：gather = 聚散（中心收缩/绽放）；slide = 交叉滑移 */
+export type BarMorph = 'gather' | 'slide'
+function loadBarMorph(): BarMorph {
+  return localStorage.getItem(MORPH_KEY) === 'slide' ? 'slide' : 'gather'
+}
+
 /**
  * 主题设置：跟随系统 / 深色 / 浅色，切换即时生效并持久化。
  * 注：第 2 阶段 IndexedDB 就绪后仍保留 localStorage——主题需要在
@@ -106,6 +120,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const lyricAlign = ref<LyricAlign>(loadLyricAlign())
   const lyricBlur = ref(loadLyricBlur())
   const playerStyle = ref<PlayerStyle>(loadPlayerStyle())
+  const capsuleGlass = ref<CapsuleGlass>(loadCapsuleGlass())
+  const barMorph = ref<BarMorph>(loadBarMorph())
   const autoRestoreQueue = ref(loadAutoRestore())
   const autoResume = ref(loadAutoResume())
   /** 自定义主题色：'' = 默认海军蓝 */
@@ -188,6 +204,16 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(PLAYER_STYLE_KEY, s)
   }
 
+  function setCapsuleGlass(g: CapsuleGlass) {
+    capsuleGlass.value = g
+    localStorage.setItem(GLASS_KEY, g)
+  }
+
+  function setBarMorph(m: BarMorph) {
+    barMorph.value = m
+    localStorage.setItem(MORPH_KEY, m)
+  }
+
   function setAutoRestoreQueue(v: boolean) {
     autoRestoreQueue.value = v
     localStorage.setItem(AUTO_RESTORE_KEY, v ? '1' : '0')
@@ -224,6 +250,10 @@ export const useSettingsStore = defineStore('settings', () => {
     setLyricBlur,
     playerStyle,
     setPlayerStyle,
+    capsuleGlass,
+    setCapsuleGlass,
+    barMorph,
+    setBarMorph,
     autoRestoreQueue,
     setAutoRestoreQueue,
     autoResume,
