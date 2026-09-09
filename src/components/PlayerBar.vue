@@ -6,6 +6,7 @@ import ProgressSlider from './ProgressSlider.vue'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { useFavoritesStore } from '@/stores/favorites'
+import { useSettingsStore } from '@/stores/settings'
 import { useSongActions } from '@/composables/useSongActions'
 import { useUiStore } from '@/stores/ui'
 import { formatDuration } from '@/utils/format'
@@ -16,6 +17,7 @@ const player = usePlayerStore()
 const ui = useUiStore()
 const library = useLibraryStore()
 const favorites = useFavoritesStore()
+const settings = useSettingsStore()
 const { openSongMenu } = useSongActions()
 
 const currentFavorited = computed(
@@ -128,7 +130,7 @@ function onRowMenu(e: MouseEvent, song: SongRecord, i: number) {
 </script>
 
 <template>
-  <footer class="player-bar glass">
+  <footer class="player-bar glass" :class="{ capsule: settings.playerStyle === 'capsule' }">
     <!-- 左：曲目信息 -->
     <div class="track">
       <CoverImage
@@ -292,6 +294,81 @@ function onRowMenu(e: MouseEvent, song: SongRecord, i: number) {
     opacity: 0;
     transform: translateY(28px);
   }
+}
+
+/* ---------- 浮动胶囊迷你播放条（Liquid Glass，悬浮于内容上方） ---------- */
+.player-bar.capsule {
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  width: min(640px, calc(100vw - 28px));
+  height: 56px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 0 12px 0 7px;
+  border-radius: 999px;
+  /* 悬浮于列表内容上方；低于歌词页(50)与菜单/弹窗(100) */
+  z-index: 40;
+  animation: capsule-enter 520ms var(--ease-spring) 100ms backwards;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.32), var(--glass-highlight);
+}
+
+@keyframes capsule-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(26px) scale(0.95);
+  }
+}
+
+.capsule .track {
+  gap: 10px;
+}
+
+.capsule .cover.clickable {
+  width: 40px;
+  height: 40px;
+}
+
+/* 控制区横排：细进度线 + 迷你按钮 */
+.capsule .controls {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.capsule .pslider {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* 进度线贴近胶囊底缘横贯，进度气泡仍可用 */
+.capsule .pslider :deep(.ps-track) {
+  height: 3px;
+}
+
+.capsule .buttons {
+  gap: 2px;
+}
+
+/* 迷你化：隐藏模式/上一曲/队列按钮与右侧收藏/音量，只留播放/下一曲/歌词 */
+.capsule .buttons .icon-btn:nth-child(1),
+.capsule .buttons .icon-btn:nth-child(2),
+.capsule .buttons .icon-btn:nth-child(5),
+.capsule .aux .icon-btn:not([title='全屏歌词']),
+.capsule .aux > svg,
+.capsule .aux .volume {
+  display: none;
+}
+
+.capsule .play-btn {
+  width: 36px;
+  height: 36px;
+}
+
+.capsule .icon-btn {
+  transform: scale(0.92);
 }
 
 /* 左：曲目 */

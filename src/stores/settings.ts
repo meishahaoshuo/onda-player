@@ -7,7 +7,7 @@ const LYRIC_FS_KEY = 'settings.lyricFontSize'
 const LYRIC_FW_KEY = 'settings.lyricFontWeight'
 const LYRIC_ALIGN_KEY = 'settings.lyricAlign'
 const LYRIC_BLUR_KEY = 'settings.lyricBlur'
-const LYRIC_STAGGER_KEY = 'settings.lyricStagger'
+const PLAYER_STYLE_KEY = 'settings.playerStyle'
 const media = window.matchMedia('(prefers-color-scheme: dark)')
 
 function loadMode(): ThemeMode {
@@ -38,11 +38,6 @@ function loadLyricAlign(): LyricAlign {
 /** 歌词景深模糊：非当前行按距离轻微模糊（Apple Music 式层次） */
 function loadLyricBlur(): boolean {
   return localStorage.getItem(LYRIC_BLUR_KEY) !== '0'
-}
-
-/** 歌词交错滚动：换行时波纹从当前行向两侧错开掠过，滚动不再整体刚性平移 */
-function loadLyricStagger(): boolean {
-  return localStorage.getItem(LYRIC_STAGGER_KEY) !== '0'
 }
 
 /** 启动时恢复上次队列（关闭则每次冷启动为空队列） */
@@ -87,8 +82,16 @@ function loadAmbient(): boolean {
   return localStorage.getItem(AMBIENT_KEY) !== '0'
 }
 
-// 遗留清理：导入动画样式选择器已下线（固定液态玻璃），清掉旧键
+// 遗留清理：导入动画样式选择器已下线（固定液态玻璃）；交错滚动/歌词页音频可视化已按反馈下线
 localStorage.removeItem('settings.absorbStyle')
+localStorage.removeItem('settings.lyricStagger')
+localStorage.removeItem('settings.lyricViz')
+
+/** 播放条样式：standard = 底部通栏；capsule = Liquid Glass 浮动胶囊（悬浮于内容上方） */
+export type PlayerStyle = 'standard' | 'capsule'
+function loadPlayerStyle(): PlayerStyle {
+  return localStorage.getItem(PLAYER_STYLE_KEY) === 'capsule' ? 'capsule' : 'standard'
+}
 
 /**
  * 主题设置：跟随系统 / 深色 / 浅色，切换即时生效并持久化。
@@ -102,7 +105,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const lyricFontWeight = ref(loadLyricWeight())
   const lyricAlign = ref<LyricAlign>(loadLyricAlign())
   const lyricBlur = ref(loadLyricBlur())
-  const lyricStagger = ref(loadLyricStagger())
+  const playerStyle = ref<PlayerStyle>(loadPlayerStyle())
   const autoRestoreQueue = ref(loadAutoRestore())
   const autoResume = ref(loadAutoResume())
   /** 自定义主题色：'' = 默认海军蓝 */
@@ -180,9 +183,9 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(LYRIC_BLUR_KEY, v ? '1' : '0')
   }
 
-  function setLyricStagger(v: boolean) {
-    lyricStagger.value = v
-    localStorage.setItem(LYRIC_STAGGER_KEY, v ? '1' : '0')
+  function setPlayerStyle(s: PlayerStyle) {
+    playerStyle.value = s
+    localStorage.setItem(PLAYER_STYLE_KEY, s)
   }
 
   function setAutoRestoreQueue(v: boolean) {
@@ -219,8 +222,8 @@ export const useSettingsStore = defineStore('settings', () => {
     setLyricAlign,
     lyricBlur,
     setLyricBlur,
-    lyricStagger,
-    setLyricStagger,
+    playerStyle,
+    setPlayerStyle,
     autoRestoreQueue,
     setAutoRestoreQueue,
     autoResume,

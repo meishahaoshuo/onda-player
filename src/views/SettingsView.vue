@@ -202,6 +202,31 @@ function onRecordKeydown(e: KeyboardEvent) {
             </div>
             <AppSwitch :model-value="settings.ambientGlow" @update:model-value="settings.setAmbientGlow" />
           </div>
+
+          <!-- 播放条 -->
+          <p class="panel-sub accent-heading">播放条</p>
+          <div class="opt-row">
+            <div class="opt-text">
+              <span class="opt-name">样式</span>
+              <span class="opt-desc">浮动胶囊以 Liquid Glass 材质悬浮于内容上方</span>
+            </div>
+            <div class="seg-choice">
+              <button
+                class="seg-choice-btn"
+                :class="{ on: settings.playerStyle === 'standard' }"
+                @click="settings.setPlayerStyle('standard')"
+              >
+                标准
+              </button>
+              <button
+                class="seg-choice-btn"
+                :class="{ on: settings.playerStyle === 'capsule' }"
+                @click="settings.setPlayerStyle('capsule')"
+              >
+                浮动胶囊
+              </button>
+            </div>
+          </div>
         </section>
 
         <!-- 快捷键 -->
@@ -601,6 +626,30 @@ function onRecordKeydown(e: KeyboardEvent) {
 .opt-desc {
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+/* 分段选择（播放条样式等）：与全站胶囊语义一致 */
+.seg-choice {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--bg-hover);
+  flex-shrink: 0;
+}
+
+.seg-choice-btn {
+  padding: 5px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.seg-choice-btn.on {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-1);
 }
 
 .modal-mask {

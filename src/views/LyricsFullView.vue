@@ -282,40 +282,10 @@ function scrollToActive(animate: boolean) {
   }
 }
 
-/**
- * 交错滚动波纹：换行时以当前行为波源，向两侧按距离错开地轻微上浮/沉落。
- * 只动 transform/opacity 且 |d|≤8，每次 ≤17 个短时 WAAPI 动画，开销可忽略；
- * 效果上把「整体刚性平移」变成「逐行依次落位」的波浪感（可开关）。
- */
-function staggerWave() {
-  if (!settings.lyricStagger) return
-  if (reducedMotion()) return
-  const active = activeIdx.value
-  if (active < 0) return
-  for (let d = 0; d <= 8; d++) {
-    const idxs = d === 0 ? [active] : [active - d, active + d]
-    for (const i of idxs) {
-      const el = lineEls.value[i]
-      if (!el) continue
-      // 波源行不位移（它有卡拉OK与放大），只让周围行错峰回应
-      const dir = i < active ? -1 : i > active ? 1 : 0
-      if (dir === 0) continue
-      el.animate(
-        [
-          { transform: `translateY(${dir * 7}px)`, opacity: 0.68 },
-          { transform: 'translateY(0px)', opacity: 1 },
-        ],
-        { duration: 430, delay: d * 34, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
-      )
-    }
-  }
-}
-
 watch(activeIdx, async (idx, old) => {
   await nextTick()
   // 飞行动画期间不滚动：落地后由 flyIn 的收尾逻辑一次性直接定位。
   if (flyActive.value) return
-  staggerWave()
   // 用户手动滚动后暂停自动跟随（松手约 1.1s）——但只针对顺次换行（±1 行）；
   // seek 等大跨度跳变是明确意图，必须立即定位，不被冻结吞掉
   if (userScrolling.value && Math.abs(idx - old) <= 1) return
@@ -482,8 +452,7 @@ watch(
   },
 )
 
-/* ---------- 鼠标视差 + 封面倾斜（浅色页面的纵深呼吸感） ---------- */
-const pageEl = ref<HTMLElement | null>(null)
+/* ---------- 鼠标视差 + 封面倾斜（浅色页面的纵深呼吸感） ---------- */const pageEl = ref<HTMLElement | null>(null)
 let parallaxRaf = 0
 let parallaxEvt: MouseEvent | null = null
 
@@ -911,6 +880,36 @@ function freezePageMotion(freeze: boolean) {
   }
 }
 
+/** 展开态悬浮视差：大图随鼠标轻微 3D 倾斜（纯 transform 合成，无高光层） */
+let zoomTiltCleanup: (() => void) | null = null
+function bindZoomTilt(root: HTMLElement, stage: HTMLElement) {
+  const target = stage.querySelector<HTMLElement>('.zoom-img, .zoom-fallback')
+  if (!target || reducedMotion()) return
+  const setEase = (t: string) => (target.style.transition = t)
+  const onMove = (e: MouseEvent) => {
+    const r = stage.getBoundingClientRect()
+    if (r.width < 1) return
+    const px = (e.clientX - r.left) / r.width - 0.5
+    const py = (e.clientY - r.top) / r.height - 0.5
+    target.style.transform = `perspective(900px) rotateX(${(-py * 7).toFixed(2)}deg) rotateY(${(px * 9).toFixed(2)}deg)`
+  }
+  const onLeave = () => {
+    setEase('transform .45s cubic-bezier(0.22, 1, 0.36, 1)')
+    target.style.transform = 'perspective(900px) rotateX(0deg) rotateY(0deg)'
+  }
+  const onEnter = () => setEase('transform .12s ease-out')
+  root.addEventListener('mousemove', onMove)
+  root.addEventListener('mouseleave', onLeave)
+  root.addEventListener('mouseenter', onEnter)
+  zoomTiltCleanup = () => {
+    root.removeEventListener('mousemove', onMove)
+    root.removeEventListener('mouseleave', onLeave)
+    root.removeEventListener('mouseenter', onEnter)
+    target.style.transform = ''
+    target.style.transition = ''
+  }
+}
+
 /** 进场：大图从封面矩形 Q 弹放大到视口中心（WAAPI，fill:both 交给 leave 反向） */
 function onZoomEnter(el: Element, done: () => void) {
   const root = el as HTMLElement
@@ -921,6 +920,8 @@ function onZoomEnter(el: Element, done: () => void) {
     if (finished) return
     finished = true
     freezePageMotion(false)
+    zoomTiltCleanup?.()
+    if (stage) bindZoomTilt(root, stage)
     done()
   }
   if (!stage || !coverEl) {
@@ -966,6 +967,8 @@ function onZoomLeave(el: Element, done: () => void) {
   const root = el as HTMLElement
   const stage = root.querySelector<HTMLElement>('.zoom-stage')
   const coverEl = document.querySelector<HTMLElement>('.cover-main')
+  zoomTiltCleanup?.()
+  zoomTiltCleanup = null
   const finish = () => {
     const realCover = coverEl?.matches('img')
       ? coverEl
@@ -1097,14 +1100,6 @@ onMounted(() => {
               <AppSwitch
                 :model-value="settings.lyricBlur"
                 @update:model-value="settings.setLyricBlur"
-              />
-            </div>
-            <div class="fs-heading">交错滚动</div>
-            <div class="switch-row">
-              <span class="switch-desc">换行时歌词逐行错峰落位，如波纹掠过</span>
-              <AppSwitch
-                :model-value="settings.lyricStagger"
-                @update:model-value="settings.setLyricStagger"
               />
             </div>
           </div>
@@ -1257,7 +1252,7 @@ onMounted(() => {
 @keyframes enter-up {
   from {
     opacity: 0;
-    transform: translateY(16px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -1270,8 +1265,8 @@ onMounted(() => {
 }
 
 .lyrics-full:not(.fly-active) .enter-item {
-  animation: enter-up 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: calc(var(--i, 0) * 70ms);
+  animation: enter-up 340ms cubic-bezier(0.25, 1, 0.4, 1) both;
+  animation-delay: calc(var(--i, 0) * 36ms);
 }
 
 .lyrics-full {
