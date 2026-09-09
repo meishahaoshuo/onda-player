@@ -461,22 +461,22 @@ function onRingPointerUp() {
 }
 
 /* 浅色主题变体：纯白列表上白色低透明底会完全隐形，
-   用轻灰调白纱 + 深色细边 + 加深投影来区分胶囊与背景（Apple 浅色玻璃配方），
-   透出感来自 blur 后的背景字影。 */
+   用轻纱 + 深色细边 + 加深投影来区分胶囊与背景（Apple 浅色玻璃配方）。
+   纱必须够薄——歌曲列表是白底黑字，白纱过厚会让透出的字影消失（「被隔断」观感）。 */
 :global([data-theme='light'] .player-bar.capsule) {
   background: linear-gradient(
     120deg,
-    rgba(255, 255, 255, 0.46),
-    rgba(255, 255, 255, 0.3) 55%,
-    rgba(255, 255, 255, 0.4)
+    rgba(255, 255, 255, 0.22),
+    rgba(255, 255, 255, 0.12) 55%,
+    rgba(255, 255, 255, 0.18)
   );
-  backdrop-filter: blur(26px) saturate(2) brightness(1.04);
-  -webkit-backdrop-filter: blur(26px) saturate(2) brightness(1.04);
-  border: 1px solid rgba(0, 0, 0, 0.07);
+  backdrop-filter: blur(22px) saturate(1.9) brightness(1.02);
+  -webkit-backdrop-filter: blur(22px) saturate(1.9) brightness(1.02);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
-    0 18px 46px rgba(0, 0, 0, 0.2),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.85),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+    0 18px 46px rgba(0, 0, 0, 0.22),
     0 4px 16px rgba(0, 0, 0, 0.1);
 }
 
