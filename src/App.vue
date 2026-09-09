@@ -59,10 +59,11 @@ const sectionEl = ref<HTMLElement | null>(null)
 /**
  * 浮动胶囊模式下，非列表视图的滚动内容末尾预留胶囊高度，
  * 避免页面底部的功能按钮被悬浮胶囊遮挡。
- * 列表视图（SongList/虚拟列表）不加——容器 padding 会压短 height:100% 的列表，
- * 它们的尾部空间由 VirtualList 的 tail prop 提供。
+ * 列表视图（charts 与 SongList 系均为 height:100% + 内部滚动的同构布局，
+ * 容器 padding 会把它们压短造成「隔断」）不加——
+ * 尾部安全空间由各自的滚动容器内部提供（VirtualList tail / list-body padding）。
  */
-const LIST_VIEWS = ['songs', 'favorites', 'recent', 'folders']
+const LIST_VIEWS = ['songs', 'favorites', 'recent', 'folders', 'charts']
 const viewCapsulePad = computed(
   () => settings.playerStyle === 'capsule' && !LIST_VIEWS.includes(ui.activeView),
 )
