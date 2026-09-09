@@ -1716,6 +1716,20 @@ onMounted(() => {
   padding: 0 4px 6px;
 }
 
+/* AppSwitch 开启态默认用全局 --accent（固定主题色，不随封面变化），在歌词页里很突兀；
+   覆盖为与上方滑块把手 / 对齐按钮同一套封面派生色（同 seg-btn.on 的令牌与白 knob）。 */
+.lyrics-full :deep(.app-switch.on) {
+  background: var(--lyric-text-active);
+}
+
+.lyrics-full :deep(.app-switch.on:hover) {
+  background: var(--lyric-control-hover);
+}
+
+.lyrics-full :deep(.app-switch.on .knob) {
+  background: #ffffff;
+}
+
 .switch-desc {
   font-size: 11px;
   color: var(--lyric-time);
