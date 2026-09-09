@@ -166,7 +166,7 @@ watch(
 
 <template>
   <div class="app-shell">
-    <div class="body-row">
+        <div class="body-row" :class="{ 'bar-capsule': settings.playerStyle === 'capsule' }">
       <Sidebar />
       <main class="content">
         <!-- 封面氛围光：跟随当前播放封面取色的低强度背景光斑 -->
@@ -256,6 +256,12 @@ watch(
   display: flex;
   flex: 1;
   min-height: 0;
+}
+
+/* 浮动胶囊模式：内容区整体留出底部空间，列表末项不被悬浮胶囊遮挡 */
+.body-row.bar-capsule {
+  padding-bottom: 96px;
+  transition: padding-bottom 460ms cubic-bezier(0.3, 1.2, 0.5, 1);
 }
 
 .content {

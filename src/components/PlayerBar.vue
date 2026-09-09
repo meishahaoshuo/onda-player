@@ -6,7 +6,7 @@ import ProgressSlider from './ProgressSlider.vue'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { useFavoritesStore } from '@/stores/favorites'
-import { useSettingsStore } from '@/stores/settings'
+import { useSettingsStore, type PlayerStyle } from '@/stores/settings'
 import { useSongActions } from '@/composables/useSongActions'
 import { useUiStore } from '@/stores/ui'
 import { formatDuration } from '@/utils/format'
@@ -127,10 +127,134 @@ function resetDrag() {
 function onRowMenu(e: MouseEvent, song: SongRecord, i: number) {
   openSongMenu(e, song, { queueIndex: i, context: player.queue })
 }
+
+/* ---------- 播放条样式：标准 ⇄ 浮动胶囊（形变过渡） ---------- */
+
+/** 实际渲染的样式：切换时先播收缩动画再换形态，避免 class 直跳的生硬感 */
+const localStyle = ref<PlayerStyle>(settings.playerStyle)
+const barEl = ref<HTMLElement | null>(null)
+let morphing = false
+
+watch(
+  () => settings.playerStyle,
+  async (nv) => {
+    if (morphing || nv === localStyle.value) return
+    morphing = true
+    const bar = barEl.value
+    if (!bar) {
+      localStyle.value = nv
+      morphing = false
+      return
+    }
+    const toCapsule = nv === 'capsule'
+    // 当前形态收缩退出
+    await bar
+      .animate(
+        toCapsule
+          ? [
+              { opacity: 1, transform: 'translateX(-50%) translateY(0) scale(1)' },
+              { opacity: 0, transform: 'translateX(-50%) translateY(34px) scale(0.92)' },
+            ]
+          : [
+              { opacity: 1, transform: 'translateY(0) scale(1)' },
+              { opacity: 0, transform: 'translateY(34px) scale(0.97)' },
+            ],
+        { duration: 220, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' },
+      )
+      .finished.catch(() => {})
+    localStyle.value = nv
+    await nextTick()
+    // 清掉 CSS/上一步的填充动画，让位给进入动画
+    bar.getAnimations().forEach((a) => a.cancel())
+    // 新形态 Q 弹进入
+    bar.animate(
+      toCapsule
+        ? [
+            { opacity: 0, transform: 'translateX(-50%) translateY(30px) scale(0.93)' },
+            { opacity: 1, transform: 'translateX(-50%) translateY(0) scale(1)' },
+          ]
+        : [
+            { opacity: 0, transform: 'translateY(30px) scale(0.97)' },
+            { opacity: 1, transform: 'translateY(0) scale(1)' },
+          ],
+      { duration: 520, easing: 'cubic-bezier(0.3, 1.36, 0.5, 1)' },
+    )
+    morphing = false
+  },
+)
+
+/* ---------- 胶囊进度环：沿胶囊边缘的进度描边，点击/拖拽 seek ---------- */
+
+const ringDragging = ref(false)
+const ringPct = computed(() => {
+  const dur = player.duration || player.current?.durationSec || 0
+  return dur > 0 ? Math.min(1, Math.max(0, player.currentTime / dur)) : 0
+})
+
+function seekFromClientX(cx: number) {
+  const bar = barEl.value
+  if (!bar) return
+  const dur = player.duration || player.current?.durationSec || 0
+  if (dur <= 0) return
+  const r = bar.getBoundingClientRect()
+  const pct = Math.min(1, Math.max(0, (cx - r.left) / r.width))
+  player.seek(pct * dur)
+}
+
+function onRingPointerDown(e: PointerEvent) {
+  ringDragging.value = true
+  barEl.value?.setPointerCapture(e.pointerId)
+  seekFromClientX(e.clientX)
+}
+
+function onRingPointerMove(e: PointerEvent) {
+  if (ringDragging.value) seekFromClientX(e.clientX)
+}
+
+function onRingPointerUp() {
+  ringDragging.value = false
+}
 </script>
 
 <template>
-  <footer class="player-bar glass" :class="{ capsule: settings.playerStyle === 'capsule' }">
+  <footer
+    ref="barEl"
+    class="player-bar glass"
+    :class="{ capsule: localStyle === 'capsule' }"
+    @pointermove="onRingPointerMove"
+    @pointerup="onRingPointerUp"
+    @pointercancel="onRingPointerUp"
+  >
+    <!-- 胶囊模式：沿边缘一圈的进度描边（SVG pathLength 归一），hit rect 提供拖拽热区 -->
+    <svg
+      v-if="localStyle === 'capsule'"
+      class="capsule-ring"
+      viewBox="0 0 760 66"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <rect class="ring-track" x="1.25" y="1.25" width="757.5" height="63.5" rx="31.75" pathLength="1000" vector-effect="non-scaling-stroke" />
+      <rect
+        class="ring-fill"
+        x="1.25"
+        y="1.25"
+        width="757.5"
+        height="63.5"
+        rx="31.75"
+        pathLength="1000"
+        vector-effect="non-scaling-stroke"
+        :style="{ strokeDashoffset: String(1000 * (1 - ringPct)) }"
+      />
+      <rect
+        class="ring-hit"
+        x="1.25"
+        y="1.25"
+        width="757.5"
+        height="63.5"
+        rx="31.75"
+        @pointerdown="onRingPointerDown"
+      />
+    </svg>
     <!-- 左：曲目信息 -->
     <div class="track">
       <CoverImage
@@ -296,22 +420,28 @@ function onRowMenu(e: MouseEvent, song: SongRecord, i: number) {
   }
 }
 
-/* ---------- 浮动胶囊迷你播放条（Liquid Glass，悬浮于内容上方） ---------- */
+/* ---------- 浮动胶囊播放条（Liquid Glass，悬浮于内容上方） ---------- */
 .player-bar.capsule {
   position: fixed;
   left: 50%;
-  bottom: 14px;
+  bottom: 16px;
   transform: translateX(-50%);
-  width: min(640px, calc(100vw - 28px));
-  height: 56px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  width: min(760px, calc(100vw - 24px));
+  height: 66px;
   gap: 14px;
-  padding: 0 12px 0 7px;
+  padding: 0 18px;
   border-radius: 999px;
   /* 悬浮于列表内容上方；低于歌词页(50)与菜单/弹窗(100) */
   z-index: 40;
-  animation: capsule-enter 520ms var(--ease-spring) 100ms backwards;
-  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.32), var(--glass-highlight);
+  animation: capsule-enter 560ms var(--ease-spring) 100ms backwards;
+  /* 液态玻璃加强：高饱和背景折射 + 内侧顶部亮线 + 双层投影 */
+  backdrop-filter: blur(36px) saturate(1.9);
+  -webkit-backdrop-filter: blur(36px) saturate(1.9);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 28%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, #ffffff 8%, transparent),
+    0 18px 48px rgba(0, 0, 0, 0.32),
+    0 4px 16px rgba(0, 0, 0, 0.16);
 }
 
 @keyframes capsule-enter {
@@ -321,54 +451,75 @@ function onRowMenu(e: MouseEvent, song: SongRecord, i: number) {
   }
 }
 
+/* 沿胶囊边缘一圈的进度描边 */
+.capsule-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* 只有热区 rect 接收事件，内部控件不受影响 */
+  overflow: visible;
+}
+
+.capsule-ring rect {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.capsule-ring .ring-track {
+  stroke: color-mix(in srgb, var(--text-tertiary) 32%, transparent);
+}
+
+.capsule-ring .ring-fill {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-dasharray: 1000;
+  /* timeupdate 4Hz 跳变由短过渡抹平 */
+  transition: stroke-dashoffset 140ms linear;
+}
+
+/* 拖拽热区：透明宽描边，只命中边缘一圈 */
+.capsule-ring .ring-hit {
+  stroke: transparent;
+  stroke-width: 18;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
 .capsule .track {
-  gap: 10px;
-}
-
-.capsule .cover.clickable {
-  width: 40px;
-  height: 40px;
-}
-
-/* 控制区横排：细进度线 + 迷你按钮 */
-.capsule .controls {
-  flex-direction: row;
-  align-items: center;
   gap: 12px;
   min-width: 0;
 }
 
+.capsule .cover.clickable {
+  width: 44px;
+  height: 44px;
+}
+
+/* 进度已移到边缘环，中间的横线滑杆隐藏，controls 只留按钮行 */
 .capsule .pslider {
-  flex: 1;
-  min-width: 120px;
-}
-
-/* 进度线贴近胶囊底缘横贯，进度气泡仍可用 */
-.capsule .pslider :deep(.ps-track) {
-  height: 3px;
-}
-
-.capsule .buttons {
-  gap: 2px;
-}
-
-/* 迷你化：隐藏模式/上一曲/队列按钮与右侧收藏/音量，只留播放/下一曲/歌词 */
-.capsule .buttons .icon-btn:nth-child(1),
-.capsule .buttons .icon-btn:nth-child(2),
-.capsule .buttons .icon-btn:nth-child(5),
-.capsule .aux .icon-btn:not([title='全屏歌词']),
-.capsule .aux > svg,
-.capsule .aux .volume {
   display: none;
 }
 
+.capsule .controls {
+  gap: 6px;
+}
+
+.capsule .buttons {
+  gap: 4px;
+}
+
 .capsule .play-btn {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
 }
 
 .capsule .icon-btn {
   transform: scale(0.92);
+}
+
+.capsule .volume {
+  width: 72px;
 }
 
 /* 左：曲目 */

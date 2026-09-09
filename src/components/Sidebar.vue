@@ -149,6 +149,16 @@ function plClick(id: string) {
         </button>
       </div>
 
+      <!-- 设置：放在分隔线上方，避免与底部悬浮胶囊播放条重叠 -->
+      <button
+        class="nav-item"
+        :class="{ active: ui.activeView === 'settings' }"
+        @click="navClick('settings')"
+      >
+        <AppIcon name="settings" />
+        <span>设置</span>
+      </button>
+
       <div class="divider" />
 
       <!-- 歌单板块：固定在分隔线下方，仅子项可拖拽排序 -->
@@ -184,17 +194,6 @@ function plClick(id: string) {
         </button>
       </div>
     </nav>
-
-    <div class="bottom">
-      <button
-        class="nav-item"
-        :class="{ active: ui.activeView === 'settings' }"
-        @click="navClick('settings')"
-      >
-        <AppIcon name="settings" />
-        <span>设置</span>
-      </button>
-    </div>
   </aside>
 </template>
 
@@ -380,15 +379,5 @@ function plClick(id: string) {
   flex-shrink: 0;
 }
 
-.bottom {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.bottom .nav-item.active {
-  background: var(--bg-active);
-}
+/* 设置入口已并入 nav（分隔线上方），底部容器移除 */
 </style>
