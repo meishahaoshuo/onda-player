@@ -7,14 +7,10 @@ import AppIcon from '@/components/AppIcon.vue'
 import { formatDuration } from '@/utils/format'
 import { useSongActions } from '@/composables/useSongActions'
 import { useFavoritesStore } from '@/stores/favorites'
-import { useSettingsStore } from '@/stores/settings'
 import { flyToPlayerFromRow } from '@/services/coverFlight'
 import type { SongRecord } from '@/types'
 
 const props = defineProps<{ songs: SongRecord[]; currentPath?: string | null; persistKey?: string }>()
-
-/** 浮动胶囊悬浮于列表底部时，滚动末尾预留胶囊高度，最后一行可完整滚出悬浮层 */
-const settings = useSettingsStore()
 const emit = defineEmits<{ play: [song: SongRecord] }>()
 
 const ROW_HEIGHT = 56
@@ -52,12 +48,7 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
     </div>
 
     <div class="list-body">
-      <VirtualList
-        :items="props.songs"
-        :item-height="ROW_HEIGHT"
-        :persist-key="props.persistKey"
-        :tail="settings.playerStyle === 'capsule' ? 84 : 0"
-      >
+      <VirtualList :items="props.songs" :item-height="ROW_HEIGHT" :persist-key="props.persistKey">
         <template #default="{ item, index }">
           <div
             class="song-row"
@@ -114,9 +105,6 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
   height: 100%;
   min-width: 0;
   overflow-x: hidden;
-  /* 抵消 .view-body 的左右/底部内边距：列表与表头通栏贴边（对齐专辑/艺术家页观感），
-     行内容自身的 12px 内边距保持缩进。与 .view-body 的 24px 内边距耦合，改动需同步。 */
-  margin: 0 -24px -24px;
 }
 
 .list-header {

@@ -97,7 +97,7 @@ onBeforeUnmount(() => {
       @click="openArtist(artist, $event)"
     >
       <span class="cover-wrap">
-        <CoverImage :cover-id="artist.coverId" :size="256" class="artist-cover" />
+        <CoverImage :cover-id="artist.coverId" :size="120" class="artist-cover" />
       </span>
       <div class="artist-name" :title="artist.name">{{ artist.name }}</div>
       <div class="artist-sub">{{ artist.songs.length }} 首</div>
@@ -109,7 +109,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .artist-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 20px;
 }
 
@@ -146,18 +146,6 @@ onBeforeUnmount(() => {
 .artist-card :deep(img),
 .artist-card :deep(.cover-fallback) {
   border-radius: 50%;
-}
-
-/* 封面随卡片宽度自适应放大（网格 minmax 150，卡片内容宽约 118-170px） */
-.artist-cover {
-  width: 100%;
-  aspect-ratio: 1;
-}
-
-.artist-cover :deep(img),
-.artist-cover :deep(.cover-fallback) {
-  width: 100%;
-  height: 100%;
 }
 
 .artist-name {
