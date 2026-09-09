@@ -851,7 +851,23 @@ function onZoomKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && coverExpanded.value) collapseCoverZoom()
 }
 
-/** 进场：大图从封面矩形 Q 弹放大 + 两圈水波同步荡开（WAAPI，fill:both 交给 leave 反向） */
+/**
+ * 展开/收起动画期间冻结页面的每帧运动（歌词 rAF + 鼠标视差 rAF）。
+ * 大图 80vmin 的缩放本身要吃满合成带宽，歌词逐行重排/逐字卡拉 OK 与视差变换
+ * 会和它抢主线程——这是「收起飞回掉帧」的主因。结束后 syncLyricRaf 按播放态自动恢复。
+ */
+function freezePageMotion(freeze: boolean) {
+  if (freeze) {
+    cancelAnimationFrame(lyricRaf)
+    lyricRaf = 0
+    cancelAnimationFrame(parallaxRaf)
+    parallaxRaf = 0
+  } else {
+    syncLyricRaf()
+  }
+}
+
+/** 进场：大图从封面矩形 Q 弹放大到视口中心（WAAPI，fill:both 交给 leave 反向） */
 function onZoomEnter(el: Element, done: () => void) {
   const root = el as HTMLElement
   const stage = root.querySelector<HTMLElement>('.zoom-stage')
@@ -860,6 +876,7 @@ function onZoomEnter(el: Element, done: () => void) {
   const finish = () => {
     if (finished) return
     finished = true
+    freezePageMotion(false)
     done()
   }
   if (!stage || !coverEl) {
@@ -888,44 +905,13 @@ function onZoomEnter(el: Element, done: () => void) {
   const scale0 = s.width / d.width
   const dx = s.left + s.width / 2 - (d.left + d.width / 2)
   const dy = s.top + s.height / 2 - (d.top + d.height / 2)
+  freezePageMotion(true)
   const anim = stage.animate(
     [
       { transform: `translate(${dx}px, ${dy}px) scale(${scale0})` },
       { transform: 'translate(0px, 0px) scale(1)' },
     ],
     { duration: 640, easing: 'cubic-bezier(0.3, 1.36, 0.5, 1)', fill: 'both' },
-  )
-  // 水波：三层涟漪依次荡开，形状从封面圆角渐变到正圆（脱离源头后自然变圆），
-  // 颜色取封面原色提亮令牌（--lyric-accent 是压暗的文字色，做特效发黑）
-  const ripples = [
-    { scale: 1.44, dur: 980, delay: 80, op: 0.5 },
-    { scale: 1.8, dur: 1180, delay: 195, op: 0.32 },
-    { scale: 2.16, dur: 1380, delay: 320, op: 0.18 },
-  ]
-  root.querySelectorAll<HTMLElement>('.zoom-ring').forEach((ring, i) => {
-    const cfg = ripples[i] ?? ripples[ripples.length - 1]
-    ring.animate(
-      [
-        { transform: `scale(${scale0})`, opacity: 0, borderRadius: '18px' },
-        { opacity: cfg.op, offset: 0.26, borderRadius: '34%' },
-        { transform: `scale(${cfg.scale})`, opacity: 0, borderRadius: '50%' },
-      ],
-      {
-        duration: cfg.dur,
-        delay: cfg.delay,
-        easing: 'cubic-bezier(0.16, 0.72, 0.3, 1)',
-        fill: 'both',
-      },
-    )
-  })
-  // 色场光晕：封面主色柔光炸开一层，把水波和大图在色场上串起来
-  root.querySelector<HTMLElement>('.zoom-bloom')?.animate(
-    [
-      { transform: `scale(${scale0 * 0.92})`, opacity: 0 },
-      { opacity: 0.5, offset: 0.3 },
-      { transform: 'scale(1.55)', opacity: 0 },
-    ],
-    { duration: 1100, delay: 50, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)', fill: 'both' },
   )
   anim.onfinish = finish
   window.setTimeout(finish, 940) // 兜底：onfinish 偶发不触发
@@ -941,6 +927,7 @@ function onZoomLeave(el: Element, done: () => void) {
       ? coverEl
       : coverEl?.querySelector<HTMLElement>('img, .cover-fallback')
     if (realCover) realCover.style.opacity = ''
+    freezePageMotion(false)
     done()
   }
   if (coverZoomInstant || !stage || !coverEl) {
@@ -962,6 +949,7 @@ function onZoomLeave(el: Element, done: () => void) {
   const scale0 = s.width / d.width
   const dx = s.left + s.width / 2 - (d.left + d.width / 2)
   const dy = s.top + s.height / 2 - (d.top + d.height / 2)
+  freezePageMotion(true)
   root.querySelector<HTMLElement>('.zoom-dim')?.animate([{ opacity: 1 }, { opacity: 0 }], {
     duration: 260,
     easing: 'ease-out',
@@ -1196,10 +1184,6 @@ onMounted(() => {
       <div v-if="coverExpanded" class="cover-zoom" @click="collapseCoverZoom">
         <div class="zoom-dim" aria-hidden="true" />
         <div class="zoom-stage">
-          <div class="zoom-bloom" aria-hidden="true" />
-          <div class="zoom-ring" aria-hidden="true" />
-          <div class="zoom-ring" aria-hidden="true" />
-          <div class="zoom-ring" aria-hidden="true" />
           <img
             v-if="expandedSrc"
             class="zoom-img"
@@ -1899,18 +1883,23 @@ onMounted(() => {
   /* 背景色场压暗聚焦：深色基调用歌词深令牌混黑，保持同色系 */
   background: color-mix(in srgb, #000000 46%, var(--lyric-bg-deep));
   opacity: 0.92;
+  /* 全屏遮罩的透明度动画也要独立成层，否则每帧重绘整屏 */
+  will-change: opacity;
 }
 
 .zoom-stage {
   position: relative;
   width: min(80vmin, 720px);
   aspect-ratio: 1;
+  /* 独立合成层：让 80vmin 大图的缩放只走合成，不逐帧重新光栅化（收起飞回掉帧的关键） */
   will-change: transform;
+  backface-visibility: hidden;
 }
 
 .zoom-img,
 .zoom-fallback {
   display: block;
+  will-change: transform;
   width: 100%;
   height: 100%;
   border-radius: 18px;
@@ -1926,30 +1915,6 @@ onMounted(() => {
   background: var(--lyric-accent);
 }
 
-/* 水波环：三层涟漪，进/出场由 WAAPI 驱动（scale + opacity + 圆角），初始不可见。
-   颜色用 --lyric-wave（封面主色提亮）—— --lyric-accent 是压暗过的文字对比色，做特效发黑。 */
-.zoom-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 18px;
-  border: 1.5px solid var(--lyric-wave);
-  /* 边缘柔光带：用渐变而非 box-shadow，避免大范围阴影随 scale 反复重绘 */
-  background: radial-gradient(closest-side, transparent 74%, var(--lyric-wave-soft) 100%);
-  opacity: 0;
-  pointer-events: none;
-  will-change: transform, opacity;
-}
-
-/* 色场光晕：跟随封面主色，把水波与大图在色场上串成一体 */
-.zoom-bloom {
-  position: absolute;
-  inset: -6%;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, var(--lyric-wave-soft), transparent 72%);
-  opacity: 0;
-  pointer-events: none;
-  will-change: transform, opacity;
-}
 
 @media (prefers-reduced-motion: reduce) {
   .bg-ambient {

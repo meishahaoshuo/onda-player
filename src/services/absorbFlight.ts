@@ -24,12 +24,6 @@ const BATCH_CAP = 6
 /** 单次扫描会话累计起飞上限（大库防雪崩） */
 const SESSION_CAP = 24
 /**
- * 「库存演出」（全库已有封面）的会话起飞上限。
- * 与实际新入库的批次分账，避免全库封面占满 SESSION_CAP 后把新歌封面挤掉，
- * 也能防止大库重扫时演出没完没了（进度条走完动画还在飞）。
- */
-const SHOW_CAP = 12
-/**
  * 飞行轨迹采样数：极坐标螺旋是曲线，采样太稀（旧版仅 6 点）时
  * 段间线性插值会出现折线感与速度突变（肉眼「一顿一顿」）。
  * 密采样 + 缓动烘焙进采样点、整体 linear 插值，速度天然连续。
@@ -235,22 +229,11 @@ function collapseVortex(): void {
 
 /* ================= 封面飞行：四面八方螺旋向心 ================= */
 
-/**
- * 批次来源：`fresh` = 本次扫描真正新入库的封面（用户刚加的歌，优先演），
- * `show` = 全库已有封面的库存演出（让动画看到「所有文件夹」的封面）。
- */
-type BatchKind = 'fresh' | 'show'
-interface Batch {
-  ids: string[]
-  kind: BatchKind
-}
-
 let sinkInstalled = false
 let sessionFlights = 0
-/** 库存演出已起飞张数（与 SHOW_CAP 分账，防挤掉新歌封面 / 防拖场） */
-let sessionShow = 0
 const flownCoverIds = new Set<string>()
-let queue: Batch[] = []
+/** 待演批次：全部来自本次扫描实际入库的歌曲（本文件夹/本次变更，不掺其他文件夹） */
+let queue: string[][] = []
 let pumping = false
 let inFlight = 0
 let lastPulseAt = 0
@@ -266,13 +249,12 @@ function reportDebug(): void {
     queueLen: queue.length,
     flying: document.querySelectorAll('.absorb-flight').length,
     sessionFlights,
-    sessionShow,
     flown: flownCoverIds.size,
     vortex: !!vortex,
   })
 }
 
-function enqueue(coverIds: string[], kind: BatchKind = 'fresh'): void {
+function enqueue(coverIds: string[]): void {
   if (reduced() || document.hidden) return
   const ui = useUiStore()
   if (ui.dolly !== 'idle') return
@@ -281,40 +263,21 @@ function enqueue(coverIds: string[], kind: BatchKind = 'fresh'): void {
   if (clearFlownOnNextEnqueue) {
     flownCoverIds.clear()
     sessionFlights = 0
-    sessionShow = 0
     clearFlownOnNextEnqueue = false
   }
   if (!ensureVortex()) return
-  queue.push({ ids: coverIds, kind })
+  queue.push(coverIds)
   void pump()
 }
 
-/** 取下一批：新入库批次优先（用户刚加的歌先演），没有才按入队顺序取库存演出 */
-function takeNextBatch(): Batch | undefined {
-  if (queue.length === 0) return undefined
-  let idx = queue.findIndex((b) => b.kind === 'fresh')
-  if (idx < 0) idx = 0
-  return queue.splice(idx, 1)[0]
-}
-
 /**
- * 扫描结束裁剪队列：最多保留「1 批新入库 + 1 批全库演出」，其余丢弃。
- * 大库扫描会持续入批，不裁剪就会出现「进度条走完动画还在飞很久」；
- * 但必须给库存演出留一批——小库扫描几十毫秒就结束，若只保新入库批，
- * 全库那批还没来得及起飞就被裁掉，用户就永远看不到其他文件夹的封面。
+ * 扫描结束裁剪队列。大库扫描会持续入批，不裁剪就会出现
+ * 「进度条走完动画还在飞很久」；已经在飞的算一批，故预算 = 2 - 在飞。
  */
 function trimQueueForFinish(): void {
-  // 已经在飞的算一批：队列预算 = 2 - 在飞，否则扫描结束后还会飞 3 批（≈4s），
-  // 体感上就是「进度条走完了动画还在继续」。
   const budget = inFlight > 0 ? 1 : 2
   if (queue.length <= budget) return
-  const freshIdx = queue.findIndex((b) => b.kind === 'fresh')
-  const showIdx = queue.findIndex((b) => b.kind === 'show')
-  const keep: Batch[] = []
-  if (freshIdx >= 0) keep.push(queue[freshIdx])
-  if (showIdx >= 0 && keep.length < budget) keep.push(queue[showIdx])
-  if (keep.length === 0) keep.push(queue[0])
-  queue = keep.slice(0, budget)
+  queue = queue.slice(0, budget)
 }
 
 async function pump(): Promise<void> {
@@ -322,8 +285,8 @@ async function pump(): Promise<void> {
   pumping = true
   try {
     while (queue.length > 0) {
-      const batch = takeNextBatch()!
-      await flyBatch(batch)
+      const ids = queue.shift()!
+      await flyBatch(ids)
       await wait(BATCH_GAP)
       await waitUntilIdle(flightMs)
     }
@@ -337,18 +300,13 @@ async function pump(): Promise<void> {
   }
 }
 
-async function flyBatch(b: Batch): Promise<void> {
+async function flyBatch(ids: string[]): Promise<void> {
   if (sessionFlights >= SESSION_CAP) {
     pulseVortex()
     return
   }
-  // 库存演出有独立额度：不与新入库封面抢 SESSION_CAP
-  if (b.kind === 'show' && sessionShow >= SHOW_CAP) {
-    pulseVortex()
-    return
-  }
   const picks: string[] = []
-  for (const id of b.ids) {
+  for (const id of ids) {
     if (flownCoverIds.has(id)) continue
     flownCoverIds.add(id)
     picks.push(id)
@@ -356,7 +314,6 @@ async function flyBatch(b: Batch): Promise<void> {
   }
   if (picks.length === 0) return
   sessionFlights += picks.length
-  if (b.kind === 'show') sessionShow += picks.length
 
   const lib = useLibraryStore()
   const srcs = await Promise.all(
@@ -513,7 +470,6 @@ export function installAbsorbFlight(): void {
       if (!was && on) {
         flownCoverIds.clear()
         sessionFlights = 0
-        sessionShow = 0
         sessionEnding = false
         return
       }

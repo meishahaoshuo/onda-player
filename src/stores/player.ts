@@ -30,6 +30,13 @@ interface PersistedState {
 }
 
 const STATE_KEY = 'playerState'
+/**
+ * 音量独立持久化：原来只随队列状态一起存，有两个漏洞——
+ * ① `saveNow` 在队列为空时直接 return，用户没播歌只调音量就存不下来；
+ * ② `restore` 在「自动恢复队列」关闭时整体 return，音量跟着一起不恢复。
+ * 音量是与队列无关的基础偏好，单独存一份，任何情况下都记住。
+ */
+const VOLUME_KEY = 'player.volume'
 
 export const usePlayerStore = defineStore('player', () => {
   const library = useLibraryStore()
@@ -179,9 +186,13 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
+  let volTimer: number | undefined
   function setVolume(v: number) {
     volume.value = Math.round(Math.min(100, Math.max(0, v)))
     getAudio().volume = volume.value / 100
+    // 音量独立落盘（短防抖，拖动滑杆不会写爆 IndexedDB）
+    window.clearTimeout(volTimer)
+    volTimer = window.setTimeout(() => void db.kvSet(VOLUME_KEY, volume.value), 250)
     scheduleSave()
   }
 
@@ -365,6 +376,14 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function restore() {
     bindAudioEvents()
+    // 音量先于队列恢复，且不受 autoRestoreQueue 开关与队列是否为空影响
+    const savedVol = await db.kvGet<number>(VOLUME_KEY)
+    const applyVolume = (v: number) => {
+      volume.value = Math.round(Math.min(100, Math.max(0, v)))
+      lastVolume.value = volume.value || 80
+      getAudio().volume = volume.value / 100
+    }
+    if (typeof savedVol === 'number' && Number.isFinite(savedVol)) applyVolume(savedVol)
     if (!settings.autoRestoreQueue) return
     const state = await db.kvGet<PersistedState>(STATE_KEY)
     if (!state || state.paths.length === 0) return
@@ -373,7 +392,8 @@ export const usePlayerStore = defineStore('player', () => {
     if (restored.length === 0) return
     queue.value = restored
     index.value = Math.min(state.index, restored.length - 1)
-    volume.value = state.volume
+    // 旧数据兼容：独立音量键不存在时才退回队列状态里那份
+    if (typeof savedVol !== 'number' && typeof state.volume === 'number') applyVolume(state.volume)
     playMode.value = state.mode
     getAudio().volume = volume.value / 100
     currentTime.value = state.time

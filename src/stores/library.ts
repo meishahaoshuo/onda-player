@@ -159,8 +159,9 @@ export const useLibraryStore = defineStore('library', () => {
       return false
     }
     if (!handle) return false
-    await registerRoot(handle)
-    await rescan()
+    const root = await registerRoot(handle)
+    // 只扫新添加的文件夹：既更快，也让导入动画的封面只来自这个文件夹
+    await rescan(root.id)
     return true
   }
 
@@ -210,16 +211,15 @@ export const useLibraryStore = defineStore('library', () => {
   }
 
   /** 全量重扫所有根目录（增量：未变化的文件只跳过） */
-  async function rescan() {
+  /** 全量重扫所有根目录（增量：未变化的文件只跳过）；传 onlyRootId 则只扫该文件夹 */
+  async function rescan(onlyRootId?: string) {
     if (scanning.value) return
     scanning.value = true
     scanTask = { cancelled: false }
-    // 重新扫描也触发吸入动画：封面取自全部文件夹的曲库（洗牌抽样），
-    // 与「新入库批次」走同一 sink，flownCoverIds 去重保证不重复起飞
-    emitRescanShow()
     try {
       for (const root of roots.value) {
         if (scanTask.cancelled) break
+        if (onlyRootId && root.id !== onlyRootId) continue
         if (root.permission !== 'granted') continue
         const handle = await db.getRootHandle(root.id)
         if (!handle) continue
@@ -238,6 +238,8 @@ export const useLibraryStore = defineStore('library', () => {
         )
         // 扫描中实时并入新数据，列表即时可见
         songs.value = await db.getAllSongs()
+        // 本文件夹演出：补投该目录下已有歌曲的封面，让动画始终只演「本次扫过的文件夹」
+        emitRootShow(root.id)
       }
     } finally {
       scanning.value = false
@@ -246,35 +248,36 @@ export const useLibraryStore = defineStore('library', () => {
   }
 
   /**
-   * 扫描批次订阅槽：吸入动画（absorbFlight）经此接收每批封面 id，store 不依赖动画模块。
-   * kind：`fresh` = 本次新入库（默认，优先演）；`show` = 全库库存演出。
+   * 扫描批次订阅槽：吸入动画（absorbFlight）经此接收每批新入库歌曲的封面 id，
+   * store 不依赖动画模块。只投喂本次扫描真正落库的歌曲——动画里出现的封面
+   * 因此始终来自「本次操作的文件夹」，不会掺入其他未扫描文件夹的封面。
    */
-  let scanBatchSink: ((coverIds: string[], kind?: 'fresh' | 'show') => void) | null = null
-  function setScanBatchSink(
-    fn: ((coverIds: string[], kind?: 'fresh' | 'show') => void) | null,
-  ) {
+  let scanBatchSink: ((coverIds: string[]) => void) | null = null
+  function setScanBatchSink(fn: ((coverIds: string[]) => void) | null) {
     scanBatchSink = fn
   }
 
   /**
-   * 全库演出：把**所有文件夹**的封面洗牌抽样成最多 2 批投喂给吸入动画，
-   * 让动画看到整个曲库而不只是本次新增的文件（添加文件夹与重新扫描都要有全库封面）。
-   * 批间节奏由 absorbFlight 的队列泵控制（BATCH_GAP + 在飞等待），这里一次性入队；
-   * setTimeout(0) 等 scanning watcher 先清场，避免旧 flownCoverIds 残留误去重。
-   * 标记 `show` 与新入库批次分账（SHOW_CAP），不会把新歌封面挤掉；
-   * 扫描结束时 absorbFlight 会把队列裁剪到最后一批，不会拖长收尾。
+   * 「本文件夹演出」：投喂指定目录下歌曲的封面（洗牌取一批最多 6 张）。
+   * 在 scanRoot 之后调用——此时新歌已入库，去重后实际只补上该文件夹的老歌封面，
+   * 于是动画里的封面永远只来自本次真正扫过的文件夹：
+   *  · 添加文件夹（只扫新目录）→ 只有新文件夹的封面，不会掺其他文件夹
+   *  · 重新扫描（扫全部目录）→ 逐个文件夹补演，重扫也有动画可看
    */
-  function emitRescanShow() {
-    const ids = [...new Set(songs.value.map((s) => s.coverId).filter(Boolean))] as string[]
+  function emitRootShow(rootId: string): void {
+    const ids = [
+      ...new Set(
+        songs.value
+          .filter((s) => s.rootId === rootId && s.coverId)
+          .map((s) => s.coverId as string),
+      ),
+    ]
     if (ids.length === 0) return
     for (let i = ids.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
       ;[ids[i], ids[j]] = [ids[j], ids[i]]
     }
-    window.setTimeout(() => {
-      const batches = Math.min(2, Math.ceil(ids.length / 6))
-      for (let b = 0; b < batches; b++) scanBatchSink?.(ids.slice(b * 6, b * 6 + 6), 'show')
-    }, 0)
+    scanBatchSink?.(ids.slice(0, 6))
   }
 
   function cancelScan() {
