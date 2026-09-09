@@ -288,6 +288,14 @@ watch(
   z-index: 0;
 }
 
+/* 浅色主题整体隐藏氛围光斑（彻底根治顶部「颜色断层」）：
+   光斑是低透明度晕染，浅色主题的白底上呈现为一灰带，
+   并被 sticky 表头的不透明白底横切出锐利直线——正是用户反复反馈的断层。
+   白底极简风格与顶部晕染天然冲突；深色主题深底上晕染协调，保留。 */
+[data-theme='light'] .ambient-layer {
+  display: none;
+}
+
 .ambient-blob {
   position: absolute;
   width: clamp(320px, 36vw, 520px);
