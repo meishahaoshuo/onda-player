@@ -42,15 +42,18 @@ export function popPlayerCover(): void {
   )
 }
 
-/** 播放栏整体下沉回弹：落位的重量感 */
+/** 播放栏整体下沉回弹：落位的重量感。
+    WAAPI 的 transform 会整体覆盖 CSS transform——胶囊模式是 translateX(-50%) 居中的，
+    keyframes 必须带上它，否则动画期间播放条会水平跳位再归位（「抽搐」）。 */
 function dipPlayerBar(delayMs: number): void {
   const bar = document.querySelector<HTMLElement>('.player-bar')
   if (!bar) return
+  const base = bar.classList.contains('capsule') ? 'translateX(-50%) ' : ''
   bar.animate(
     [
-      { transform: 'translateY(0)' },
-      { transform: 'translateY(2.5px)', offset: 0.45 },
-      { transform: 'translateY(0)' },
+      { transform: `${base}translateY(0)` },
+      { transform: `${base}translateY(2.5px)`, offset: 0.45 },
+      { transform: `${base}translateY(0)` },
     ],
     { duration: 300, delay: delayMs, easing: 'ease-out' },
   )

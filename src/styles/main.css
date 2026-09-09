@@ -28,6 +28,7 @@
 
   /* 液态玻璃令牌（中性深灰玻璃） */
   --glass-bg: linear-gradient(120deg, rgba(28, 28, 30, 0.72), rgba(36, 36, 38, 0.6) 55%, rgba(28, 28, 30, 0.66));
+  --glass-bg-c: #1c1c1e;
   --glass-border: rgba(255, 255, 255, 0.12);
   --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -1px 0 rgba(0, 0, 0, 0.25);
   --glass-blur: blur(32px) saturate(1.4);
@@ -77,6 +78,7 @@
   --border-subtle: rgba(0, 0, 0, 0.08);
 
   --glass-bg: linear-gradient(120deg, rgba(255, 255, 255, 0.72), rgba(250, 250, 252, 0.6) 55%, rgba(255, 255, 255, 0.66));
+  --glass-bg-c: #ffffff;
   --glass-border: rgba(0, 0, 0, 0.08);
   --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 0, 0, 0.03);
   --glass-blur: blur(32px) saturate(1.4);

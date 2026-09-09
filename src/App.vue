@@ -166,7 +166,7 @@ watch(
 
 <template>
   <div class="app-shell">
-        <div class="body-row" :class="{ 'bar-capsule': settings.playerStyle === 'capsule' }">
+        <div class="body-row">
       <Sidebar />
       <main class="content">
         <!-- 封面氛围光：跟随当前播放封面取色的低强度背景光斑 -->
@@ -192,7 +192,12 @@ watch(
           </div>
         </header>
         <Transition name="view" mode="out-in" @enter="onViewEnter">
-          <section ref="sectionEl" :key="ui.activeView" class="view-body">
+          <section
+            ref="sectionEl"
+            :key="ui.activeView"
+            class="view-body"
+            :class="{ 'capsule-pad': settings.playerStyle === 'capsule' }"
+          >
             <!-- 搜索优先：有关键词时内容区显示搜索结果 -->
             <!-- 注意：这条 v-if / v-else-if 链必须从 SongsView 一路连通到 PlaceholderView。
                  曾经 template v-if 与 SongsView 的 v-if 断开成两条链，
@@ -256,12 +261,6 @@ watch(
   display: flex;
   flex: 1;
   min-height: 0;
-}
-
-/* 浮动胶囊模式：内容区整体留出底部空间，列表末项不被悬浮胶囊遮挡 */
-.body-row.bar-capsule {
-  padding-bottom: 96px;
-  transition: padding-bottom 460ms cubic-bezier(0.3, 1.2, 0.5, 1);
 }
 
 .content {
@@ -415,5 +414,12 @@ watch(
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0 24px 24px;
+  /* 浮动胶囊模式：滚动内容末尾留白（内容延伸到视口底、从胶囊后穿过，
+     滚到底时末项仍能完整露出）——悬浮感的来源，不能加在 body-row 上 */
+  scroll-padding-bottom: 84px;
+}
+
+.view-body.capsule-pad {
+  padding-bottom: 84px;
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import CoverImage from './CoverImage.vue'
 import ProgressSlider from './ProgressSlider.vue'
@@ -128,9 +128,9 @@ function onRowMenu(e: MouseEvent, song: SongRecord, i: number) {
   openSongMenu(e, song, { queueIndex: i, context: player.queue })
 }
 
-/* ---------- 播放条样式：标准 ⇄ 浮动胶囊（形变过渡） ---------- */
+/* ---------- 播放条样式：标准 ⇄ 浮动胶囊（FLIP 连续形变） ---------- */
 
-/** 实际渲染的样式：切换时先播收缩动画再换形态，避免 class 直跳的生硬感 */
+/** 实际渲染的样式：切换时旧形态连续「收缩/展开」为新形态，无跳变 */
 const localStyle = ref<PlayerStyle>(settings.playerStyle)
 const barEl = ref<HTMLElement | null>(null)
 let morphing = false
@@ -146,64 +146,83 @@ watch(
       morphing = false
       return
     }
-    const toCapsule = nv === 'capsule'
-    // 当前形态收缩退出
-    await bar
-      .animate(
-        toCapsule
-          ? [
-              { opacity: 1, transform: 'translateX(-50%) translateY(0) scale(1)' },
-              { opacity: 0, transform: 'translateX(-50%) translateY(34px) scale(0.92)' },
-            ]
-          : [
-              { opacity: 1, transform: 'translateY(0) scale(1)' },
-              { opacity: 0, transform: 'translateY(34px) scale(0.97)' },
-            ],
-        { duration: 220, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' },
-      )
-      .finished.catch(() => {})
+    // FLIP first：旧形态几何
+    const f = bar.getBoundingClientRect()
+    const fRadius = getComputedStyle(bar).borderRadius
+    const wasCapsule = localStyle.value === 'capsule'
+    // 切换布局（同时禁用 CSS 入场动画，避免与形变叠加）
+    bar.style.animation = 'none'
     localStyle.value = nv
     await nextTick()
-    // 清掉 CSS/上一步的填充动画，让位给进入动画
-    bar.getAnimations().forEach((a) => a.cancel())
-    // 新形态 Q 弹进入
+    // FLIP last：新形态几何
+    const l = bar.getBoundingClientRect()
+    const lRadius = getComputedStyle(bar).borderRadius
+    const dx = f.left + f.width / 2 - (l.left + l.width / 2)
+    const dy = f.top + f.height / 2 - (l.top + l.height / 2)
+    const sx = f.width / l.width
+    const sy = f.height / l.height
+    // 胶囊形态的 CSS 定位含 translateX(-50%)，动画帧必须携带
+    const anchor = nv === 'capsule' ? 'translateX(-50%) ' : ''
+    const wasAnchor = wasCapsule ? 'translateX(-50%) ' : ''
     bar.animate(
-      toCapsule
-        ? [
-            { opacity: 0, transform: 'translateX(-50%) translateY(30px) scale(0.93)' },
-            { opacity: 1, transform: 'translateX(-50%) translateY(0) scale(1)' },
-          ]
-        : [
-            { opacity: 0, transform: 'translateY(30px) scale(0.97)' },
-            { opacity: 1, transform: 'translateY(0) scale(1)' },
-          ],
-      { duration: 520, easing: 'cubic-bezier(0.3, 1.36, 0.5, 1)' },
+      [
+        {
+          transform: `${wasAnchor}translate(${dx}px, ${dy}px) scale(${sx.toFixed(3)}, ${sy.toFixed(3)})`,
+          borderRadius: fRadius,
+          opacity: 0.55,
+        },
+        {
+          transform: `${anchor}translate(0px, 0px) scale(1, 1)`,
+          borderRadius: lRadius,
+          opacity: 1,
+        },
+      ],
+      { duration: 480, easing: 'cubic-bezier(0.3, 1.16, 0.4, 1)' },
     )
     morphing = false
   },
 )
 
+onMounted(() => {
+  // 首挂载入场（CSS 动画已移除，由这里播一次）
+  barEl.value
+    ?.animate(
+      [
+        { opacity: 0, transform: 'translateY(26px)' },
+        { opacity: 1, transform: 'translateY(0)' },
+      ],
+      { duration: 560, easing: 'cubic-bezier(0.3, 1.3, 0.5, 1)', delay: 100, fill: 'backwards' },
+    )
+    .finished.catch(() => {})
+})
+
 /* ---------- 胶囊进度环：沿胶囊边缘的进度描边，点击/拖拽 seek ---------- */
 
 const ringDragging = ref(false)
+const progressLineEl = ref<HTMLElement | null>(null)
 const ringPct = computed(() => {
   const dur = player.duration || player.current?.durationSec || 0
   return dur > 0 ? Math.min(1, Math.max(0, player.currentTime / dur)) : 0
 })
 
 function seekFromClientX(cx: number) {
-  const bar = barEl.value
-  if (!bar) return
+  const line = progressLineEl.value
+  if (!line) return
   const dur = player.duration || player.current?.durationSec || 0
   if (dur <= 0) return
-  const r = bar.getBoundingClientRect()
+  const r = line.getBoundingClientRect()
   const pct = Math.min(1, Math.max(0, (cx - r.left) / r.width))
   player.seek(pct * dur)
 }
 
 function onRingPointerDown(e: PointerEvent) {
   ringDragging.value = true
-  barEl.value?.setPointerCapture(e.pointerId)
+  // 合成指针（自动化测试）没有活动 pointer id，capture 失败不应阻断 seek
+  try {
+    progressLineEl.value?.setPointerCapture(e.pointerId)
+  } catch {
+    /* 忽略 */
+  }
   seekFromClientX(e.clientX)
 }
 
@@ -225,36 +244,17 @@ function onRingPointerUp() {
     @pointerup="onRingPointerUp"
     @pointercancel="onRingPointerUp"
   >
-    <!-- 胶囊模式：沿边缘一圈的进度描边（SVG pathLength 归一），hit rect 提供拖拽热区 -->
-    <svg
+    <!-- 胶囊模式：顶部一条低调的进度细线，鼠标悬停胶囊时才显现；点击/拖拽 seek -->
+    <div
       v-if="localStyle === 'capsule'"
-      class="capsule-ring"
-      viewBox="0 0 760 66"
-      preserveAspectRatio="none"
-      aria-hidden="true"
+      ref="progressLineEl"
+      class="capsule-progress"
+      :class="{ dragging: ringDragging }"
+      @pointerdown="onRingPointerDown"
     >
-      <rect class="ring-track" x="1.25" y="1.25" width="757.5" height="63.5" rx="31.75" pathLength="1000" vector-effect="non-scaling-stroke" />
-      <rect
-        class="ring-fill"
-        x="1.25"
-        y="1.25"
-        width="757.5"
-        height="63.5"
-        rx="31.75"
-        pathLength="1000"
-        vector-effect="non-scaling-stroke"
-        :style="{ strokeDashoffset: String(1000 * (1 - ringPct)) }"
-      />
-      <rect
-        class="ring-hit"
-        x="1.25"
-        y="1.25"
-        width="757.5"
-        height="63.5"
-        rx="31.75"
-        @pointerdown="onRingPointerDown"
-      />
-    </svg>
+      <div class="cp-track" />
+      <div class="cp-fill" :style="{ width: `${ringPct * 100}%` }" />
+    </div>
     <!-- 左：曲目信息 -->
     <div class="track">
       <CoverImage
@@ -409,18 +409,10 @@ function onRingPointerUp() {
   flex-shrink: 0;
   padding: 0 20px;
   gap: 20px;
-  /* 应用启动时从底部轻滑入：一次性的入场动画，不参与后续交互 */
-  animation: bar-enter 640ms var(--ease-spring) 120ms backwards;
+  /* 入场动画由 onMounted 的 WAAPI 播放（样式切换的 FLIP 形变也由 WAAPI 接管） */
 }
 
-@keyframes bar-enter {
-  from {
-    opacity: 0;
-    transform: translateY(28px);
-  }
-}
-
-/* ---------- 浮动胶囊播放条（Liquid Glass，悬浮于内容上方） ---------- */
+/* ---------- 浮动胶囊播放条（Liquid Glass，真正悬浮于内容上方） ---------- */
 .player-bar.capsule {
   position: fixed;
   left: 50%;
@@ -433,57 +425,59 @@ function onRingPointerUp() {
   border-radius: 999px;
   /* 悬浮于列表内容上方；低于歌词页(50)与菜单/弹窗(100) */
   z-index: 40;
-  animation: capsule-enter 560ms var(--ease-spring) 100ms backwards;
-  /* 液态玻璃加强：高饱和背景折射 + 内侧顶部亮线 + 双层投影 */
+  /* 液态玻璃：底比通栏更透，背景内容从胶囊后穿过时折射可见 */
+  background: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--glass-bg-c, #1c1c1e) 42%, transparent),
+    color-mix(in srgb, var(--glass-bg-c, #1c1c1e) 30%, transparent) 55%,
+    color-mix(in srgb, var(--glass-bg-c, #1c1c1e) 38%, transparent)
+  );
   backdrop-filter: blur(36px) saturate(1.9);
   -webkit-backdrop-filter: blur(36px) saturate(1.9);
+  border: 1px solid var(--glass-border);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #ffffff 28%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 30%, transparent),
     inset 0 -1px 0 color-mix(in srgb, #ffffff 8%, transparent),
-    0 18px 48px rgba(0, 0, 0, 0.32),
-    0 4px 16px rgba(0, 0, 0, 0.16);
+    0 18px 48px rgba(0, 0, 0, 0.3),
+    0 4px 16px rgba(0, 0, 0, 0.14);
+  transition: background 420ms var(--ease-out), box-shadow 420ms var(--ease-out);
 }
 
-@keyframes capsule-enter {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(26px) scale(0.95);
-  }
-}
-
-/* 沿胶囊边缘一圈的进度描边 */
-.capsule-ring {
+/* 顶部进度细线：平时几乎不可见，悬停胶囊时显现 */
+.capsule-progress {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none; /* 只有热区 rect 接收事件，内部控件不受影响 */
-  overflow: visible;
-}
-
-.capsule-ring rect {
-  fill: none;
-  stroke-width: 2.5;
-}
-
-.capsule-ring .ring-track {
-  stroke: color-mix(in srgb, var(--text-tertiary) 32%, transparent);
-}
-
-.capsule-ring .ring-fill {
-  stroke: var(--accent);
-  stroke-linecap: round;
-  stroke-dasharray: 1000;
-  /* timeupdate 4Hz 跳变由短过渡抹平 */
-  transition: stroke-dashoffset 140ms linear;
-}
-
-/* 拖拽热区：透明宽描边，只命中边缘一圈 */
-.capsule-ring .ring-hit {
-  stroke: transparent;
-  stroke-width: 18;
-  pointer-events: stroke;
+  top: -1px;
+  left: 28px;
+  right: 28px;
+  height: 6px; /* 热区高度 */
+  opacity: 0;
+  transition: opacity var(--dur-med) var(--ease-out);
   cursor: pointer;
+  touch-action: none;
+}
+
+.player-bar.capsule:hover .capsule-progress,
+.capsule-progress.dragging {
+  opacity: 1;
+}
+
+.capsule-progress .cp-track,
+.capsule-progress .cp-fill {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  height: 2.5px;
+  border-radius: 999px;
+}
+
+.capsule-progress .cp-track {
+  width: 100%;
+  background: color-mix(in srgb, var(--text-tertiary) 30%, transparent);
+}
+
+.capsule-progress .cp-fill {
+  background: var(--accent);
+  transition: width 140ms linear;
 }
 
 .capsule .track {
@@ -496,7 +490,7 @@ function onRingPointerUp() {
   height: 44px;
 }
 
-/* 进度已移到边缘环，中间的横线滑杆隐藏，controls 只留按钮行 */
+/* 进度已移到顶部细线，controls 只留按钮行 */
 .capsule .pslider {
   display: none;
 }

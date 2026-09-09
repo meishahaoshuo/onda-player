@@ -27,6 +27,7 @@ const NAV_DEFS: Record<string, { view: ViewId; label: string; icon: IconName }> 
   albums: { view: 'albums', label: '专辑', icon: 'disc' },
   artists: { view: 'artists', label: '艺术家', icon: 'artist' },
   folders: { view: 'folders', label: '文件夹', icon: 'folder' },
+  settings: { view: 'settings', label: '设置', icon: 'settings' },
 }
 
 const brandLogo = computed(() =>
@@ -81,8 +82,7 @@ function setEl(id: string) {
 
 function activeNavId(): string | null {
   if (ui.activeView === 'playlists') return ui.detailKey ?? 'playlists'
-  if (ui.activeView !== 'settings') return ui.activeView
-  return null
+  return ui.activeView // 设置已并入主导航，pill 同样滑到设置项
 }
 
 async function updatePill() {
@@ -148,16 +148,6 @@ function plClick(id: string) {
           <span>{{ NAV_DEFS[id].label }}</span>
         </button>
       </div>
-
-      <!-- 设置：放在分隔线上方，避免与底部悬浮胶囊播放条重叠 -->
-      <button
-        class="nav-item"
-        :class="{ active: ui.activeView === 'settings' }"
-        @click="navClick('settings')"
-      >
-        <AppIcon name="settings" />
-        <span>设置</span>
-      </button>
 
       <div class="divider" />
 

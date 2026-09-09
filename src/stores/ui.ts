@@ -36,6 +36,7 @@ export const useUiStore = defineStore('ui', () => {
     'albums',
     'artists',
     'folders',
+    'settings',
   ]
   const navOrder = ref<string[]>(loadNavOrder())
 
