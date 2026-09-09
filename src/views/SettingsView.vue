@@ -229,28 +229,6 @@ function onRecordKeydown(e: KeyboardEvent) {
           </div>
           <div class="opt-row">
             <div class="opt-text">
-              <span class="opt-name">胶囊玻璃材质</span>
-              <span class="opt-desc">浮动胶囊模式下的玻璃质感（液态玻璃透出背景更多）</span>
-            </div>
-            <div class="seg-choice">
-              <button
-                class="seg-choice-btn"
-                :class="{ on: settings.capsuleGlass === 'liquid' }"
-                @click="settings.setCapsuleGlass('liquid')"
-              >
-                液态玻璃
-              </button>
-              <button
-                class="seg-choice-btn"
-                :class="{ on: settings.capsuleGlass === 'frost' }"
-                @click="settings.setCapsuleGlass('frost')"
-              >
-                磨砂玻璃
-              </button>
-            </div>
-          </div>
-          <div class="opt-row">
-            <div class="opt-text">
               <span class="opt-name">切换动效</span>
               <span class="opt-desc">标准与浮动胶囊两种形态之间的过渡方式</span>
             </div>

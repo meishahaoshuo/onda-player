@@ -255,10 +255,7 @@ function onRingPointerUp() {
   <footer
     ref="barEl"
     class="player-bar glass"
-    :class="{
-      capsule: localStyle === 'capsule',
-      'glass-frost': localStyle === 'capsule' && settings.capsuleGlass === 'frost',
-    }"
+    :class="{ capsule: localStyle === 'capsule' }"
     @pointermove="onRingPointerMove"
     @pointerup="onRingPointerUp"
     @pointercancel="onRingPointerUp"
@@ -463,20 +460,24 @@ function onRingPointerUp() {
     backdrop-filter 420ms var(--ease-out), border-color 420ms var(--ease-out);
 }
 
-/* 材质二：磨砂玻璃 —— 深色薄纱 + 中度模糊，透出内容只余光影，可读性最稳 */
-.player-bar.capsule.glass-frost {
+/* 浅色主题变体：纯白列表上白色低透明底会完全隐形，
+   用轻灰调白纱 + 深色细边 + 加深投影来区分胶囊与背景（Apple 浅色玻璃配方），
+   透出感来自 blur 后的背景字影。 */
+:global([data-theme='light'] .player-bar.capsule) {
   background: linear-gradient(
     120deg,
-    rgba(30, 32, 40, 0.52),
-    rgba(24, 26, 34, 0.42) 55%,
-    rgba(30, 32, 40, 0.48)
+    rgba(255, 255, 255, 0.46),
+    rgba(255, 255, 255, 0.3) 55%,
+    rgba(255, 255, 255, 0.4)
   );
-  backdrop-filter: blur(26px) saturate(1.6);
-  -webkit-backdrop-filter: blur(26px) saturate(1.6);
-  border-color: rgba(255, 255, 255, 0.13);
+  backdrop-filter: blur(26px) saturate(2) brightness(1.04);
+  -webkit-backdrop-filter: blur(26px) saturate(2) brightness(1.04);
+  border: 1px solid rgba(0, 0, 0, 0.07);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 18px 46px rgba(0, 0, 0, 0.45);
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    0 18px 46px rgba(0, 0, 0, 0.2),
+    0 4px 16px rgba(0, 0, 0, 0.1);
 }
 
 /* 顶部进度细线：平时几乎不可见，悬停胶囊时显现 */

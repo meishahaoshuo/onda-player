@@ -8,7 +8,6 @@ const LYRIC_FW_KEY = 'settings.lyricFontWeight'
 const LYRIC_ALIGN_KEY = 'settings.lyricAlign'
 const LYRIC_BLUR_KEY = 'settings.lyricBlur'
 const PLAYER_STYLE_KEY = 'settings.playerStyle'
-const GLASS_KEY = 'settings.capsuleGlass'
 const MORPH_KEY = 'settings.barMorph'
 const media = window.matchMedia('(prefers-color-scheme: dark)')
 
@@ -84,21 +83,18 @@ function loadAmbient(): boolean {
   return localStorage.getItem(AMBIENT_KEY) !== '0'
 }
 
-// 遗留清理：导入动画样式选择器已下线（固定液态玻璃）；交错滚动/歌词页音频可视化已按反馈下线
+// 遗留清理：导入动画样式选择器已下线（固定液态玻璃）；交错滚动/歌词页音频可视化/
+// 磨砂玻璃材质已按反馈下线（胶囊固定液态玻璃）
 localStorage.removeItem('settings.absorbStyle')
 localStorage.removeItem('settings.lyricStagger')
+localStorage.removeItem('settings.lyricViz')
+localStorage.removeItem('settings.capsuleGlass')
 localStorage.removeItem('settings.lyricViz')
 
 /** 播放条样式：standard = 底部通栏；capsule = Liquid Glass 浮动胶囊（悬浮于内容上方） */
 export type PlayerStyle = 'standard' | 'capsule'
 function loadPlayerStyle(): PlayerStyle {
   return localStorage.getItem(PLAYER_STYLE_KEY) === 'capsule' ? 'capsule' : 'standard'
-}
-
-/** 浮动胶囊玻璃材质：liquid = 液态玻璃（重折射高透）；frost = 磨砂玻璃（深色薄纱） */
-export type CapsuleGlass = 'liquid' | 'frost'
-function loadCapsuleGlass(): CapsuleGlass {
-  return localStorage.getItem(GLASS_KEY) === 'frost' ? 'frost' : 'liquid'
 }
 
 /** 标准⇄胶囊切换动效：gather = 聚散（中心收缩/绽放）；slide = 交叉滑移 */
@@ -120,7 +116,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const lyricAlign = ref<LyricAlign>(loadLyricAlign())
   const lyricBlur = ref(loadLyricBlur())
   const playerStyle = ref<PlayerStyle>(loadPlayerStyle())
-  const capsuleGlass = ref<CapsuleGlass>(loadCapsuleGlass())
   const barMorph = ref<BarMorph>(loadBarMorph())
   const autoRestoreQueue = ref(loadAutoRestore())
   const autoResume = ref(loadAutoResume())
@@ -204,11 +199,6 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(PLAYER_STYLE_KEY, s)
   }
 
-  function setCapsuleGlass(g: CapsuleGlass) {
-    capsuleGlass.value = g
-    localStorage.setItem(GLASS_KEY, g)
-  }
-
   function setBarMorph(m: BarMorph) {
     barMorph.value = m
     localStorage.setItem(MORPH_KEY, m)
@@ -250,8 +240,6 @@ export const useSettingsStore = defineStore('settings', () => {
     setLyricBlur,
     playerStyle,
     setPlayerStyle,
-    capsuleGlass,
-    setCapsuleGlass,
     barMorph,
     setBarMorph,
     autoRestoreQueue,
