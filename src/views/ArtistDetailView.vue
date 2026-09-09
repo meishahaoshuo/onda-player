@@ -67,7 +67,6 @@ function onPlay(song: SongRecord) {
       </div>
     </header>
     <SongList
-      class="list"
       :songs="artist.songs"
       :current-path="player.currentPath"
       :persist-key="`list:artist:${artist.name}`"
@@ -78,12 +77,9 @@ function onPlay(song: SongRecord) {
 </template>
 
 <style scoped>
-/* 根元素同时是 App 传入的 .detail-layer 滚动层。
-   歌曲列表需要有界高度才能内部虚拟滚动，故此页不让覆盖层滚动，
-   而是 .list 占满剩余高度、由列表内部滚动（滚动位置由 persistKey 记忆）。 */
+/* 根元素同时是 App 传入的 .detail-layer 滚动层（外层滚动架构）：
+   自然高度向下生长，滚动与表头吸附都发生在覆盖层上（对齐专辑详情页）。 */
 .artist-detail {
-  height: 100%;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -102,14 +98,18 @@ function onPlay(song: SongRecord) {
   opacity: 1;
 }
 
-/* 返回艺术家列表：头部右上角的隐藏式关闭钮，悬停/聚焦时浮现 */
+/* 艺术家详情头部：margin-top 为顶部留白 —— .detail-layer 宿主不能带 padding-top
+   （sticky 吸附边界是滚动容器 padding 内缘），组件自身 padding-top 又会被
+   App.vue 的 .detail-layer padding 简写同特异性覆盖，故用首个子元素的 margin。 */
 .artist-header {
   position: relative;
   display: flex;
   align-items: center;
   gap: 20px;
+  margin-top: 20px;
 }
 
+/* 返回艺术家列表：头部右上角的隐藏式关闭钮，悬停/聚焦时浮现 */
 .header-close {
   position: absolute;
   top: 4px;
@@ -170,11 +170,6 @@ function onPlay(song: SongRecord) {
   font-size: 13px;
   color: var(--text-secondary);
   margin-top: 6px;
-}
-
-.list {
-  flex: 1;
-  min-height: 0;
 }
 
 .empty-hint {

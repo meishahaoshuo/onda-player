@@ -75,7 +75,6 @@ const scanPct = computed(() =>
         :current-path="player.currentPath"
         persist-key="list:songs"
         @play="onPlay"
-        class="list"
       />
       <div v-else class="empty small">
         <p class="empty-hint">尚未扫描到音频文件</p>
@@ -85,12 +84,13 @@ const scanPct = computed(() =>
 </template>
 
 <style scoped>
+/* min-height 而非 height：列表内容走外层滚动（view-body），自然高度向下生长；
+   空态时仍占满一屏供 flex 居中。不能加 overflow（会让 sticky 表头失效） */
 .songs-view {
-  height: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow-x: hidden;
 }
 
 .empty {
@@ -201,11 +201,5 @@ const scanPct = computed(() =>
   margin-left: auto;
   font-size: 12px;
   color: var(--accent);
-}
-
-.list {
-  flex: 1;
-  min-height: 0;
-  overflow-x: hidden;
 }
 </style>

@@ -57,16 +57,13 @@ const title = computed(() => viewTitles[ui.activeView])
 const sectionEl = ref<HTMLElement | null>(null)
 
 /**
- * 浮动胶囊模式下，非列表视图的滚动内容末尾预留胶囊高度，
- * 避免页面底部的功能按钮被悬浮胶囊遮挡。
- * 列表视图（charts 与 SongList 系均为 height:100% + 内部滚动的同构布局，
- * 容器 padding 会把它们压短造成「隔断」）不加——
- * 尾部安全空间由各自的滚动容器内部提供（VirtualList tail / list-body padding）。
+ * 浮动胶囊模式下，滚动内容末尾预留胶囊高度，避免页面底部内容被悬浮胶囊遮挡。
+ * 全站已统一为「外层滚动」架构：所有视图内容都是自然文档流，
+ * 容器 padding 即安全空间，不会再压短 height:100% 的内层列表（旧架构的隔断根源已移除）。
+ * 例外是文件夹页右列 .main 与详情覆盖层——它们自身是滚动宿主，
+ * 同样吃这份 padding（内容盒缩进，胶囊落在缩进出的空白上）。
  */
-const LIST_VIEWS = ['songs', 'favorites', 'recent', 'folders', 'charts']
-const viewCapsulePad = computed(
-  () => settings.playerStyle === 'capsule' && !LIST_VIEWS.includes(ui.activeView),
-)
+const viewCapsulePad = computed(() => settings.playerStyle === 'capsule')
 
 /** 是否有搜索关键词（内容区被搜索结果接管） */
 const searching = computed(() => ui.searchQuery.trim().length > 0)
@@ -80,7 +77,8 @@ const searchPlaceholder = computed(() =>
 /* ---------- 全应用滚动位置记忆 ----------
    切视图 / 钻取详情前把旧容器的 scrollTop 记入 ui store，
    回来时（Transition enter 或同视图钻取返回）恢复。
-   key：`view:<视图>|<detailKey>`；SongList/VirtualList 的内部滚动由组件自己记（list:*）。 */
+   key：`view:<视图>|<detailKey>`；各 .scroll-host 内列表的滚动由
+   SongList/VirtualList 以 list:* 键自存自取（外层滚动架构下记录的就是宿主 scrollTop）。 */
 const scrollKey = (view: string, detail: string | null) => `view:${view}|${detail ?? ''}`
 // 歌单详情已改为覆盖层（网格常驻），不再使用外层滚动记忆
 const INLINE_DETAIL_VIEWS = new Set<string>([])
@@ -208,7 +206,7 @@ watch(
           <section
             ref="sectionEl"
             :key="ui.activeView"
-            class="view-body"
+            class="view-body scroll-host"
             :class="{ 'capsule-pad': viewCapsulePad }"
           >
             <!-- 搜索优先：有关键词时内容区显示搜索结果 -->
@@ -247,13 +245,15 @@ watch(
         <AlbumDetailView
           v-if="ui.activeView === 'albums' && ui.detailKey && !searching"
           :album-key="ui.detailKey"
-          class="detail-layer"
+          class="detail-layer scroll-host"
+          :class="{ 'capsule-pad': viewCapsulePad }"
         />
         <!-- 艺术家详情：与专辑详情同架构（覆盖层 + 引力坍缩过渡） -->
         <ArtistDetailView
           v-else-if="ui.activeView === 'artists' && ui.detailKey && !searching"
           :artist-name="ui.detailKey"
-          class="detail-layer"
+          class="detail-layer scroll-host"
+          :class="{ 'capsule-pad': viewCapsulePad }"
         />
       </main>
     </div>
@@ -345,14 +345,17 @@ watch(
 
 /* 专辑详情覆盖层：盖住标题与网格，自带滚动；放在 .content 内天然避开侧栏与播放条。
    必须保持完全不透明：覆盖层与 body 之间夹着一级界面的网格/封面，
-   一旦半透明一级内容就会穿透出来（无论有没有壁纸）。 */
+   一旦半透明一级内容就会穿透出来（无论有没有壁纸）。
+   注意不加 padding-top：sticky 吸附边界是滚动容器的 padding 内缘，
+   顶部留白由详情组件自己带（artist/album-detail 的 padding-top），否则表头
+   吸在 20px 处、上缘漏出一条穿行的行。 */
 .detail-layer {
   position: absolute;
   inset: 0;
   z-index: 5;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 20px 24px 24px;
+  padding: 0 24px 24px;
   background: var(--bg-base);
 }
 
@@ -429,10 +432,11 @@ watch(
   padding: 0 24px 24px;
 }
 
-/* 浮动胶囊模式：非列表视图的滚动内容末尾预留胶囊高度（防遮底部功能按钮）。
-   列表视图（songs/favorites/recent/folders）不加——容器 padding 会压短
-   height:100% 的虚拟列表（行在胶囊上缘截断），其尾部空间走 VirtualList tail。 */
-.view-body.capsule-pad {
+/* 浮动胶囊模式：滚动内容末尾预留胶囊高度（防遮底部内容）。
+   外层滚动架构下所有视图内容都是自然文档流，容器 padding 即安全空间；
+   详情覆盖层同样是滚动宿主，跟随此规则。 */
+.view-body.capsule-pad,
+.detail-layer.capsule-pad {
   padding-bottom: 96px;
 }
 </style>

@@ -45,7 +45,6 @@ function onPlay(song: SongRecord) {
 
     <SongList
       v-if="results.length > 0"
-      class="results"
       :songs="results"
       :current-path="player.currentPath"
       :persist-key="`list:search:${scope.key}`"
@@ -67,11 +66,11 @@ function onPlay(song: SongRecord) {
 </template>
 
 <style scoped>
+/* min-height 而非 height：内容走外层滚动（view-body），空态仍占满一屏居中 */
 .search-view {
-  height: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
 }
 
 .scope-bar {
@@ -117,11 +116,6 @@ function onPlay(song: SongRecord) {
   background: var(--bg-active);
   color: var(--accent-text, var(--text-primary));
   font-weight: 500;
-}
-
-.results {
-  flex: 1;
-  min-height: 0;
 }
 
 .empty {

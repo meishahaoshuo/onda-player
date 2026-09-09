@@ -125,8 +125,9 @@ function selectRoot(id: string) {
         </div>
       </aside>
 
-      <!-- 右：选中文件夹的歌曲 -->
-      <div class="main">
+      <!-- 右：选中文件夹的歌曲（本列自身滚动，是 SongList 的 .scroll-host 宿主；
+           左栏文件夹列表独立滚动，不受右列滚动影响） -->
+      <div class="main scroll-host">
         <template v-if="selectedRootId">
           <div class="main-head">
             <h2 class="main-title">{{ selectedRootName }}</h2>
@@ -138,7 +139,6 @@ function selectRoot(id: string) {
             :current-path="player.currentPath"
             :persist-key="`list:folder:${selectedRootId}`"
             @play="onPlay"
-            class="list"
           />
           <div v-else class="list-empty">这个文件夹里没有可播放的音乐</div>
         </template>
@@ -467,13 +467,14 @@ function selectRoot(id: string) {
   cursor: default;
 }
 
-/* 右：内容列 */
+/* 右：内容列（自身滚动宿主： SongList 的表头吸附与虚拟列表测量都挂在这里） */
 .main {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow-y: auto;
 }
 
 .main-head {
@@ -495,11 +496,6 @@ function selectRoot(id: string) {
   font-size: 12px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
-}
-
-.list {
-  flex: 1;
-  min-height: 0;
 }
 
 .list-empty {

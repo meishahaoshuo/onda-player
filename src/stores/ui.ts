@@ -66,7 +66,8 @@ export const useUiStore = defineStore('ui', () => {
   /* ---------- 滚动位置记忆（全应用） ----------
      key 约定：
      - `view:<视图id>|<detailKey>`：外层 .view-body 滚动位置（App.vue 统一捕获/恢复）
-     - `list:<来源>:<id>`：SongList/VirtualList 内部滚动位置（组件自存自取） */
+     - `list:<来源>:<id>`：.scroll-host 滚动宿主上列表的滚动位置
+       （SongList/VirtualList 自存自取；外层滚动架构下记录的是宿主 scrollTop） */
   const scrollMemory = new Map<string, number>()
 
   function rememberScroll(key: string, top: number) {

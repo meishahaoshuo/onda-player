@@ -332,6 +332,10 @@ const metaRows = computed<MetaRow[]>(() => {
   gap: 24px;
   align-items: flex-end;
   padding: 28px 24px;
+  /* 顶部留白：.detail-layer 滚动宿主不能带 padding-top（sticky 吸附边界 =
+     滚动容器 padding 内缘，会挡住表头吸顶）；组件 padding-top 又会被
+     App.vue 的 .detail-layer padding 简写同特异性覆盖，故用子元素 margin */
+  margin-top: 20px;
   border-radius: var(--radius-panel);
   overflow: hidden;
 }

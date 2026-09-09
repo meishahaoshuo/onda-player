@@ -42,11 +42,11 @@ function onPlay(song: (typeof recentSongs.value)[number]) {
 </template>
 
 <style scoped>
+/* min-height 而非 height：内容走外层滚动（view-body），空态仍占满一屏居中 */
 .recent-view {
-  height: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
 }
 
 .empty {

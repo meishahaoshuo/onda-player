@@ -99,15 +99,21 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
 </template>
 
 <style scoped>
+/* 自然高度：滚动交给外层 .scroll-host 宿主（外层滚动架构）。
+   注意不能加 overflow（含 overflow-x:hidden，会计算成 overflow-y:auto），
+   否则本元素成为表头 sticky 的最近滚动容器，表头就永远吸不到宿主顶部 */
 .song-list {
   display: flex;
   flex-direction: column;
-  height: 100%;
   min-width: 0;
-  overflow-x: hidden;
 }
 
+/* 表头吸附在滚动宿主顶部（view-body / 详情覆盖层 / 文件夹右列），
+   不透明底防止行从表头下穿过 */
 .list-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: grid;
   grid-template-columns: 56px minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.2fr) 72px;
   gap: 12px;
@@ -117,12 +123,13 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
   font-size: 12px;
   color: var(--text-tertiary);
   border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-base);
 }
 
 .list-body {
-  flex: 1;
-  min-height: 0;
-  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .song-row {

@@ -6,7 +6,6 @@ import { formatDuration } from '@/utils/format'
 import { useStatsStore } from '@/stores/stats'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
-import { useSettingsStore } from '@/stores/settings'
 import { useStaggerReveal } from '@/composables/useStaggerReveal'
 import { flyToPlayerFromRow } from '@/services/coverFlight'
 import type { SongRecord } from '@/types'
@@ -15,7 +14,6 @@ import type { SongRecord } from '@/types'
 const stats = useStatsStore()
 const library = useLibraryStore()
 const player = usePlayerStore()
-const settings = useSettingsStore()
 
 const rootEl = ref<HTMLElement | null>(null)
 const reveal = useStaggerReveal(() => rootEl.value, '.chart-row')
@@ -72,7 +70,7 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
 <template>
   <div ref="rootEl" class="charts-view">
     <template v-if="ranked.length > 0">
-      <div class="list-body" :class="{ 'capsule-safe': settings.playerStyle === 'capsule' }">
+      <div class="list-body">
         <!-- 前三强：磨砂玻璃卡，随内容滚动；领奖台区不带表头 -->
         <div v-if="podium.length > 0" class="top3" :class="{ in: podiumIn }">
           <button
@@ -138,13 +136,14 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
 </template>
 
 <style scoped>
+/* min-height 而非 height：内容走外层滚动（view-body），领奖台滚走后表头吸附其顶。
+   不能加 overflow（含 overflow-x:hidden），否则表头 sticky 的最近滚动容器不再是 view-body */
 .charts-view {
   position: relative;
-  height: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow-x: hidden;
 }
 
 /* ---------- 全息光柱领奖台 ---------- */
@@ -281,6 +280,7 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
   padding: 0 12px;
 }
 
+/* 表头吸附在滚动宿主（view-body）顶部，行从其不透明底下穿过 */
 .list-header {
   position: sticky;
   top: 0;
@@ -293,15 +293,9 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
 }
 
 .list-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-/* 浮动胶囊悬浮于列表底部：滚动末尾预留胶囊高度，最后一行可完整滚出悬浮层
-   （padding 加在滚动内容内部，不会像 view-body 的容器 padding 那样压缩列表可视高度） */
-.list-body.capsule-safe {
-  padding-bottom: 96px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .list-end-hint {

@@ -36,7 +36,6 @@ function goSongs() {
       :current-path="player.currentPath"
       persist-key="list:favorites"
       @play="onPlay"
-      class="list"
     />
     <div v-else class="empty">
       <AppIcon name="heart" :size="48" class="empty-icon" />
@@ -48,16 +47,11 @@ function goSongs() {
 </template>
 
 <style scoped>
+/* min-height 而非 height：内容走外层滚动（view-body），空态仍占满一屏居中 */
 .favorites-view {
-  height: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
-}
-
-.list {
-  flex: 1;
-  min-height: 0;
 }
 
 .empty {
