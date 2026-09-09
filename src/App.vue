@@ -55,6 +55,18 @@ const viewTitles: Record<ViewId, string> = {
 
 const title = computed(() => viewTitles[ui.activeView])
 const sectionEl = ref<HTMLElement | null>(null)
+
+/**
+ * 浮动胶囊模式下，非列表视图的滚动内容末尾预留胶囊高度，
+ * 避免页面底部的功能按钮被悬浮胶囊遮挡。
+ * 列表视图（SongList/虚拟列表）不加——容器 padding 会压短 height:100% 的列表，
+ * 它们的尾部空间由 VirtualList 的 tail prop 提供。
+ */
+const LIST_VIEWS = ['songs', 'favorites', 'recent', 'folders']
+const viewCapsulePad = computed(
+  () => settings.playerStyle === 'capsule' && !LIST_VIEWS.includes(ui.activeView),
+)
+
 /** 是否有搜索关键词（内容区被搜索结果接管） */
 const searching = computed(() => ui.searchQuery.trim().length > 0)
 const { scope: searchScope } = useSearchScope()
@@ -192,7 +204,12 @@ watch(
           </div>
         </header>
         <Transition name="view" mode="out-in" @enter="onViewEnter">
-          <section ref="sectionEl" :key="ui.activeView" class="view-body">
+          <section
+            ref="sectionEl"
+            :key="ui.activeView"
+            class="view-body"
+            :class="{ 'capsule-pad': viewCapsulePad }"
+          >
             <!-- 搜索优先：有关键词时内容区显示搜索结果 -->
             <!-- 注意：这条 v-if / v-else-if 链必须从 SongsView 一路连通到 PlaceholderView。
                  曾经 template v-if 与 SongsView 的 v-if 断开成两条链，
@@ -409,8 +426,12 @@ watch(
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0 24px 24px;
-  /* 注意：浮动胶囊模式下不能在这里加 padding-bottom——
-     SongList 的虚拟列表是 height:100%，会被压短，行在胶囊上缘处
-     截断（「上下白板隔断」）。尾部安全空间由 VirtualList 的 tail prop 提供。 */
+}
+
+/* 浮动胶囊模式：非列表视图的滚动内容末尾预留胶囊高度（防遮底部功能按钮）。
+   列表视图（songs/favorites/recent/folders）不加——容器 padding 会压短
+   height:100% 的虚拟列表（行在胶囊上缘截断），其尾部空间走 VirtualList tail。 */
+.view-body.capsule-pad {
+  padding-bottom: 96px;
 }
 </style>

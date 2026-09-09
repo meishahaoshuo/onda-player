@@ -117,7 +117,7 @@ onBeforeUnmount(() => {
       @click="openAlbum(album, $event)"
     >
       <span class="cover-wrap">
-        <CoverImage :cover-id="album.coverId" :size="140" class="album-cover" />
+        <CoverImage :cover-id="album.coverId" :size="256" class="album-cover" />
       </span>
       <div class="album-name" :title="album.name">{{ album.name }}</div>
       <div class="album-sub">
@@ -131,7 +131,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .album-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
   gap: 20px;
 }
 
@@ -152,6 +152,9 @@ onBeforeUnmount(() => {
 /* 播放态：标题转强调色（封面外圈的旋转光环已按需求移除） */
 .cover-wrap {
   position: relative;
+  /* inline span 会用 img 的 HTML width 属性撑宽，令 width:100% 失效（封面卡在 140px） */
+  display: block;
+  width: 100%;
 }
 
 .album-card.playing .album-name {
@@ -167,14 +170,14 @@ onBeforeUnmount(() => {
 }
 
 .album-cover {
-  width: 140px;
-  height: 140px;
+  width: 100%;
+  aspect-ratio: 1;
 }
 
 .album-cover :deep(img),
 .album-cover :deep(.cover-fallback) {
-  width: 140px;
-  height: 140px;
+  width: 100%;
+  height: 100%;
   border-radius: 8px;
 }
 

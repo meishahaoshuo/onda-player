@@ -444,40 +444,41 @@ function onRingPointerUp() {
   z-index: 40;
   background: linear-gradient(
     120deg,
-    rgba(255, 255, 255, 0.1),
-    rgba(255, 255, 255, 0.05) 55%,
-    rgba(255, 255, 255, 0.09)
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.03) 55%,
+    rgba(255, 255, 255, 0.05)
   );
-  backdrop-filter: blur(20px) saturate(2.6) brightness(1.12);
-  -webkit-backdrop-filter: blur(20px) saturate(2.6) brightness(1.12);
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(18px) saturate(3) brightness(1.16);
+  -webkit-backdrop-filter: blur(18px) saturate(3) brightness(1.16);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.45),
-    inset 0 -8px 18px rgba(255, 255, 255, 0.08),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
-    0 18px 46px rgba(0, 0, 0, 0.45);
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.55),
+    inset 0 -10px 22px rgba(255, 255, 255, 0.09),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+    0 22px 54px rgba(0, 0, 0, 0.5),
+    0 4px 16px rgba(0, 0, 0, 0.2);
   transition: background 420ms var(--ease-out), box-shadow 420ms var(--ease-out),
     backdrop-filter 420ms var(--ease-out), border-color 420ms var(--ease-out);
 }
 
 /* 浅色主题变体：纯白列表上白色低透明底会完全隐形，
-   用轻纱 + 深色细边 + 加深投影来区分胶囊与背景（Apple 浅色玻璃配方）。
+   用极薄白纱 + 深色细边 + 加深投影来区分胶囊与背景。
    纱必须够薄——歌曲列表是白底黑字，白纱过厚会让透出的字影消失（「被隔断」观感）。 */
 :global([data-theme='light'] .player-bar.capsule) {
   background: linear-gradient(
     120deg,
-    rgba(255, 255, 255, 0.22),
-    rgba(255, 255, 255, 0.12) 55%,
-    rgba(255, 255, 255, 0.18)
+    rgba(255, 255, 255, 0.13),
+    rgba(255, 255, 255, 0.07) 55%,
+    rgba(255, 255, 255, 0.11)
   );
-  backdrop-filter: blur(22px) saturate(1.9) brightness(1.02);
-  -webkit-backdrop-filter: blur(22px) saturate(1.9) brightness(1.02);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(16px) saturate(2.4) brightness(1.03);
+  -webkit-backdrop-filter: blur(16px) saturate(2.4) brightness(1.03);
+  border: 1px solid rgba(0, 0, 0, 0.09);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.85),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.4),
-    0 18px 46px rgba(0, 0, 0, 0.22),
-    0 4px 16px rgba(0, 0, 0, 0.1);
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.45),
+    0 18px 46px rgba(0, 0, 0, 0.24),
+    0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
 /* 顶部进度细线：平时几乎不可见，悬停胶囊时显现 */
