@@ -264,13 +264,15 @@ const cpStyle = computed(() => ({
   '--cp-x': `${(displayPct.value * barWidth.value).toFixed(1)}px`,
 }))
 
-/* ---------- 播放头光尘：极小 + 只在播放头附近自由浮动 ----------
+/* ---------- 播放头光尘：极小 + 只在播放头附近随机漫游 ----------
    每层是一个 1px 圆点，靠一条 box-shadow 一次画出 DUST_PER_LAYER 颗
    （颜色/模糊/扩散走主题令牌，主题切换自动跟随）；整团挂在播放头
    （.pt-dusts 用 --cp-x 平移），所以只在拖拽时围着手指/播放头活动。
-   点位由下标哈希算出（不用 Math.random，观感固定可复现）。 ---------- */
-const DUST_LAYERS = 8
-const DUST_PER_LAYER = 20
+   每层只有 4 颗、层数给到 40：这样「哪几颗连在一起」看不出来，
+   叠加下边 4 航点的闭合漫游路径，整体就是一片各自乱飘的浮尘。
+   所有点位与航点都由下标哈希算出（不用 Math.random，观感固定可复现）。 ---------- */
+const DUST_LAYERS = 40
+const DUST_PER_LAYER = 4
 const DUST_SPAN = 72 /* 横向 ±72px：光是「播放头附近的一团」，不是整条铺满 */
 const DUST_TOP = 7
 const DUST_H = 52 /* 纵向 7~59px，避开上下边缘 */
@@ -284,8 +286,10 @@ function dustRand(n: number): number {
 }
 
 interface DustLayer {
-  dx: number
-  dy: number
+  x1: number
+  y1: number
+  x2: number
+  y2: number
   dur: number
   del: number
   twk: number
@@ -300,13 +304,19 @@ const DUST: DustLayer[] = Array.from({ length: DUST_LAYERS }, (_, li) => {
       y: Number((DUST_TOP + dustRand(seed * 2 + 1) * DUST_H).toFixed(1)),
     }
   })
+  // 4 航点闭合漫游路径：两个中间点各自随机偏开，回到原点收尾（循环无跳变）
+  const r1 = dustRand(li * 13 + 3)
+  const r2 = dustRand(li * 13 + 5)
+  const r3 = dustRand(li * 13 + 7)
+  const r4 = dustRand(li * 13 + 11)
   return {
-    // 自由浮动：来回摆（alternate），幅度小、周期错开 → 像浮在光里的一团尘
-    dx: Math.round((dustRand(li * 7 + 3) - 0.5) * 2 * 16), // ±16px
-    dy: Math.round((dustRand(li * 7 + 5) - 0.5) * 2 * 7), // ±7px
-    dur: 7000 + Math.round(dustRand(li * 7 + 1) * 7000), // 7~14s 一个来回
-    del: -Math.round(dustRand(li * 7 + 2) * 12000), // 负延迟错峰
-    twk: 6000 + Math.round(dustRand(li * 7 + 4) * 6000), // 6~12s 呼吸
+    x1: Math.round((r1 - 0.5) * 2 * 26), // ±26px
+    y1: Math.round((r2 - 0.5) * 2 * 13), // ±13px
+    x2: Math.round((r3 - 0.5) * 2 * 22),
+    y2: Math.round((r4 - 0.5) * 2 * 15),
+    dur: 8000 + Math.round(dustRand(li * 13 + 2) * 10000), // 8~18s 走一圈
+    del: -Math.round(dustRand(li * 13 + 4) * 14000), // 负延迟错峰
+    twk: 5000 + Math.round(dustRand(li * 13 + 6) * 6000), // 5~11s 呼吸
     dots,
   }
 })
@@ -422,8 +432,10 @@ function onRingPointerUp() {
           :key="i"
           class="pt-dust"
           :style="{
-            '--dx': `${l.dx}px`,
-            '--dy': `${l.dy}px`,
+            '--x1': `${l.x1}px`,
+            '--y1': `${l.y1}px`,
+            '--x2': `${l.x2}px`,
+            '--y2': `${l.y2}px`,
             '--dur': `${l.dur}ms`,
             '--del': `${l.del}ms`,
             '--twk': `${l.twk}ms`,
@@ -756,7 +768,8 @@ function onRingPointerUp() {
   --fc-mix: color-mix(in srgb, var(--fc) var(--dust-mix), var(--dust-tint));
 }
 
-/* 拖拽时整条微微发光：外圈一层封面色辉光 + 内侧一层同色呼吸（不碰材质的 box-shadow） */
+/* 拖拽时整条微微发光：外圈一层很淡的封面色辉光 + 内侧一层同色呼吸
+   （不碰材质的 box-shadow；两档浓度刻意压得克制，只做「亮了一点」的暗示） */
 .player-bar.capsule::after {
   content: '';
   position: absolute;
@@ -765,8 +778,8 @@ function onRingPointerUp() {
   pointer-events: none;
   z-index: 1;
   box-shadow:
-    0 0 38px color-mix(in srgb, var(--fc-mix) 55%, transparent),
-    inset 0 0 26px color-mix(in srgb, var(--fc-mix) 26%, transparent);
+    0 0 30px color-mix(in srgb, var(--fc-mix) 28%, transparent),
+    inset 0 0 20px color-mix(in srgb, var(--fc-mix) 13%, transparent);
   opacity: 0;
   transition: opacity var(--dur-med) var(--ease-out);
 }
@@ -852,19 +865,26 @@ function onRingPointerUp() {
   background: transparent;
   opacity: var(--dust-opacity);
   will-change: transform, opacity;
-  /* 自由浮动 + 呼吸：每层各自 ±16px/±7px 来回摆（alternate，周期 7~14s 错开），
-     呼吸负责明暗闪动 —— 读起来是「播放头附近浮着的一团光尘」 */
+  /* 随机漫游 + 呼吸：每层按各自 4 航点的闭合路径飘（8~18s 一圈、相位错开），
+     呼吸负责明暗闪动。层数 40 而每层只 4 颗 → 「哪几颗连在一起」看不出来，
+     整体就是一片各飘各的浮尘 */
   animation:
-    dust-float var(--dur) ease-in-out var(--del) infinite alternate,
+    dust-wander var(--dur) ease-in-out var(--del) infinite,
     dust-twinkle var(--twk) ease-in-out var(--del) infinite;
 }
 
-@keyframes dust-float {
-  from {
+@keyframes dust-wander {
+  0% {
     transform: translate3d(0, 0, 0);
   }
-  to {
-    transform: translate3d(var(--dx), var(--dy), 0);
+  33% {
+    transform: translate3d(var(--x1), var(--y1), 0);
+  }
+  66% {
+    transform: translate3d(var(--x2), var(--y2), 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
   }
 }
 

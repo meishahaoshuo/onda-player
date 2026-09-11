@@ -123,7 +123,7 @@ report.playing = await evaluate(`(() => {
   const d = document.querySelector('.pt-dust')
   return { barPaused: document.querySelector('.player-bar').className.includes('bar-paused'), playState: getComputedStyle(d).animationPlayState }
 })()`)
-// 自由浮动：播放中同一层的光尘 transform 必须随时间变化
+// 随机漫游：同一层的 transform 随时间变化，且各层同时刻的 transform 互不相同
 report.flow = await evaluate(`(async () => {
   const d = document.querySelector('.pt-dust')
   const cs = getComputedStyle(d)
@@ -131,7 +131,9 @@ report.flow = await evaluate(`(async () => {
   const anim = cs.animationName
   await new Promise((r) => setTimeout(r, 1200))
   const b = getComputedStyle(d).transform
-  return { animationName: anim, a, b, flowing: a !== b }
+  const all = [...document.querySelectorAll('.pt-dust')].map((x) => getComputedStyle(x).transform)
+  const distinct = new Set(all).size
+  return { animationName: anim, a, b, flowing: a !== b, layers: all.length, distinctTransforms: distinct }
 })()`)
 report.seeked = await evaluate(`(async () => {
   __musicTest.toggle()
@@ -203,6 +205,7 @@ await evaluate(`(async () => {
 report.restState = await evaluate(`(() => ({
   dustOpacity: getComputedStyle(document.querySelector('.pt-dusts')).opacity,
   glowOpacity: getComputedStyle(document.querySelector('.player-bar'), '::after').opacity,
+  glowShadow: getComputedStyle(document.querySelector('.player-bar'), '::after').boxShadow,
   barCursor: getComputedStyle(document.querySelector('.player-bar')).cursor,
   bandCursor: getComputedStyle(document.querySelector('.capsule-progress')).cursor,
 }))()`)
@@ -252,6 +255,7 @@ report.dragging = await evaluate(`(() => {
     dustTranslateX: Math.round(parseFloat(dusts.getBoundingClientRect().x - lr.x)),
     headX: Math.round(parseFloat(layer.style.getPropertyValue('--cp-x')) || 0),
     glowOpacity: getComputedStyle(bar, '::after').opacity,
+    glowShadow: getComputedStyle(bar, '::after').boxShadow,
     cursor: getComputedStyle(bar).cursor,
   }
 })()`)
