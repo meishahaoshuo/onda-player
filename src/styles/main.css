@@ -58,12 +58,13 @@
   /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
   --ambient-fallback: rgba(92, 124, 224, 0.18);
 
-  /* 胶囊播放条「进度光粒子」：深色主题 = 发光粒子（混白提亮 + 外发光），
-     颜色本身由封面明亮色注入（--fc），这里只管「长什么样」 */
-  --dust-size: 2.4px;
+  /* 胶囊播放条「封面色氛围光 + 光尘」（鸿蒙沉浸光感）：
+     光尘恒为白微光，封面色由氛围光承担；深色主题走发光尘埃 */
+  --dust-bloom-color: rgba(255, 255, 255, 0.5);
+  /* 单颗光尘的体积 = blur + spread（元素本身 0×0，靠 box-shadow 画点） */
+  --dust-blur: 0.9px;
+  --dust-spread: 0.2px;
   --dust-opacity: 1;
-  --dust-bloom: 7px;
-  --dust-halo-opacity: 0.36;
   --dust-mix: 80%;
   --dust-tint: #ffffff;
   /* 已播区间的氛围光浓度（与粒子共用一个封面色） */
@@ -114,12 +115,12 @@
   /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
   --ambient-fallback: rgba(23, 37, 84, 0.1);
 
-  /* 胶囊播放条「进度光粒子」：浅色主题 = 彩色微尘（封面色朝黑压一档才在
-     白底玻璃上读得出来，不做强外发光），避免出现「脏色带」 */
-  --dust-size: 2.2px;
-  --dust-opacity: 0.9;
-  --dust-bloom: 3px;
-  --dust-halo-opacity: 0.3;
+  /* 胶囊播放条「封面色氛围光 + 光尘」：浅色主题下白尘在白玻璃上读不出来，
+     组件内按 --fc-mix 覆盖 --dust-bloom-color（封面色），氛围光压一档避免脏色带 */
+  --dust-bloom-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  --dust-blur: 0.7px;
+  --dust-spread: 0.1px;
+  --dust-opacity: 0.95;
   --dust-mix: 85%;
   --dust-tint: #0b0b0d;
   /* 浅色白底上氛围光要更克制，避免变成一条「脏色带」 */
@@ -131,13 +132,6 @@
 /* 胶囊氛围光的进度值：注册成可过渡的 <number>，让 timeupdate（约 4Hz）
    的跳变变成连续推移；拖拽时由 .ring-dragging 关掉过渡以求 100% 跟手 */
 @property --cp-p {
-  syntax: '<number>';
-  inherits: true;
-  initial-value: 0;
-}
-
-/* 光粒子的「聚拢」系数（0 静止 / 1 向指针聚拢）：hover 与拖拽切换 */
-@property --pull {
   syntax: '<number>';
   inherits: true;
   initial-value: 0;
