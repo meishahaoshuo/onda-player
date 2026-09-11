@@ -397,20 +397,23 @@ function onRingPointerUp() {
       <div class="pt-field">
         <!-- 氛围光：封面色薄雾铺在已播侧，没有任何线条 -->
         <div class="pt-wash" />
-        <!-- 光尘：每层一个 0×0 元素 + 一条 box-shadow，画满整层散点 -->
-        <div
-          v-for="(l, i) in DUST"
-          :key="i"
-          class="pt-dust"
-          :style="{
-            '--dx': `${l.dx}px`,
-            '--dy': `${l.dy}px`,
-            '--dur': `${l.dur}ms`,
-            '--del': `${l.del}ms`,
-            '--twk': `${l.twk}ms`,
-            boxShadow: dustShadow(l),
-          }"
-        />
+        <!-- 光尘：只在拖拽时浮现（.pt-dusts 由 .ring-dragging 淡入），
+             每层一个 1px 圆点 + 一条 box-shadow，画满整层散点 -->
+        <div class="pt-dusts">
+          <div
+            v-for="(l, i) in DUST"
+            :key="i"
+            class="pt-dust"
+            :style="{
+              '--dx': `${l.dx}px`,
+              '--dy': `${l.dy}px`,
+              '--dur': `${l.dur}ms`,
+              '--del': `${l.del}ms`,
+              '--twk': `${l.twk}ms`,
+              boxShadow: dustShadow(l),
+            }"
+          />
+        </div>
       </div>
     </div>
     <!-- 拖拽热区：仍只占顶部 18px，避开封面与按钮（见下方 .capsule-progress 注释） -->
@@ -766,6 +769,18 @@ function onRingPointerUp() {
 /* 光尘层：0×0 元素 + 一条 box-shadow 画出整层散点（点色/模糊/扩散全走主题令牌），
    每层有自己的漂移与呼吸相位 —— 480 颗只占 8 个合成图层。
    暂停即停、reduced-motion 即静（见下方两条规则）。 */
+.capsule-particles .pt-dusts {
+  position: absolute;
+  inset: 0;
+  /* 光尘只在拖拽时出现：常态完全隐去，拖拽淡入、松手淡出 */
+  opacity: 0;
+  transition: opacity 200ms var(--ease-out);
+}
+
+.player-bar.ring-dragging .capsule-particles .pt-dusts {
+  opacity: 1;
+}
+
 .capsule-particles .pt-dust {
   position: absolute;
   left: 0;
@@ -822,16 +837,16 @@ function onRingPointerUp() {
   }
 }
 
-/* 拖拽热区：只在**顶端边框**上（以 1px 边框为中线，上下各 3px）。
-   点按钮、点封面、从条上滑过都不会碰到它；配合「先预备、移动够 4px 才算拖拽」，
-   按下本身也不再跳进度。按下后靠 setPointerCapture 跟手，指针可以离开这条细带。
-   本层无内容无底色，只负责命中。 */
+/* 拖拽热区：顶部 12px 的横带 —— 再往下就压到播放键（40px 圆钮从 y=13 起），
+   点按钮时蹭到热区就会开始拖进度，是误触的主要来源。
+   防误触靠的是 onRingPointerDown 的「先预备、移动够 4px 才算拖拽」：
+   按下不 seek，点一下不会跳进度。本层无内容无底色，只负责命中。 */
 .capsule-progress {
   position: absolute;
-  top: -3px;
+  top: 0;
   left: 0;
   right: 0;
-  height: 9px;
+  height: 12px;
   cursor: ew-resize;
   touch-action: none;
 }

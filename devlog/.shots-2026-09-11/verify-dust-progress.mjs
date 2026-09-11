@@ -189,7 +189,8 @@ report.shotLightRest = await shot('dust-light-rest.png')
 
 // ---------- 拖拽：只在顶端边框生效，且必须真的横向拖动 ----------
 const geo = await barGeo()
-const edgeY = geo.y + 2 /* 顶端边框细带（top:-3px / height:9px） */
+const edgeY = geo.y + 6 /* 顶部 12px 热区中部 */
+const bandY = geo.y + 10 /* 热区下缘附近，也该能拖 */
 const midY = geo.y + 34 /* 条中部：按钮/文字区，绝不该开始拖拽 */
 
 await evaluate(`(async () => {
@@ -199,6 +200,7 @@ await evaluate(`(async () => {
 })()`)
 
 // 误触 1：在顶端边框点一下（不移动）→ 进度不动
+report.dustAtRest = await evaluate(`getComputedStyle(document.querySelector('.pt-dusts')).opacity`)
 const tBefore = await evaluate(`__musicTest.playerState().currentTime`)
 await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: Math.round(geo.x + geo.w * 0.8), y: Math.round(edgeY), button: 'left', clickCount: 1, buttons: 1 })
 await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: Math.round(geo.x + geo.w * 0.8), y: Math.round(edgeY), button: 'left', buttons: 0 })
@@ -217,18 +219,23 @@ report.midDrag = await evaluate(`(() => ({
 await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: Math.round(geo.x + geo.w * 0.6), y: Math.round(midY), button: 'left', buttons: 0 })
 await sleep(200)
 
-// 真拖：从顶端边框按下并横移 → 必须生效且精确落位
-await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: Math.round(geo.x + geo.w * 0.42), y: Math.round(edgeY), button: 'left', clickCount: 1, buttons: 1 })
-await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(geo.x + geo.w * 0.72), y: Math.round(edgeY), button: 'left', buttons: 1 })
+// 真拖：从热区**下缘**（y+10，不再是细边框）按下并横移 → 必须生效且精确落位
+await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: Math.round(geo.x + geo.w * 0.42), y: Math.round(bandY), button: 'left', clickCount: 1, buttons: 1 })
+await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(geo.x + geo.w * 0.72), y: Math.round(bandY), button: 'left', buttons: 1 })
 await sleep(280)
 report.dragging = await evaluate(`(() => {
   const bar = document.querySelector('.player-bar')
   const layer = document.querySelector('.capsule-particles')
-  return { ringDragging: bar.className.includes('ring-dragging'), cpP: layer.style.getPropertyValue('--cp-p') }
+  return {
+    ringDragging: bar.className.includes('ring-dragging'),
+    cpP: layer.style.getPropertyValue('--cp-p'),
+    dustDuringDrag: getComputedStyle(document.querySelector('.pt-dusts')).opacity,
+  }
 })()`)
 report.shotLightDrag = await shot('dust-light-drag.png')
-await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: Math.round(geo.x + geo.w * 0.72), y: Math.round(edgeY), button: 'left', buttons: 0 })
-await sleep(220)
+await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: Math.round(geo.x + geo.w * 0.72), y: Math.round(bandY), button: 'left', buttons: 0 })
+await sleep(320)
+report.dustAfterRelease = await evaluate(`getComputedStyle(document.querySelector('.pt-dusts')).opacity`)
 
 // ---------- 深色主题 ----------
 await evaluate(`(async () => {
