@@ -411,7 +411,7 @@ function onRecordKeydown(e: KeyboardEvent) {
   flex-direction: column;
   gap: 6px;
   position: sticky;
-  top: var(--list-sticky-top, 0);
+  top: 0;
 }
 
 .nav-card {
