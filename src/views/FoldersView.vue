@@ -107,8 +107,7 @@ function selectRoot(id: string) {
       </aside>
 
       <!-- 右：选中文件夹的歌曲（本列自身滚动，是 SongList 的 .scroll-host 宿主；
-           左栏文件夹列表独立滚动，不受右列滚动影响） -->
-      <div class="main scroll-host">
+           左栏文件夹列表独立滚动，不受右列滚动影响） -->      <div class="main scroll-host">
         <template v-if="selectedRootId">
           <div class="main-head">
             <h2 class="main-title">{{ selectedRootName }}</h2>

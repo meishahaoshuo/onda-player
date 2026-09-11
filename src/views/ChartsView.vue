@@ -60,7 +60,7 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
   <div ref="rootEl" class="charts-view">
     <template v-if="ranked.length > 0">
       <div class="list-body">
-        <!-- 前三强：磨砂玻璃卡，随内容滚动；领奖台区不带表头 -->
+        <!-- 前三强：磨砂玻璃卡，随内容滚动 -->
         <div v-if="podium.length > 0" class="top3" :class="{ in: podiumIn }">
           <button
             v-for="p in podium"
@@ -82,16 +82,8 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
           </button>
           <div v-if="rest.length === 0" class="list-end-hint">前三名就是全部上榜歌曲</div>
         </div>
-        <!-- 表头只挂在第 4 名起的列表区上方，与行列严格同 grid 对齐 -->
+        <!-- 第 4 名起的列表（列名表头已按需求移除，行自对齐） -->
         <template v-if="rest.length > 0">
-          <div class="list-header">
-            <span class="col-rank">名次</span>
-            <span class="col-title">标题</span>
-            <span class="col-artist">艺术家</span>
-            <span class="col-album">专辑</span>
-            <span class="col-count">播放次数</span>
-            <span class="col-duration">时长</span>
-          </div>
           <div
             v-for="row in rest"
             :key="row.song.path"
@@ -125,8 +117,9 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
 </template>
 
 <style scoped>
-/* min-height 而非 height：内容走外层滚动（view-body），领奖台滚走后表头吸附其顶。
-   不能加 overflow（含 overflow-x:hidden），否则表头 sticky 的最近滚动容器不再是 view-body */
+/* min-height 而非 height：内容走外层滚动（view-body）。
+   不能加 overflow（含 overflow-x:hidden），否则本元素成为滚动容器、
+   外层滚动架构失效 */
 .charts-view {
   position: relative;
   min-height: 100%;
@@ -260,25 +253,12 @@ function onPlay(song: SongRecord, e?: MouseEvent) {
 }
 
 
-.list-header,
 .chart-row {
   display: grid;
   grid-template-columns: 56px minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.2fr) 88px 72px;
   gap: 12px;
   align-items: center;
   padding: 0 12px;
-}
-
-/* 表头吸附在滚动宿主（view-body）顶部，行从其不透明底下穿过 */
-.list-header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  height: 36px;
-  font-size: 12px;
-  color: var(--text-tertiary);
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-base);
 }
 
 .list-body {

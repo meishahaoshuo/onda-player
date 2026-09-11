@@ -273,6 +273,8 @@ watch(
   display: flex;
   flex-direction: column;
   position: relative;
+  /* 顶栏高度：view-header 悬浮层与 view-body 首屏留白两处共用 */
+  --head-h: 68px;
 }
 
 /* 封面氛围光：绝对定位背景层，内容抬到其上 */
@@ -358,12 +360,24 @@ watch(
   background: var(--bg-base);
 }
 
+/* 顶栏：悬浮磨砂玻璃层——滚动内容从它底下穿过（普通磨砂：--glass-bg 平整底色
+   + --glass-blur 大模糊，与队列面板/玻璃卡同一语言）；详情覆盖层（z:5）依旧整体盖住它 */
 .view-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  height: var(--head-h);
   padding: 20px 24px 12px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--glass-border);
 }
 
 .view-header h1 {
@@ -431,6 +445,10 @@ watch(
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0 24px 96px;
+  /* 首屏内容从悬浮顶栏下缘开始，滚动后从顶栏玻璃底下穿过 */
+  padding: var(--head-h) 24px 96px;
+  /* 首屏内容从悬浮顶栏下缘开始，滚动后从顶栏玻璃底下穿过；
+     设置页左列导航等吸附元素吸在顶栏下缘 */
+  --list-sticky-top: var(--head-h);
 }
 </style>
