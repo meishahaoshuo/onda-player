@@ -10,6 +10,23 @@
 const DURATION = 340
 const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
+/**
+ * 「列表首屏错峰浮现」的会话级闸门。
+ *
+ * 必须是**模块作用域**：写进组件的 `<script setup>` 会被编译进 `setup()`，
+ * 变成每个组件实例各一份，于是每次挂载都会重播——SongList 随左侧板块切换
+ * 反复挂载，就会出现「前 14 行重新浮现、其余行瞬间出现」的半刷新观感。
+ * 用模块变量保证整个会话只播一次，切板块一律直接显示。
+ */
+let listRevealPlayed = false
+
+/** 领取一次首屏浮现机会：本次会话第一次调用返回 true，之后恒为 false。 */
+export function claimListReveal(): boolean {
+  if (listRevealPlayed) return false
+  listRevealPlayed = true
+  return true
+}
+
 export interface StaggerRevealOptions {
   /** 批内相邻条目的延迟步长 */
   step?: number

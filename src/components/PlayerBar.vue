@@ -200,12 +200,16 @@ watch(
 )
 
 onMounted(() => {
-  // 首挂载入场（CSS 动画已移除，由这里播一次）
+  // 首挂载入场（CSS 动画已移除，由这里播一次）。
+  // 胶囊形态 resting transform 含 translateX(-50%)，关键帧必须携带，
+  // 否则入场期间水平锚点缺失：胶囊先被顶到 left:50%（偏右），结束回落时
+  // 才跳回 CSS 的 translateX(-50%)，表现为「从右边抽搐到中间」。
+  const anchor = localStyle.value === 'capsule' ? 'translateX(-50%) ' : ''
   barEl.value
     ?.animate(
       [
-        { opacity: 0, transform: 'translateY(26px)' },
-        { opacity: 1, transform: 'translateY(0)' },
+        { opacity: 0, transform: `${anchor}translateY(26px)` },
+        { opacity: 1, transform: `${anchor}translateY(0)` },
       ],
       { duration: 560, easing: 'cubic-bezier(0.3, 1.3, 0.5, 1)', delay: 100, fill: 'backwards' },
     )
@@ -214,10 +218,17 @@ onMounted(() => {
 
 /* ---------- 胶囊进度弧线：沿胶囊边框轮廓走的进度描边，点击/拖拽 seek ---------- */
 
-/** 弧线路径：与胶囊顶部轮廓同心（viewBox 0 0 760 26，胶囊 760 宽圆角 33）。
-    中段几乎贴着顶边（内缩 2.5px），两端顺着左右圆角曲线向下延伸一点——
-    像描着胶囊边框走的一条线，而不是悬空的拱桥 */
-const CP_PATH = 'M 2,24 C 2,9.5 10,4.5 26,4.5 L 734,4.5 C 750,4.5 758,9.5 758,24'
+/** 贴合外框的进度线：沿胶囊外轮廓圆角「平行内缩 2px」描摹。
+    坐标系 viewBox 0 0 760 26，与胶囊内宽 758 近似 1:1。
+    胶囊外框圆角半径 33、圆心 (33,33)；元素在 border 内侧，故元素坐标里
+    圆心 (32,32)、半径 32，内缩 2px 后描摹半径 30。
+    路径 = 左圆弧(从 y=20 沿圆角爬升) → 顶部直线(y=2，顶边内缩 2px) → 右圆弧。
+    圆弧与直线相切，所以直线段与弯曲段之间是 C1 连续的，没有折角。
+    两端只爬到 y=20（距胶囊中线 33 还有 13px），下沉 18px ——
+    旧路径一路包到 y=33 下沉 31.5px（用户：弯太多），
+    上一版只下沉 8.5px 且断在 x=0（用户：像被硬切一刀），这里取中并且真正贴着圆弧走。 */
+const CP_PATH =
+  'M 4.5,20 A 30 30 0 0 1 32,2 L 726,2 A 30 30 0 0 1 753.5,20'
 
 const ringDragging = ref(false)
 const progressLineEl = ref<HTMLElement | null>(null)
@@ -233,6 +244,12 @@ const displayPct = computed(() => (ringDragging.value ? dragPct.value : ringPct.
 const cpDash = computed(() => 1 - displayPct.value)
 /** 进度为 0 时隐藏填充线：round 线帽在 dash 长度为 0 时仍会画出一个小圆点 */
 const cpVisible = computed(() => displayPct.value > 0.004)
+/** 三层光晕共用同一份行内样式：dashoffset 驱动进度，进度为 0 时整组隐藏
+    （round 线帽在 dash 长度为 0 时仍会画出一个小圆点） */
+const cpFillStyle = computed(() => ({
+  strokeDashoffset: cpDash.value,
+  opacity: cpVisible.value ? undefined : 0,
+}))
 
 function pctFromClientX(cx: number): number {
   const line = progressLineEl.value
@@ -268,18 +285,23 @@ function onRingPointerUp() {
   if (dur > 0) player.seek(dragPct.value * dur) // 松手落到最终位置
   ringDragging.value = false
 }
+
+/* 进度线配色已改为跟着主题对比方向走的「玻璃高光 / 压深」——
+   深色玻璃提亮（白）、浅色玻璃压深（近黑），不再从封面派生彩色。
+   详见下方 .capsule-progress 上的 --cp-line / --cp-rail 定义。 */
 </script>
 
 <template>
   <footer
     ref="barEl"
     class="player-bar glass"
-    :class="{ capsule: localStyle === 'capsule', 'material-liquid': settings.barMaterial === 'liquid', 'material-frosted': settings.barMaterial === 'frosted' }"
+    :class="{ capsule: localStyle === 'capsule', 'material-liquid': settings.barMaterial === 'liquid', 'material-frosted': settings.barMaterial === 'frosted', 'ring-dragging': ringDragging }"
     @pointermove="onRingPointerMove"
     @pointerup="onRingPointerUp"
     @pointercancel="onRingPointerUp"
   >
-    <!-- 胶囊模式：顶部一条沿胶囊弧度微微弯曲的进度线，悬停胶囊时显现；点击/拖拽 seek -->
+    <!-- 胶囊模式：顶部一条沿胶囊外框微微弯曲的进度线，常驻可见（半透明）、
+         悬停胶囊时变清晰加粗；点击/拖拽 seek -->
     <div
       v-if="localStyle === 'capsule'"
       ref="progressLineEl"
@@ -288,29 +310,15 @@ function onRingPointerUp() {
       @pointerdown="onRingPointerDown"
     >
       <svg class="cp-svg" viewBox="0 0 760 26" preserveAspectRatio="none" aria-hidden="true">
-        <defs>
-          <linearGradient id="cp-grad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stop-color="var(--accent-strong)" />
-            <stop offset="0.5" stop-color="var(--accent)" />
-            <stop offset="1" stop-color="var(--accent-strong)" />
-          </linearGradient>
-        </defs>
-        <!-- 轨道：低透明度弧线 -->
+        <!-- 轨道：极淡的细线 -->
         <path class="cp-track" :d="CP_PATH" />
-        <!-- 光晕底：粗一号的半透明主色，托出玻璃的「发光体」质感 -->
-        <path
-          class="cp-glow"
-          :d="CP_PATH"
-          pathLength="1"
-          :style="{ strokeDashoffset: cpDash, opacity: cpVisible ? '' : 0 }"
-        />
-        <!-- 填充：主色渐变细线，dashoffset 驱动进度 -->
-        <path
-          class="cp-fill"
-          :d="CP_PATH"
-          pathLength="1"
-          :style="{ strokeDashoffset: cpDash, opacity: cpVisible ? '' : 0 }"
-        />
+        <!-- 进度「光晕」：三层同心描边叠加（宽而淡 → 窄而亮），
+             形成贴在玻璃边框上的一层浅浅的光。
+             不用 filter: blur —— 每帧模糊是项目明令禁止的卡顿根因，
+             而纯描边叠加在合成上几乎无开销。 -->
+        <path class="cp-fill cp-haze" :d="CP_PATH" pathLength="1" :style="cpFillStyle" />
+        <path class="cp-fill cp-glow" :d="CP_PATH" pathLength="1" :style="cpFillStyle" />
+        <path class="cp-fill cp-core" :d="CP_PATH" pathLength="1" :style="cpFillStyle" />
       </svg>
     </div>
     <!-- 左：曲目信息 -->
@@ -320,6 +328,7 @@ function onRingPointerUp() {
         :size="52"
         class="cover clickable"
         title="打开全屏歌词"
+        draggable="false"
         @click="ui.lyricsOpen = true"
       />
       <div class="meta">
@@ -477,37 +486,39 @@ function onRingPointerUp() {
     backdrop-filter 420ms var(--ease-out), border-color 420ms var(--ease-out);
 }
 
-/* 材质一：液态玻璃 —— 低模糊高折射白纱 + 顶高光，背景内容透出最清晰 */
+/* 材质一：液态玻璃 —— 低模糊高折射白纱 + 顶高光，背景内容透出最清晰
+   透明度↑：白纱 alpha 压到 3/1.5/2.5%；折射感↑：saturate 3.6 + brightness 1.2 + 顶缘高光更亮 */
 .player-bar.material-liquid {
   background: linear-gradient(
     120deg,
-    rgba(255, 255, 255, 0.06),
-    rgba(255, 255, 255, 0.03) 55%,
-    rgba(255, 255, 255, 0.05)
+    rgba(255, 255, 255, 0.03),
+    rgba(255, 255, 255, 0.015) 55%,
+    rgba(255, 255, 255, 0.025)
   );
-  backdrop-filter: blur(18px) saturate(3) brightness(1.16);
-  -webkit-backdrop-filter: blur(18px) saturate(3) brightness(1.16);
+  backdrop-filter: blur(20px) saturate(3.6) brightness(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(3.6) brightness(1.2);
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.3);
+  border-top: 1px solid rgba(255, 255, 255, 0.36);
   box-shadow:
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.55),
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.62),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16),
     0 -8px 24px rgba(0, 0, 0, 0.22);
 }
 
-/* 材质一浅色主题：极薄白纱 + 深色细边区分条与背景 */
+/* 材质一浅色主题：更薄白纱 + 更强折射，深色细边区分条与背景 */
 :global([data-theme='light'] .player-bar.material-liquid) {
   background: linear-gradient(
     120deg,
-    rgba(255, 255, 255, 0.13),
-    rgba(255, 255, 255, 0.07) 55%,
-    rgba(255, 255, 255, 0.11)
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.04) 55%,
+    rgba(255, 255, 255, 0.065)
   );
-  backdrop-filter: blur(16px) saturate(2.4) brightness(1.03);
-  -webkit-backdrop-filter: blur(16px) saturate(2.4) brightness(1.03);
-  border-top-color: rgba(0, 0, 0, 0.09);
+  backdrop-filter: blur(18px) saturate(3.1) brightness(1.05);
+  -webkit-backdrop-filter: blur(18px) saturate(3.1) brightness(1.05);
+  border-top-color: rgba(0, 0, 0, 0.08);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.95),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
 }
 
 /* 材质二：普通磨砂 —— 平整半透明底色 + 大模糊，无高折射白纱，观感沉稳 */
@@ -548,22 +559,22 @@ function onRingPointerUp() {
   border-radius: 999px;
 }
 
-/* 胶囊 + 液态玻璃：全边框 + 更强立体投影 */
+/* 胶囊 + 液态玻璃：全边框 + 更强立体投影（折射感↑：边框/顶缘高光更亮，玻璃更「厚」） */
 .player-bar.capsule.material-liquid {
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.38);
   box-shadow:
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.55),
-    inset 0 -10px 22px rgba(255, 255, 255, 0.09),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.7),
+    inset 0 -10px 22px rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.24),
     0 22px 54px rgba(0, 0, 0, 0.5),
     0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
 :global([data-theme='light'] .player-bar.capsule.material-liquid) {
-  border: 1px solid rgba(0, 0, 0, 0.09);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.45),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.98),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6),
     0 18px 46px rgba(0, 0, 0, 0.24),
     0 4px 16px rgba(0, 0, 0, 0.12);
 }
@@ -585,76 +596,138 @@ function onRingPointerUp() {
     0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
-/* 顶部进度弧线：平时几乎不可见，悬停胶囊时显现。
-   SVG 与胶囊同宽（left/right:0），viewBox 760×26 与胶囊轮廓同心；
-   preserveAspectRatio:none 随胶囊宽度伸缩（窗口窄于 760 时水平压缩），
-   non-scaling-stroke 保证描边宽度不随拉伸变形。
-   热区高度 26px（=曲线视觉高），top:-2 对齐胶囊顶缘 */
+/* 顶部进度线：平时完全隐藏，鼠标移到它上面（或正在拖拽）才显现。
+   线本身沿胶囊外框圆角贴合（见 CP_PATH），元素铺满胶囊内宽与之对齐。
+   热区只占顶部 18px —— 旧版是 left/right:0 的整条全宽、高 26px，
+   覆盖胶囊 40% 高度，鼠标从上缘进出极易误触发 seek；压到 18px 后
+   同时避开了封面主体（封面从 11px 起）。 */
 .capsule-progress {
   position: absolute;
-  top: -2px;
+  top: 0;
   left: 0;
   right: 0;
-  height: 26px;
+  height: 18px;
   opacity: 0;
   transition: opacity var(--dur-med) var(--ease-out);
   cursor: pointer;
   touch-action: none;
+  /* 进度线走「玻璃高光」语义：线色跟随主题的对比方向——
+     深色玻璃提亮（白线读起来像玻璃受光），浅色玻璃压深（近黑线）。
+     白线照搬到浅色玻璃上会整个隐形，所以两边不能共用一套值。 */
+  /* 线色只负责「亮/暗」，柔和不透明度交给各光晕层的 opacity 控制 */
+  --cp-line: #ffffff;
+  --cp-rail: rgba(255, 255, 255, 0.2);
 }
 
-.player-bar.capsule:hover .capsule-progress,
+:global([data-theme='light'] .capsule-progress) {
+  --cp-line: #14141a;
+  --cp-rail: rgba(0, 0, 0, 0.1);
+}
+
+.capsule-progress:hover,
 .capsule-progress.dragging {
   opacity: 1;
+}
+
+/* 拖拽进度期间，内容区与按钮一律不响应指针事件。
+   热区只有 18px 高（还要让出封面所在的下半区），拖动中指针极易滑出热区
+   落到封面或按钮上；若它们此时仍响应，用户就会感觉「拖进度条反而抓到了封面」。
+   配合 setPointerCapture 双保险。 */
+.player-bar.ring-dragging .track,
+.player-bar.ring-dragging .controls,
+.player-bar.ring-dragging .aux {
+  pointer-events: none;
 }
 
 .capsule-progress .cp-svg {
   display: block;
   width: 100%;
-  height: 100%;
+  height: 26px; /* 高于 18px 热区：两端线条画到 y=20，靠 overflow 补全 */
   overflow: visible;
+  pointer-events: none; /* 命中一律交给热区容器，避免 svg 自身拦事件 */
 }
 
 .capsule-progress .cp-track,
-.capsule-progress .cp-glow,
 .capsule-progress .cp-fill {
   fill: none;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
+  transition: stroke-width 180ms var(--ease-out);
+}
+
+/* dasharray 只给填充线（它在模板里带 pathLength="1"，故 1 = 整条实线）。
+   轨道没有 pathLength，若继承同一条 dasharray:1，会被解析成
+   「1px 实线 + 1px 空隙」的密集虚线，轨道凭空淡掉约一半。 */
+.capsule-progress .cp-fill {
   stroke-dasharray: 1;
 }
 
 .capsule-progress .cp-track {
-  stroke: color-mix(in srgb, var(--text-tertiary) 32%, transparent);
-  stroke-width: 2.5;
+  stroke: var(--cp-rail);
+  stroke-width: 2;
 }
 
-/* 光晕底：粗一号的半透明主色，玻璃「发光体」质感（无 filter，纯叠加） */
-.capsule-progress .cp-glow {
-  stroke: var(--accent);
-  stroke-width: 7;
-  opacity: 0.28;
-  transition: stroke-dashoffset 160ms linear;
-}
-
+/* 光晕三层：宽而淡的 haze 垫底、窄而亮的 core 压面，中间 glow 过渡。
+   叠加起来就是「贴在玻璃边框上的一层浅浅的光」——比一根实线柔和得多 */
 .capsule-progress .cp-fill {
-  stroke: url(#cp-grad);
-  stroke-width: 2.5;
-  transition: stroke-dashoffset 160ms linear;
+  stroke: var(--cp-line);
+  stroke-linecap: round;
+  transition:
+    stroke-dashoffset 160ms linear,
+    stroke-width 180ms var(--ease-out),
+    opacity 180ms var(--ease-out);
 }
 
-/* 拖拽中关闭过渡：进度 100% 跟手（松手恢复平滑跟随播放时钟） */
-.capsule-progress.dragging .cp-fill,
-.capsule-progress.dragging .cp-glow {
-  transition: none;
+.capsule-progress .cp-haze {
+  stroke-width: 7;
+  opacity: 0.1;
 }
 
-/* 浅色主题：轨道换深色细线（白底上白轨道不可见），光晕收敛 */
-:global([data-theme='light'] .capsule-progress .cp-track) {
-  stroke: rgba(0, 0, 0, 0.14);
+.capsule-progress .cp-glow {
+  stroke-width: 3.5;
+  opacity: 0.16;
 }
 
-:global([data-theme='light'] .capsule-progress .cp-glow) {
+.capsule-progress .cp-core {
+  stroke-width: 1.5;
+  opacity: 0.85;
+}
+
+/* 悬停：光晕整体增强一档，提示「这里可点可拖」 */
+.player-bar.capsule:hover .capsule-progress .cp-haze {
+  stroke-width: 8;
+  opacity: 0.13;
+}
+
+.player-bar.capsule:hover .capsule-progress .cp-glow {
+  stroke-width: 4.5;
   opacity: 0.2;
+}
+
+.player-bar.capsule:hover .capsule-progress .cp-core {
+  stroke-width: 2;
+  opacity: 0.95;
+}
+
+/* 拖拽中：光晕再增强并加粗（进度更醒目、更好瞄准）；
+   同时关闭进度过渡，使拖动 100% 跟手（松手恢复平滑跟随播放时钟） */
+.player-bar.capsule .capsule-progress.dragging .cp-haze {
+  stroke-width: 9;
+  opacity: 0.15;
+}
+
+.player-bar.capsule .capsule-progress.dragging .cp-glow {
+  stroke-width: 5;
+  opacity: 0.24;
+}
+
+.player-bar.capsule .capsule-progress.dragging .cp-core {
+  stroke-width: 2.5;
+  opacity: 1;
+}
+
+.capsule-progress.dragging .cp-fill {
+  transition: none;
 }
 
 .capsule .track {
@@ -705,6 +778,10 @@ function onRingPointerUp() {
   cursor: pointer;
   transition: transform var(--dur-med) var(--ease-spring), box-shadow var(--dur-med) var(--ease-out);
   border-radius: 8px;
+  /* 关掉 <img> 的原生拖拽与文字选中：否则在进度条上按下后拖到封面，
+     浏览器会启动图片 drag，表现为「拖进度条却把小封面拖动了」 */
+  -webkit-user-drag: none;
+  user-select: none;
 }
 
 .cover.clickable:hover {
@@ -793,30 +870,75 @@ function onRingPointerUp() {
   fill: currentColor;
 }
 
+/* 音量条：极细 3px 线 + 低对比轨道；拇指缩到 8px、去掉投影，
+   平时隐藏，仅 hover/聚焦/拖拽时浮出，整体最无感但功能完全正常 */
 .volume {
   width: 88px;
-  height: 4px;
+  height: 14px; /* 透明命中区，可见线仅 3px 居中 */
   appearance: none;
   -webkit-appearance: none;
-  border-radius: 2px;
-  background: linear-gradient(to right, var(--accent) var(--vol, 80%), var(--bg-hover) var(--vol, 80%));
+  background: transparent;
   cursor: pointer;
 }
 
-.volume::-webkit-slider-thumb {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--text-primary);
-  box-shadow: var(--shadow-1);
-  transition: transform var(--dur-fast) var(--ease-spring);
+.volume::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--vol, 80%),
+    color-mix(in srgb, var(--text-tertiary) 18%, transparent) var(--vol, 80%)
+  );
+  transition: filter var(--dur-fast) var(--ease-out);
 }
 
-.volume:hover::-webkit-slider-thumb {
-  transform: scale(1.2);
+/* 克制提示：hover 时整条线微微提亮，无圆点/发光，保持无感 */
+.volume:hover::-webkit-slider-runnable-track {
+  filter: brightness(1.22);
 }
+
+.volume::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-tertiary) 18%, transparent);
+  transition: filter var(--dur-fast) var(--ease-out);
+}
+
+.volume:hover::-moz-range-track {
+  filter: brightness(1.22);
+}
+
+.volume::-moz-range-progress {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 8px;
+  height: 8px;
+  margin-top: -2.5px; /* (3-8)/2 居中于细线 */
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+}
+
+.volume::-moz-range-thumb {
+  width: 8px;
+  height: 8px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+/* 拇指永久隐藏：音量条就是一条随音量填充的细线，彻底无「包裹」感；
+   点击/拖拽轨道本身（原生 range 行为）调音量仍正常，填充段实时跟随 */
 
 /* 队列面板 */
 .queue-panel {

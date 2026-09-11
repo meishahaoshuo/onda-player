@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import Sidebar from '@/components/Sidebar.vue'
 import PlayerBar from '@/components/PlayerBar.vue'
+import BootSplash from '@/components/BootSplash.vue'
 import SongContextMenu from '@/components/SongContextMenu.vue'
 import SongsView from '@/views/SongsView.vue'
 import FoldersView from '@/views/FoldersView.vue'
@@ -254,6 +255,9 @@ watch(
     <PlayerBar />
     <SongContextMenu />
     <LyricsFullView v-if="ui.lyricsOpen" />
+
+    <!-- 启动过场：logo 碎片聚拢 → 拼合抖动 → 淡出。盖在最上层，播完自行卸载 -->
+    <BootSplash />
   </div>
 </template>
 

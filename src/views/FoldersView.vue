@@ -42,16 +42,6 @@ function selectRoot(id: string) {
 
 <template>
   <div class="folders-view">
-    <!-- 扫描状态：旋转图标 + 进度文字 + 取消（不再显示视觉进度条，保持简洁） -->
-    <div v-if="library.scanning" class="scan-bar">
-      <AppIcon name="scan" :size="14" class="scan-spin" />
-      <span class="scan-text">
-        正在扫描 {{ library.scanProgress.scanned + library.scanProgress.skipped }} /
-        {{ library.scanProgress.total }}
-      </span>
-      <button class="scan-cancel" @click="library.cancelScan()">取消</button>
-    </div>
-
     <div v-if="library.roots.length === 0" class="empty">
       <div class="empty-badge">
         <AppIcon name="folder" :size="32" />
@@ -148,47 +138,6 @@ function selectRoot(id: string) {
   flex-direction: column;
   gap: 12px;
   overflow: hidden;
-}
-
-/* 扫描进度条 */
-.scan-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  border-radius: var(--radius-item);
-  background: var(--bg-hover);
-  font-size: 12px;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.scan-spin {
-  animation: spin 1.2s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.scan-text {
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.scan-cancel {
-  font-size: 12px;
-  color: var(--text-secondary);
-  padding: 3px 10px;
-  border-radius: 6px;
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-}
-
-.scan-cancel:hover {
-  background: var(--bg-active);
-  color: var(--text-primary);
 }
 
 /* 空态：全页引导 */

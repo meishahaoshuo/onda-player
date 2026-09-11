@@ -207,6 +207,9 @@ function plClick(id: string) {
   gap: 11px;
   padding: 4px 12px 18px;
   color: var(--text-primary);
+  /* 启动过场把 logo 飞到这里后由这段过渡接手淡入，与 splash 副本交叉淡化。
+     显隐由 BootSplash 直接设内联 opacity 控制（scoped 里的 :global 组合实测没命中） */
+  transition: opacity 200ms var(--ease-out);
 }
 
 .brand-logo {

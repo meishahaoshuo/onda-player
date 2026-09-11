@@ -6,6 +6,7 @@ import QualityBadge from '@/components/QualityBadge.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { formatDuration } from '@/utils/format'
 import { useSongActions } from '@/composables/useSongActions'
+import { claimListReveal } from '@/composables/useStaggerReveal'
 import { useFavoritesStore } from '@/stores/favorites'
 import { flyToPlayerFromRow } from '@/services/coverFlight'
 import type { SongRecord } from '@/types'
@@ -18,12 +19,21 @@ const ROW_HEIGHT = 56
 const { openSongMenu } = useSongActions()
 const favorites = useFavoritesStore()
 
-/** 首屏错峰浮现：只对挂载初期渲染的行生效。
-    虚拟列表滚动时会持续回收/重建行，一旦窗口期结束，行直接显示，滚动不闪动。 */
+/** 首屏错峰浮现：只对「本次会话首次挂载」渲染的行生效。
+    虚拟列表滚动时会持续回收/重建行，一旦窗口期结束，行直接显示，滚动不闪动。
+
+    关键：闸门必须是模块作用域（`claimListReveal`），不能是本文件里的变量——
+    `<script setup>` 的顶层变量会被编译进 setup()，每个实例各一份，于是
+    SongList 随左侧板块切换反复挂载时每次都会重播：前 MAX_REVEAL_ROWS 行重新浮现、
+    其余行瞬间出现，看起来就是「上半部分列表在刷新、下半部分还在」。 */
 const REVEAL_WINDOW_MS = 900
 const MAX_REVEAL_ROWS = 14
-const booting = ref(true)
-const bootTimer = window.setTimeout(() => (booting.value = false), REVEAL_WINDOW_MS)
+const booting = ref(false)
+let bootTimer = 0
+if (claimListReveal()) {
+  booting.value = true
+  bootTimer = window.setTimeout(() => (booting.value = false), REVEAL_WINDOW_MS)
+}
 onBeforeUnmount(() => window.clearTimeout(bootTimer))
 
 function onRowClick(song: SongRecord, e: MouseEvent) {

@@ -8,6 +8,19 @@
     <meta name="theme-color" content="#172554" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Onda Player</title>
+    <script>
+      // 首帧底色：赶在 Vue 挂载（约 250ms）之前就把主题底色刷上，
+      // 否则刷新时会先闪一下浏览器默认的白底，深色主题下尤其刺眼。
+      // 写入的是同一个 data-theme，Vue 挂载后接管时不会跳变。
+      try {
+        var m = localStorage.getItem('settings.themeMode') || 'system'
+        var dark =
+          m === 'dark' ||
+          (m === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        document.documentElement.style.backgroundColor = dark ? '#0a0a0a' : '#ffffff'
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="app"></div>
