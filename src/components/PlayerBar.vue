@@ -268,10 +268,10 @@ const cpStyle = computed(() => ({
    每层是一个 1px 圆点，靠一条 box-shadow 一次画出 DUST_PER_LAYER 颗
    （颜色/模糊/扩散走主题令牌，主题切换自动跟随）；整团挂在播放头
    （.pt-dusts 用 --cp-x 平移），所以只在拖拽时围着手指/播放头活动。
-   每层只有 4 颗、层数给到 40：这样「哪几颗连在一起」看不出来，
+   每层只有 4 颗、层数给到 20：这样「哪几颗连在一起」看不出来，
    叠加下边 4 航点的闭合漫游路径，整体就是一片各自乱飘的浮尘。
    所有点位与航点都由下标哈希算出（不用 Math.random，观感固定可复现）。 ---------- */
-const DUST_LAYERS = 40
+const DUST_LAYERS = 20
 const DUST_PER_LAYER = 4
 const DUST_SPAN = 72 /* 横向 ±72px：光是「播放头附近的一团」，不是整条铺满 */
 const DUST_TOP = 7
@@ -290,7 +290,11 @@ interface DustLayer {
   y1: number
   x2: number
   y2: number
+  jx: number
+  jy: number
   dur: number
+  jdur: number
+  jdel: number
   del: number
   twk: number
   dots: { x: number; y: number }[]
@@ -310,11 +314,16 @@ const DUST: DustLayer[] = Array.from({ length: DUST_LAYERS }, (_, li) => {
   const r3 = dustRand(li * 13 + 7)
   const r4 = dustRand(li * 13 + 11)
   return {
-    x1: Math.round((r1 - 0.5) * 2 * 26), // ±26px
-    y1: Math.round((r2 - 0.5) * 2 * 13), // ±13px
-    x2: Math.round((r3 - 0.5) * 2 * 22),
-    y2: Math.round((r4 - 0.5) * 2 * 15),
-    dur: 8000 + Math.round(dustRand(li * 13 + 2) * 10000), // 8~18s 走一圈
+    x1: Math.round((r1 - 0.5) * 2 * 34), // ±34px（比上一版更大 → 流动更明显）
+    y1: Math.round((r2 - 0.5) * 2 * 17), // ±17px
+    x2: Math.round((r3 - 0.5) * 2 * 30),
+    y2: Math.round((r4 - 0.5) * 2 * 19),
+    // 第二档「抖动」：更快的小幅位移叠在漫游上，两个频率一起才像在流
+    jx: 2 + Math.round(dustRand(li * 17 + 1) * 3), // 2~5px
+    jy: 1 + Math.round(dustRand(li * 17 + 2) * 2), // 1~3px
+    dur: 5000 + Math.round(dustRand(li * 13 + 2) * 6000), // 5~11s 走一圈
+    jdur: 2200 + Math.round(dustRand(li * 17 + 3) * 2000), // 2.2~4.2s 一次
+    jdel: -Math.round(dustRand(li * 17 + 4) * 4000),
     del: -Math.round(dustRand(li * 13 + 4) * 14000), // 负延迟错峰
     twk: 5000 + Math.round(dustRand(li * 13 + 6) * 6000), // 5~11s 呼吸
     dots,
@@ -436,7 +445,11 @@ function onRingPointerUp() {
             '--y1': `${l.y1}px`,
             '--x2': `${l.x2}px`,
             '--y2': `${l.y2}px`,
+            '--jx': `${l.jx}px`,
+            '--jy': `${l.jy}px`,
             '--dur': `${l.dur}ms`,
+            '--jdur': `${l.jdur}ms`,
+            '--jdel': `${l.jdel}ms`,
             '--del': `${l.del}ms`,
             '--twk': `${l.twk}ms`,
             boxShadow: dustShadow(l),
@@ -865,11 +878,12 @@ function onRingPointerUp() {
   background: transparent;
   opacity: var(--dust-opacity);
   will-change: transform, opacity;
-  /* 随机漫游 + 呼吸：每层按各自 4 航点的闭合路径飘（8~18s 一圈、相位错开），
-     呼吸负责明暗闪动。层数 40 而每层只 4 颗 → 「哪几颗连在一起」看不出来，
-     整体就是一片各飘各的浮尘 */
+  /* 随机漫游 + 快抖 + 呼吸：漫游走各自 4 航点的闭合路径（5~11s 一圈，`transform`），
+     再叠一档更快的小幅位移（2.2~4.2s，`translate`）—— 两个频率一起才有流动感；
+     呼吸负责明暗闪动。层多而每层只 4 颗 → 看不出「哪几颗连在一起」 */
   animation:
     dust-wander var(--dur) ease-in-out var(--del) infinite,
+    dust-jitter var(--jdur) ease-in-out var(--jdel) infinite alternate,
     dust-twinkle var(--twk) ease-in-out var(--del) infinite;
 }
 
@@ -885,6 +899,15 @@ function onRingPointerUp() {
   }
   100% {
     transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes dust-jitter {
+  from {
+    translate: calc(-1 * var(--jx)) calc(-1 * var(--jy));
+  }
+  to {
+    translate: var(--jx) var(--jy);
   }
 }
 
