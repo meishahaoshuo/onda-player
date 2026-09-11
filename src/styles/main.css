@@ -57,6 +57,13 @@
 
   /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
   --ambient-fallback: rgba(92, 124, 224, 0.18);
+
+  /* 胶囊播放条「氛围光」进度：已播过的左半边覆盖的一层主色薄雾。
+     配色派生自 --accent，所以自定义主题换主色时自动跟随 */
+  --bar-glow: color-mix(in srgb, var(--accent) 20%, transparent);
+  --bar-glow-mid: color-mix(in srgb, var(--accent) 13%, transparent);
+  --bar-glow-far: color-mix(in srgb, var(--accent) 4%, transparent);
+  --bar-glow-edge: color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
 :root[data-theme='light'] {
@@ -102,9 +109,23 @@
 
   /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
   --ambient-fallback: rgba(23, 37, 84, 0.1);
+
+  /* 胶囊播放条「氛围光」进度（同深色，浅底上主色本身很深，故取值略低） */
+  --bar-glow: color-mix(in srgb, var(--accent) 17%, transparent);
+  --bar-glow-mid: color-mix(in srgb, var(--accent) 11%, transparent);
+  --bar-glow-far: color-mix(in srgb, var(--accent) 3%, transparent);
+  --bar-glow-edge: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 /* ---------- 动效令牌 ---------- */
+
+/* 胶囊氛围光的进度值：注册成可过渡的 <number>，让 timeupdate（约 4Hz）
+   的跳变变成连续推移；拖拽时由 .ring-dragging 关掉过渡以求 100% 跟手 */
+@property --cp-p {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
 
 :root {
   --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);

@@ -216,19 +216,11 @@ onMounted(() => {
     .finished.catch(() => {})
 })
 
-/* ---------- 胶囊进度弧线：沿胶囊边框轮廓走的进度描边，点击/拖拽 seek ---------- */
-
-/** 贴合外框的进度线：沿胶囊外轮廓圆角「平行内缩 2px」描摹。
-    坐标系 viewBox 0 0 760 26，与胶囊内宽 758 近似 1:1。
-    胶囊外框圆角半径 33、圆心 (33,33)；元素在 border 内侧，故元素坐标里
-    圆心 (32,32)、半径 32，内缩 2px 后描摹半径 30。
-    路径 = 左圆弧(从 y=20 沿圆角爬升) → 顶部直线(y=2，顶边内缩 2px) → 右圆弧。
-    圆弧与直线相切，所以直线段与弯曲段之间是 C1 连续的，没有折角。
-    两端只爬到 y=20（距胶囊中线 33 还有 13px），下沉 18px ——
-    旧路径一路包到 y=33 下沉 31.5px（用户：弯太多），
-    上一版只下沉 8.5px 且断在 x=0（用户：像被硬切一刀），这里取中并且真正贴着圆弧走。 */
-const CP_PATH =
-  'M 4.5,20 A 30 30 0 0 1 32,2 L 726,2 A 30 30 0 0 1 753.5,20'
+/* ---------- 胶囊进度「氛围光」：已播过的半边被照亮，点击/拖拽 seek ----------
+   进度不再是描在边框上的线，而是一层从主色派生的薄光：左半（已播）被照亮，
+   右边界用 mask 的软过渡收尾。常态软边界 68px（几乎看不出是控件），
+   悬停/拖拽收紧到 14px 并浮出一条 1px 分界线（此时才明确「这里能拖」）。
+   实现见下方 .capsule-glow / .cg-* 样式；进度值由 --cp-p（0~1）驱动。 */
 
 const ringDragging = ref(false)
 const progressLineEl = ref<HTMLElement | null>(null)
@@ -241,15 +233,8 @@ const ringPct = computed(() => {
     音频 seek 只在按下（跳到点按处）与松手（落到最终位置）各执行一次 */
 const dragPct = ref(0)
 const displayPct = computed(() => (ringDragging.value ? dragPct.value : ringPct.value))
-const cpDash = computed(() => 1 - displayPct.value)
-/** 进度为 0 时隐藏填充线：round 线帽在 dash 长度为 0 时仍会画出一个小圆点 */
-const cpVisible = computed(() => displayPct.value > 0.004)
-/** 三层光晕共用同一份行内样式：dashoffset 驱动进度，进度为 0 时整组隐藏
-    （round 线帽在 dash 长度为 0 时仍会画出一个小圆点） */
-const cpFillStyle = computed(() => ({
-  strokeDashoffset: cpDash.value,
-  opacity: cpVisible.value ? undefined : 0,
-}))
+/** 氛围光层的行内进度变量：mask 软边界与分界线的位置都由它驱动 */
+const cpStyle = computed(() => ({ '--cp-p': String(displayPct.value) }))
 
 function pctFromClientX(cx: number): number {
   const line = progressLineEl.value
@@ -285,10 +270,6 @@ function onRingPointerUp() {
   if (dur > 0) player.seek(dragPct.value * dur) // 松手落到最终位置
   ringDragging.value = false
 }
-
-/* 进度线配色已改为跟着主题对比方向走的「玻璃高光 / 压深」——
-   深色玻璃提亮（白）、浅色玻璃压深（近黑），不再从封面派生彩色。
-   详见下方 .capsule-progress 上的 --cp-line / --cp-rail 定义。 */
 </script>
 
 <template>
@@ -300,27 +281,27 @@ function onRingPointerUp() {
     @pointerup="onRingPointerUp"
     @pointercancel="onRingPointerUp"
   >
-    <!-- 胶囊模式：顶部一条沿胶囊外框微微弯曲的进度线，常驻可见（半透明）、
-         悬停胶囊时变清晰加粗；点击/拖拽 seek -->
+    <!-- 胶囊模式进度「氛围光」：已播过的左半边像被照亮（一层主色薄雾），
+         没有任何线条；指针悬停/拖拽时才把软边界收紧并浮出一条 1px 分界线。
+         本层纯视觉：z-index:-1 沉到玻璃之上、内容之下，不接触指针 -->
+    <div
+      v-if="localStyle === 'capsule'"
+      class="capsule-glow"
+      :style="cpStyle"
+      aria-hidden="true"
+    >
+      <!-- 常态：68px 软边界；悬停/拖拽交叉淡入下面那条 14px 的紧边界 -->
+      <div class="cg-fill cg-soft" />
+      <div class="cg-fill cg-tight" />
+      <div class="cg-edge" />
+    </div>
+    <!-- 拖拽热区：仍只占顶部 18px，避开封面与按钮（见下方 .capsule-progress 注释） -->
     <div
       v-if="localStyle === 'capsule'"
       ref="progressLineEl"
       class="capsule-progress"
-      :class="{ dragging: ringDragging }"
       @pointerdown="onRingPointerDown"
-    >
-      <svg class="cp-svg" viewBox="0 0 760 26" preserveAspectRatio="none" aria-hidden="true">
-        <!-- 轨道：极淡的细线 -->
-        <path class="cp-track" :d="CP_PATH" />
-        <!-- 进度「光晕」：三层同心描边叠加（宽而淡 → 窄而亮），
-             形成贴在玻璃边框上的一层浅浅的光。
-             不用 filter: blur —— 每帧模糊是项目明令禁止的卡顿根因，
-             而纯描边叠加在合成上几乎无开销。 -->
-        <path class="cp-fill cp-haze" :d="CP_PATH" pathLength="1" :style="cpFillStyle" />
-        <path class="cp-fill cp-glow" :d="CP_PATH" pathLength="1" :style="cpFillStyle" />
-        <path class="cp-fill cp-core" :d="CP_PATH" pathLength="1" :style="cpFillStyle" />
-      </svg>
-    </div>
+    />
     <!-- 左：曲目信息 -->
     <div class="track">
       <CoverImage
@@ -596,37 +577,112 @@ function onRingPointerUp() {
     0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
-/* 顶部进度线：平时完全隐藏，鼠标移到它上面（或正在拖拽）才显现。
-   线本身沿胶囊外框圆角贴合（见 CP_PATH），元素铺满胶囊内宽与之对齐。
-   热区只占顶部 18px —— 旧版是 left/right:0 的整条全宽、高 26px，
+/* ---------- 胶囊进度「氛围光」 ----------
+   进度不做成线，而是「已播过的左半边被照亮」：一层从主色派生的薄光。
+   右边界由 mask 的线性渐变收尾 —— 常态 68px 软过渡（远看只是一片渐变，
+   不像控件），悬停/拖拽时交叉淡入 14px 的紧边界并浮出一条 1px 分界线。
+   全程只有 opacity 交叉淡入与 mask 位置变化，没有 filter: blur
+   （见 03-设计规范 §9 动画性能红线）。 */
+.capsule-glow {
+  position: absolute;
+  inset: 0; /* 贴到边框内侧，与胶囊轮廓同形 */
+  z-index: -1; /* 页脚自建层叠上下文（z-index:6），负值即落在玻璃之上、内容之下 */
+  border-radius: 999px;
+  pointer-events: none; /* 纯视觉层：命中一律交给下方 18px 热区 */
+  /* --cp-p 已在 main.css 用 @property 注册成 <number>，
+     故这里的过渡能把 timeupdate（约 4Hz）的跳变抹成连续推移 */
+  transition: --cp-p 160ms linear;
+}
+
+.player-bar.ring-dragging .capsule-glow {
+  transition: none; /* 拖拽 100% 跟手 */
+}
+
+.cg-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--bar-glow) 0%,
+    var(--bar-glow-mid) 58%,
+    var(--bar-glow-far) 100%
+  );
+  transition: opacity var(--dur-med) var(--ease-out);
+}
+
+/* 常态：68px 软边界（进度为 0 时整层被 mask 收光，天然不可见） */
+.cg-soft {
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    #000 0,
+    #000 calc(var(--cp-p) * 100% - 68px),
+    transparent calc(var(--cp-p) * 100%)
+  );
+  mask-image: linear-gradient(
+    90deg,
+    #000 0,
+    #000 calc(var(--cp-p) * 100% - 68px),
+    transparent calc(var(--cp-p) * 100%)
+  );
+}
+
+/* 悬停/拖拽：14px 紧边界，进度位置读起来明确 */
+.cg-tight {
+  opacity: 0;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    #000 0,
+    #000 calc(var(--cp-p) * 100% - 14px),
+    transparent calc(var(--cp-p) * 100%)
+  );
+  mask-image: linear-gradient(
+    90deg,
+    #000 0,
+    #000 calc(var(--cp-p) * 100% - 14px),
+    transparent calc(var(--cp-p) * 100%)
+  );
+}
+
+.player-bar.capsule:hover .capsule-glow .cg-soft,
+.player-bar.ring-dragging .capsule-glow .cg-soft {
+  opacity: 0;
+}
+
+.player-bar.capsule:hover .capsule-glow .cg-tight,
+.player-bar.ring-dragging .capsule-glow .cg-tight {
+  opacity: 1;
+}
+
+/* 分界线：只在悬停/拖拽时浮出的一条 1px 细线，给「能拖」一个落点 */
+.cg-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--cp-p) * 100%);
+  width: 1px;
+  transform: translateX(-0.5px);
+  background: var(--bar-glow-edge);
+  opacity: 0;
+  transition: opacity var(--dur-med) var(--ease-out);
+}
+
+.player-bar.capsule:hover .capsule-glow .cg-edge,
+.player-bar.ring-dragging .capsule-glow .cg-edge {
+  opacity: 1;
+}
+
+/* 拖拽热区：只占顶部 18px —— 旧版是 left/right:0 的整条全宽、高 26px，
    覆盖胶囊 40% 高度，鼠标从上缘进出极易误触发 seek；压到 18px 后
-   同时避开了封面主体（封面从 11px 起）。 */
+   同时避开了封面主体（封面从 11px 起）。本层无内容无底色，只负责命中。 */
 .capsule-progress {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   height: 18px;
-  opacity: 0;
-  transition: opacity var(--dur-med) var(--ease-out);
   cursor: pointer;
   touch-action: none;
-  /* 进度线走「玻璃高光」语义：线色跟随主题的对比方向——
-     深色玻璃提亮（白线读起来像玻璃受光），浅色玻璃压深（近黑线）。
-     白线照搬到浅色玻璃上会整个隐形，所以两边不能共用一套值。 */
-  /* 线色只负责「亮/暗」，柔和不透明度交给各光晕层的 opacity 控制 */
-  --cp-line: #ffffff;
-  --cp-rail: rgba(255, 255, 255, 0.2);
-}
-
-:global([data-theme='light'] .capsule-progress) {
-  --cp-line: #14141a;
-  --cp-rail: rgba(0, 0, 0, 0.1);
-}
-
-.capsule-progress:hover,
-.capsule-progress.dragging {
-  opacity: 1;
 }
 
 /* 拖拽进度期间，内容区与按钮一律不响应指针事件。
@@ -637,97 +693,6 @@ function onRingPointerUp() {
 .player-bar.ring-dragging .controls,
 .player-bar.ring-dragging .aux {
   pointer-events: none;
-}
-
-.capsule-progress .cp-svg {
-  display: block;
-  width: 100%;
-  height: 26px; /* 高于 18px 热区：两端线条画到 y=20，靠 overflow 补全 */
-  overflow: visible;
-  pointer-events: none; /* 命中一律交给热区容器，避免 svg 自身拦事件 */
-}
-
-.capsule-progress .cp-track,
-.capsule-progress .cp-fill {
-  fill: none;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-  transition: stroke-width 180ms var(--ease-out);
-}
-
-/* dasharray 只给填充线（它在模板里带 pathLength="1"，故 1 = 整条实线）。
-   轨道没有 pathLength，若继承同一条 dasharray:1，会被解析成
-   「1px 实线 + 1px 空隙」的密集虚线，轨道凭空淡掉约一半。 */
-.capsule-progress .cp-fill {
-  stroke-dasharray: 1;
-}
-
-.capsule-progress .cp-track {
-  stroke: var(--cp-rail);
-  stroke-width: 2;
-}
-
-/* 光晕三层：宽而淡的 haze 垫底、窄而亮的 core 压面，中间 glow 过渡。
-   叠加起来就是「贴在玻璃边框上的一层浅浅的光」——比一根实线柔和得多 */
-.capsule-progress .cp-fill {
-  stroke: var(--cp-line);
-  stroke-linecap: round;
-  transition:
-    stroke-dashoffset 160ms linear,
-    stroke-width 180ms var(--ease-out),
-    opacity 180ms var(--ease-out);
-}
-
-.capsule-progress .cp-haze {
-  stroke-width: 7;
-  opacity: 0.1;
-}
-
-.capsule-progress .cp-glow {
-  stroke-width: 3.5;
-  opacity: 0.16;
-}
-
-.capsule-progress .cp-core {
-  stroke-width: 1.5;
-  opacity: 0.85;
-}
-
-/* 悬停：光晕整体增强一档，提示「这里可点可拖」 */
-.player-bar.capsule:hover .capsule-progress .cp-haze {
-  stroke-width: 8;
-  opacity: 0.13;
-}
-
-.player-bar.capsule:hover .capsule-progress .cp-glow {
-  stroke-width: 4.5;
-  opacity: 0.2;
-}
-
-.player-bar.capsule:hover .capsule-progress .cp-core {
-  stroke-width: 2;
-  opacity: 0.95;
-}
-
-/* 拖拽中：光晕再增强并加粗（进度更醒目、更好瞄准）；
-   同时关闭进度过渡，使拖动 100% 跟手（松手恢复平滑跟随播放时钟） */
-.player-bar.capsule .capsule-progress.dragging .cp-haze {
-  stroke-width: 9;
-  opacity: 0.15;
-}
-
-.player-bar.capsule .capsule-progress.dragging .cp-glow {
-  stroke-width: 5;
-  opacity: 0.24;
-}
-
-.player-bar.capsule .capsule-progress.dragging .cp-core {
-  stroke-width: 2.5;
-  opacity: 1;
-}
-
-.capsule-progress.dragging .cp-fill {
-  transition: none;
 }
 
 .capsule .track {
