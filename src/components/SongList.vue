@@ -44,6 +44,20 @@ function onRowClick(song: SongRecord, e: MouseEvent) {
 function onRowMenu(song: SongRecord, e: MouseEvent) {
   openSongMenu(e, song, { context: props.songs })
 }
+
+/** 悬停时测量本行「标题内容」的右端（从标题列左缘算起），写入 --title-end。
+    悬停按钮以此为左端点、以标题列右缘为右端点取中，居中在标题与艺术家之间的空白里 */
+function onRowHover(e: MouseEvent) {
+  const row = e.currentTarget as HTMLElement | null
+  const title = row?.querySelector<HTMLElement>('.col-title')
+  const line = title?.querySelector<HTMLElement>('.title-line')
+  if (!row || !title || !line) return
+  const range = document.createRange()
+  range.selectNodeContents(line)
+  const r = range.getBoundingClientRect()
+  const t = title.getBoundingClientRect()
+  row.style.setProperty('--title-end', `${Math.max(0, r.right - t.left).toFixed(1)}px`)
+}
 </script>
 
 <template>
@@ -68,6 +82,7 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
             }"
             :style="{ height: `${ROW_HEIGHT}px`, '--reveal-i': index }"
             @click="onRowClick(item, $event)"
+            @mouseenter="onRowHover"
             @contextmenu.prevent="onRowMenu(item, $event)"
           >
             <span class="col-cover" data-flight-cover>
@@ -234,18 +249,18 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
   font-variant-numeric: tabular-nums;
 }
 
-/* 悬停快捷操作：悬浮在标题列右端的空白处（标题文本通常只占列左侧，
-   右侧空白正好在标题与艺术家列之间），透明底与行背景融为一体；
-   opacity + 位移过渡浮现 */
+/* 悬停快捷操作：水平居中在「标题内容右端（--title-end，悬停时测得）→ 标题列右缘」
+   的空白带里——正是标题与艺术家列之间的空白；垂直仍对齐行中线。
+   透明底与行背景融为一体，opacity + 位移过渡浮现 */
 .row-actions {
   position: absolute;
   top: 50%;
-  right: 0;
+  left: calc(var(--title-end, 70%) + (100% - var(--title-end, 70%)) / 2);
   display: flex;
   align-items: center;
   gap: 2px;
   opacity: 0;
-  transform: translateY(-50%) translateX(6px);
+  transform: translate(-50%, -50%) translateX(6px);
   pointer-events: none;
   transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
@@ -253,7 +268,7 @@ function onRowMenu(song: SongRecord, e: MouseEvent) {
 .song-row:hover .row-actions,
 .song-row:focus-within .row-actions {
   opacity: 1;
-  transform: translateY(-50%) translateX(0);
+  transform: translate(-50%, -50%) translateX(0);
   pointer-events: auto;
 }
 

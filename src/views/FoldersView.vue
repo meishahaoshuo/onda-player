@@ -98,7 +98,8 @@ function selectRoot(id: string) {
           <button
             class="ghost-btn"
             :disabled="library.scanning"
-            @click="library.rescan()"
+            :title="selectedRootId ? '只重新扫描选中的文件夹' : '重新扫描全部文件夹'"
+            @click="library.rescan(selectedRootId ?? undefined)"
           >
             <AppIcon name="scan" :size="15" /> 重新扫描
           </button>

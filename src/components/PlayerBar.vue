@@ -65,6 +65,18 @@ function onVolumeInput(e: Event) {
 
 const queueOpen = ref(false)
 
+/** 队列面板点外部自动关闭：document 捕获阶段监听，
+    面板内部与「播放队列」按钮（自己负责开关）除外。
+    落在播放条空白处时同时拦下传播——只收面板，不触发 seek */
+function onDocPointerDown(e: PointerEvent) {
+  if (!queueOpen.value) return
+  const t = e.target as HTMLElement | null
+  if (!t || typeof t.closest !== 'function') return
+  if (t.closest('.queue-panel') || t.closest('[data-queue-toggle]')) return
+  queueOpen.value = false
+  if (t.closest('.player-bar')) e.stopPropagation()
+}
+
 function jumpTo(path: string) {
   const song = player.queue.find((s) => s.path === path)
   if (song) void player.playSong(song)
@@ -232,12 +244,14 @@ onMounted(() => {
     barRO.observe(barEl.value)
   }
   window.addEventListener('resize', measureBar)
+  document.addEventListener('pointerdown', onDocPointerDown, true)
 })
 
 onBeforeUnmount(() => {
   barRO?.disconnect()
   barRO = null
   window.removeEventListener('resize', measureBar)
+  document.removeEventListener('pointerdown', onDocPointerDown, true)
 })
 
 /* ---------- 胶囊进度「封面色氛围光 + 播放头光尘」：点击/拖拽 seek ----------
@@ -348,10 +362,10 @@ function particleColor(slot: number): string {
 }
 
 watch(
-  [() => player.current?.coverId ?? null, () => settings.ambientGlow],
-  async ([coverId, on]) => {
+  () => player.current?.coverId ?? null,
+  async (coverId) => {
     const seq = ++dustSeq
-    if (!coverId || !on) {
+    if (!coverId) {
       particleColors.value = []
       return
     }
@@ -380,6 +394,11 @@ function isBlankArea(t: EventTarget | null): boolean {
 }
 
 function onBarPointerDown(e: PointerEvent) {
+  // 队列面板开着时，点播放条空白处只收起面板，不触发 seek
+  if (queueOpen.value) {
+    queueOpen.value = false
+    return
+  }
   const dur = player.duration || player.current?.durationSec || 0
   if (dur <= 0) return
   if (!isBlankArea(e.target)) return // 控件自己处理，不抢指针
@@ -420,10 +439,10 @@ function onRingPointerUp() {
     @pointercancel="onRingPointerUp"
   >
     <!-- 胶囊模式进度「封面色氛围光 + 光尘」：已播区间是一层封面取色的氛围光，
-         上面浮着一层极细极密的白色光尘（480 颗）；没有光带、没有光晕。
+         上面浮着一层极细极密的白色光尘；没有光带、没有光晕。
          本层纯视觉：z-index:-1 沉到玻璃之上、内容之下，不接触指针 -->
     <div
-      v-if="localStyle === 'capsule' && settings.ambientGlow"
+      v-if="localStyle === 'capsule'"
       class="capsule-particles"
       :style="cpStyle"
       aria-hidden="true"
@@ -508,7 +527,13 @@ function onRingPointerUp() {
         <button class="icon-btn" title="下一曲" @click="player.next()">
           <AppIcon name="next" :size="20" />
         </button>
-        <button class="icon-btn" :class="{ 'is-active': queueOpen }" title="播放队列" @click="queueOpen = !queueOpen">
+        <button
+          class="icon-btn"
+          :class="{ 'is-active': queueOpen }"
+          title="播放队列"
+          data-queue-toggle
+          @click="queueOpen = !queueOpen"
+        >
           <AppIcon name="queue" />
         </button>
       </div>
@@ -757,9 +782,10 @@ function onRingPointerUp() {
 }
 
 /* ---------- 胶囊进度「封面色氛围光 + 光尘」 ----------
-   已播区间 = 氛围光（.pt-wash，封面色薄雾）＋ 一层极细极密的白色光尘
-   （.pt-dust × 8 层，每层靠一条 box-shadow 画出 60 颗，共 480 颗）。
-   两者共用 .pt-field 上的一条 mask 收边（--cp-p 驱动、宽度固定 68px），
+   已播区间 = 氛围光（.pt-wash，封面色薄雾）＋ 光尘（.pt-dust × 20 层，
+   每层靠一条 box-shadow 画出 4 颗，共 80 颗）。
+   氛围光被 --cp-p 的 mask 收在已播区间；光尘只在拖拽时出现，
+   整团挂在播放头（--cp-x）两侧 ±72px，各层沿自己的闭合路径随机漫游 + 快抖。
    没有任何线条、光带或指针光晕。
    全程没有 filter: blur、没有逐帧 JS（见 03-设计规范 §9 动画性能红线）。 */
 .capsule-particles {
@@ -845,7 +871,8 @@ function onRingPointerUp() {
 }
 
 /* 光尘层：0×0 元素 + 一条 box-shadow 画出整层散点（点色/模糊/扩散全走主题令牌），
-   每层有自己的漂移与呼吸相位 —— 480 颗只占 8 个合成图层。
+   每层有自己的漫游与呼吸相位 —— 80 颗只占 20 个合成图层。
+   整团挂在播放头位置（播放头两侧 ±72px 都有），只在拖拽时浮现。
    暂停即停、reduced-motion 即静（见下方两条规则）。 */
 .capsule-particles .pt-dusts {
   position: absolute;

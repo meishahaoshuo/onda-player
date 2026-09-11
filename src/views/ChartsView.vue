@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import CoverImage from '@/components/CoverImage.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { formatDuration } from '@/utils/format'
 import { useStatsStore } from '@/stores/stats'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
-import { useStaggerReveal } from '@/composables/useStaggerReveal'
 import { flyToPlayerFromRow } from '@/services/coverFlight'
 import type { SongRecord } from '@/types'
 
@@ -16,7 +15,6 @@ const library = useLibraryStore()
 const player = usePlayerStore()
 
 const rootEl = ref<HTMLElement | null>(null)
-const reveal = useStaggerReveal(() => rootEl.value, '.chart-row')
 
 /** 次数降序、同次数按标题；rank 从 1 起 */
 const ranked = computed(() => {
@@ -48,16 +46,7 @@ const rest = computed(() => ranked.value.slice(3))
 const podiumIn = ref(false)
 const podiumTimer = window.setTimeout(() => (podiumIn.value = true), 30)
 
-/* 第 4 名起的列表错峰浮现 */
-watch(
-  () => rest.value.length,
-  () => reveal.refresh(),
-  { flush: 'post' },
-)
-
-onMounted(() => reveal.refresh())
 onBeforeUnmount(() => {
-  reveal.disconnect()
   window.clearTimeout(podiumTimer)
 })
 

@@ -26,8 +26,7 @@ export async function extractHiResCover(song: SongRecord): Promise<Blob | null> 
 }
 
 /** 最长边超过阈值才缩放，否则直接用原图 */
-async function downscale(blob: Blob, maxEdge: number): Promise<Blob> {
-  let bitmap: ImageBitmap
+async function downscale(blob: Blob, maxEdge: number): Promise<Blob> {  let bitmap: ImageBitmap
   try {
     bitmap = await createImageBitmap(blob)
   } catch {
@@ -49,4 +48,9 @@ async function downscale(blob: Blob, maxEdge: number): Promise<Blob> {
   } finally {
     bitmap.close()
   }
+}
+
+/** 用户导入的任意图片 → 封面库规格（最长边 256px）的缩略图，歌单自定义封面用 */
+export async function imageToCoverThumb(blob: Blob): Promise<Blob> {
+  return downscale(blob, 256)
 }

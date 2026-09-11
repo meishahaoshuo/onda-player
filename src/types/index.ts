@@ -52,8 +52,10 @@ export interface PlaylistRecord {
   name: string
   /** 歌曲 path 有序列表 */
   songPaths: string[]
-  /** 手动指定的封面来源歌曲 path；缺省时用歌曲封面自动拼贴 */
+  /** 手动指定的封面来源歌曲 path */
   coverPath?: string
+  /** 用户导入的自定义封面（covers 库中的 coverId，`plcover:` 前缀）；与 coverPath 互斥 */
+  customCoverId?: string
   createdAt: number
 }
 

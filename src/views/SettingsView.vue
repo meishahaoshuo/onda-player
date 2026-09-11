@@ -14,7 +14,6 @@ import {
 } from '@/services/hotkeys'
 import type { ThemeMode } from '@/types'
 import AppIcon from '@/components/AppIcon.vue'
-import AppSwitch from '@/components/AppSwitch.vue'
 
 /**
  * 设置页：左侧分类导航 + 右侧内容面板。
@@ -191,16 +190,6 @@ function onRecordKeydown(e: KeyboardEvent) {
               />
               <AppIcon name="plus" :size="14" />
             </label>
-          </div>
-
-          <!-- 背景 -->
-          <p class="panel-sub accent-heading">背景</p>
-          <div class="opt-row">
-            <div class="opt-text">
-              <span class="opt-name">封面氛围光</span>
-              <span class="opt-desc">内容区背景跟随当前播放封面的主色泛起淡淡光晕</span>
-            </div>
-            <AppSwitch :model-value="settings.ambientGlow" @update:model-value="settings.setAmbientGlow" />
           </div>
 
           <!-- 播放条 -->

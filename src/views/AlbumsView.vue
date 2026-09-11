@@ -6,7 +6,6 @@ import { usePlayerStore } from '@/stores/player'
 import { beginAlbumEnter, clearTransitionState } from '@/services/pageTransition'
 import { paletteCache } from '@/services/paletteCache'
 import { useMagneticGrid } from '@/composables/useMagneticGrid'
-import { useStaggerReveal } from '@/composables/useStaggerReveal'
 import { formatTotalDuration } from '@/utils/format'
 
 const library = useLibraryStore()
@@ -14,7 +13,6 @@ const player = usePlayerStore()
 
 const gridEl = ref<HTMLElement | null>(null)
 const magnet = useMagneticGrid(gridEl, '.album-card')
-const reveal = useStaggerReveal(() => gridEl.value, '.album-card')
 
 const sortedAlbums = computed(() =>
   [...library.albums].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN')),
@@ -77,15 +75,7 @@ watch(
   { flush: 'post' },
 )
 
-/* 条目错峰浮现：数据就绪/增长后重新登记 */
-watch(
-  () => sortedAlbums.value.length,
-  () => reveal.refresh(),
-  { flush: 'post' },
-)
-
 onMounted(() => {
-  reveal.refresh()
   scrollEl = (gridEl.value?.closest('.view-body') as HTMLElement | null) ?? null
   scrollEl?.addEventListener('scroll', onScroll, { passive: true })
   window.addEventListener('resize', onScroll, { passive: true })
@@ -96,7 +86,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  reveal.disconnect()
   scrollEl?.removeEventListener('scroll', onScroll)
   window.removeEventListener('resize', onScroll)
   window.clearTimeout(scrollTimer)

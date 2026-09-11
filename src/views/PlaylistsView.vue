@@ -10,12 +10,13 @@ import { extractBrightColors } from '@/services/palette'
 import * as db from '@/services/db'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
-import { usePlaylistStore } from '@/stores/playlist'
+import { usePlaylistStore, playlistManualCoverId } from '@/stores/playlist'
 import { useFavoritesStore } from '@/stores/favorites'
 import { useStatsStore } from '@/stores/stats'
 import { useSongActions } from '@/composables/useSongActions'
 import { useStaggerReveal } from '@/composables/useStaggerReveal'
 import { flyToPlayerFromRow } from '@/services/coverFlight'
+import { imageToCoverThumb } from '@/services/cover'
 import { useUiStore } from '@/stores/ui'
 import { formatDuration, formatTotalDuration } from '@/utils/format'
 import type { SongRecord } from '@/types'
@@ -91,11 +92,11 @@ const currentSongs = computed<SongRecord[]>(() => {
 /** 歌单内歌曲的封面 id 列表（拼贴封面用） */
 const currentCoverIds = computed(() => currentSongs.value.map((s) => s.coverId))
 
-/** 手动指定的封面：coverPath 指向的歌还在库中就用它的封面，否则回退拼贴 */
+/** 手动指定的封面：自定义导入图优先，其次 coverPath 指向的歌；都没有回退拼贴 */
 const currentCoverId = computed<string | null>(() => {
-  const path = current.value?.coverPath
-  if (!path) return null
-  return library.songs.find((s) => s.path === path)?.coverId ?? null
+  if (!current.value) return null
+  const byPath = new Map(library.songs.map((s) => [s.path, s.coverId]))
+  return playlistManualCoverId(current.value, byPath)
 })
 
 /** 封面选择弹窗：歌单内歌曲按封面去重 */
@@ -117,12 +118,37 @@ function chooseCover(path: string | null) {
   showCoverPicker.value = false
 }
 
-/** 歌单列表页：id → 手动指定封面的 coverId（未设置则不在 map 里） */
+/* ---------- 自定义封面导入：任意图片 → 256px 缩略图入 covers 库 ---------- */
+
+const coverFileEl = ref<HTMLInputElement | null>(null)
+const importingCover = ref(false)
+
+async function onCoverFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // 先还原：同一张图允许重复选择
+  if (!file || !current.value) return
+  importingCover.value = true
+  try {
+    const blob = await imageToCoverThumb(file)
+    // coverId 带时间戳：重复导入生成新 id，绕开 coverUrl 对旧 id 的缓存
+    const coverId = `plcover:${current.value.id}:${Date.now()}`
+    await db.putCover(coverId, blob)
+    playlistStore.setCustomCover(current.value.id, coverId)
+  } catch {
+    /* 图片解码失败：保持原封面不动 */
+  } finally {
+    importingCover.value = false
+  }
+}
+
+/** 歌单列表页：id → 手动指定封面的 coverId（自定义导入图优先；未设置则不在 map 里） */
 const cardCoverOverride = computed(() => {
   const byPath = new Map(library.songs.map((s) => [s.path, s.coverId]))
   const map = new Map<string, string | null>()
   for (const p of playlistStore.playlists) {
-    if (p.coverPath) map.set(p.id, byPath.get(p.coverPath) ?? null)
+    const manual = playlistManualCoverId(p, byPath)
+    if (manual) map.set(p.id, manual)
   }
   return map
 })
@@ -599,15 +625,25 @@ function confirmRemove() {
         </FrostedPanel>
       </div></Transition>
     </teleport>
-    <!-- 封面选择弹层：从歌单内歌曲封面中挑一张 -->
+    <!-- 封面选择弹层：从歌单内歌曲封面中挑一张，或导入自定义图片 -->
     <teleport to="body">
       <Transition name="modal"><div v-if="showCoverPicker" class="modal-mask" @click.self="showCoverPicker = false">
         <FrostedPanel class="modal wide" radius="12px">
           <h3 class="modal-title">设置「{{ current.name }}」的封面</h3>
           <div class="cover-grid">
-            <button class="cover-choice" :class="{ active: !currentCoverId }" @click="chooseCover(null)">
-              <CollageCover :cover-ids="currentCoverIds" :size="72" />
-              <span class="cover-choice-name">自动拼贴</span>
+            <button
+              class="cover-choice"
+              :class="{ active: !!current?.customCoverId }"
+              :disabled="importingCover"
+              @click="coverFileEl?.click()"
+            >
+              <CoverImage
+                v-if="current?.customCoverId"
+                :cover-id="current.customCoverId"
+                :size="72"
+              />
+              <span v-else class="cover-import-ph"><AppIcon name="plus" :size="20" /></span>
+              <span class="cover-choice-name">{{ importingCover ? '导入中…' : '导入图片' }}</span>
             </button>
             <button
               v-for="c in coverChoices"
@@ -621,7 +657,18 @@ function confirmRemove() {
               <span class="cover-choice-name">{{ c.title }}</span>
             </button>
           </div>
-          <div v-if="coverChoices.length === 0" class="empty-hint">歌单里的歌曲都没有封面</div>
+          <div v-if="coverChoices.length === 0" class="empty-hint">歌单里的歌曲都没有封面，可导入图片作为封面</div>
+          <div class="modal-actions">
+            <button class="action-btn" :disabled="importingCover" @click="chooseCover(null)">恢复默认</button>
+          </div>
+          <!-- 隐藏的图片选择入口：点「导入图片」触发 -->
+          <input
+            ref="coverFileEl"
+            type="file"
+            accept="image/*"
+            class="cover-file-input"
+            @change="onCoverFile"
+          />
         </FrostedPanel>
       </div></Transition>
     </teleport>
@@ -904,6 +951,33 @@ function confirmRemove() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 「导入图片」磁贴的占位块：与 72px 封面同尺寸的虚线空位 */
+.cover-import-ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
+  border: 1px dashed var(--border-subtle);
+  color: var(--text-tertiary);
+  background: var(--bg-hover);
+}
+
+.cover-choice:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* 隐藏的图片选择 input（点「导入图片」磁贴触发） */
+.cover-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .pl-info {

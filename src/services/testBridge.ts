@@ -288,6 +288,16 @@ export function installTestBridge() {
       await library.rescan()
       return this.status()
     },
+    /** 直接记一次播放计数（排行榜/最近在听的验证用，不必真听满 30s） */
+    async recordPlay(path?: string) {
+      const { useStatsStore } = await import('@/stores/stats')
+      const { useLibraryStore } = await import('@/stores/library')
+      const lib = useLibraryStore()
+      const p = path ?? lib.sortedSongs[0]?.path
+      if (!p) return false
+      useStatsStore().recordPlay(p)
+      return true
+    },
     /** 播放库中第 index 首歌（context 为全库，与真实点击行为一致） */
     async playAt(index: number) {
       const library = useLibraryStore()

@@ -135,7 +135,7 @@ let ambientSeq = 0
 watch(
   () => player.current?.coverId ?? null,
   async (coverId) => {
-    if (!settings.ambientGlow || !coverId) {
+    if (!coverId) {
       ambientColors.value = []
       return
     }
@@ -145,21 +145,13 @@ watch(
       if (!url || seq !== ambientSeq) return
       const blob = await (await fetch(url)).blob()
       const colors = await extractBrightColors(blob).catch(() => [] as string[])
-      if (seq !== ambientSeq || !settings.ambientGlow) return
+      if (seq !== ambientSeq) return
       ambientColors.value = colors.length > 0 ? colors.slice(0, 2) : [null, null]
     } catch {
       /* 取色失败保持无氛围光 */
     }
   },
   { immediate: true },
-)
-
-// 关闭氛围光开关时清空
-watch(
-  () => settings.ambientGlow,
-  (on) => {
-    if (!on) ambientColors.value = []
-  },
 )
 
 /** 详情覆盖层被绕过返回过渡直接关闭时（典型：详情打开时点侧边栏当前视图，
@@ -178,8 +170,8 @@ watch(
         <div class="body-row">
       <Sidebar />
       <main class="content">
-        <!-- 封面氛围光：跟随当前播放封面取色的低强度背景光斑 -->
-        <div v-if="settings.ambientGlow && player.current?.coverId" class="ambient-layer" aria-hidden="true">
+        <!-- 封面氛围光：跟随当前播放封面取色的低强度背景光斑（默认常开） -->
+        <div v-if="player.current?.coverId" class="ambient-layer" aria-hidden="true">
           <Transition v-for="(c, i) in ambientColors" :key="`${player.currentPath}-${i}`" name="ambient">
             <div v-if="c" class="ambient-blob" :class="`ab-${i}`" :style="{ '--fc': c }" />
           </Transition>

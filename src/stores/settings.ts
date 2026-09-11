@@ -78,11 +78,8 @@ function darken(hex: string, f = 0.78): string {
   return `#${ch.map((v) => v.toString(16).padStart(2, '0')).join('')}`
 }
 
-/* ---------- 封面氛围光开关 ---------- */
-const AMBIENT_KEY = 'settings.ambientGlow'
-function loadAmbient(): boolean {
-  return localStorage.getItem(AMBIENT_KEY) !== '0'
-}
+/* ---------- 遗留清理：封面氛围光开关已下线（默认常开，不再可关） ---------- */
+localStorage.removeItem('settings.ambientGlow')
 
 // 遗留清理：导入动画样式选择器已下线（固定液态玻璃）；交错滚动/歌词页音频可视化已下线
 localStorage.removeItem('settings.absorbStyle')
@@ -128,8 +125,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const autoResume = ref(loadAutoResume())
   /** 自定义主题色：'' = 默认海军蓝 */
   const accentColor = ref(loadAccent())
-  /** 封面氛围光：主内容区背景跟随当前播放封面取色发光 */
-  const ambientGlow = ref(loadAmbient())
 
   // 实际生效的主题（system 模式下随系统实时变化）
   const resolvedTheme = ref<'dark' | 'light'>(media.matches ? 'dark' : 'light')
@@ -232,11 +227,6 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(ACCENT_KEY, accentColor.value)
   }
 
-  function setAmbientGlow(v: boolean) {
-    ambientGlow.value = v
-    localStorage.setItem(AMBIENT_KEY, v ? '1' : '0')
-  }
-
   return {
     themeMode,
     resolvedTheme,
@@ -262,7 +252,5 @@ export const useSettingsStore = defineStore('settings', () => {
     setAutoResume,
     accentColor,
     setAccentColor,
-    ambientGlow,
-    setAmbientGlow,
   }
 })

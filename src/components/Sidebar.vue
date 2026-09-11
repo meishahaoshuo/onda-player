@@ -2,7 +2,7 @@
 import { nextTick, onBeforeUnmount, watch, ref, computed } from 'vue'
 import { useUiStore } from '@/stores/ui'
 import { useSettingsStore } from '@/stores/settings'
-import { usePlaylistStore } from '@/stores/playlist'
+import { usePlaylistStore, playlistManualCoverId } from '@/stores/playlist'
 import { useLibraryStore } from '@/stores/library'
 import { usePlaylistMenu } from '@/composables/usePlaylistMenu'
 import { useDragReorder } from '@/composables/useDragReorder'
@@ -47,13 +47,14 @@ onBeforeUnmount(() => {
   plDrag.dispose()
 })
 
-/* ---------- 歌单项小封面：手动指定的封面优先，否则取歌单内第一首有封面的歌 ---------- */
+/* ---------- 歌单项小封面：手动封面（自定义导入图/来源歌曲）优先，否则取歌单内第一首有封面的歌 ---------- */
 const playlistCovers = computed(() => {
   const byPath = new Map(library.songs.map((s) => [s.path, s.coverId]))
   const map = new Map<string, string | null>()
   for (const p of playlistStore.playlists) {
-    if (p.coverPath && byPath.has(p.coverPath)) {
-      map.set(p.id, byPath.get(p.coverPath) ?? null)
+    const manual = playlistManualCoverId(p, byPath)
+    if (manual) {
+      map.set(p.id, manual)
       continue
     }
     const first = p.songPaths.map((x) => byPath.get(x) ?? null).find((c) => c !== null) ?? null

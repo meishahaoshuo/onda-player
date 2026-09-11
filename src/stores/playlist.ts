@@ -74,11 +74,23 @@ export const usePlaylistStore = defineStore('playlists', () => {
     void db.kvSet(ORDER_KEY, arr.map((p) => p.id))
   }
 
-  /** 指定歌单封面来源歌曲；null 恢复自动拼贴 */
+  /** 指定歌单封面来源歌曲；null 恢复默认（自动拼贴） */
   function setCover(id: string, path: string | null) {
     update(id, (p) => {
       const next = { ...p, coverPath: path ?? undefined }
       if (path === null) delete next.coverPath
+      // 歌曲封面与自定义导入封面互斥
+      delete next.customCoverId
+      return next
+    })
+  }
+
+  /** 设置用户导入的自定义封面（coverId 须已写入 covers 库）；null 恢复默认 */
+  function setCustomCover(id: string, coverId: string | null) {
+    update(id, (p) => {
+      const next = { ...p, customCoverId: coverId ?? undefined }
+      if (coverId === null) delete next.customCoverId
+      else delete next.coverPath
       return next
     })
   }
@@ -94,5 +106,15 @@ export const usePlaylistStore = defineStore('playlists', () => {
     })
   }
 
-  return { playlists, loaded, load, create, rename, remove, addSongs, removeSong, moveSong, reorder, setCover }
+  return { playlists, loaded, load, create, rename, remove, addSongs, removeSong, moveSong, reorder, setCover, setCustomCover }
 })
+
+/** 歌单手动封面的最终 coverId：用户导入的自定义图优先，其次封面来源歌曲；都没设返回 null */
+export function playlistManualCoverId(
+  p: PlaylistRecord,
+  coverByPath: Map<string, string | null>,
+): string | null {
+  if (p.customCoverId) return p.customCoverId
+  if (p.coverPath) return coverByPath.get(p.coverPath) ?? null
+  return null
+}
