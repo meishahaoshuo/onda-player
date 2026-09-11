@@ -123,6 +123,16 @@ report.playing = await evaluate(`(() => {
   const d = document.querySelector('.pt-dust')
   return { barPaused: document.querySelector('.player-bar').className.includes('bar-paused'), playState: getComputedStyle(d).animationPlayState }
 })()`)
+// 定向流动：播放中同一层的光尘 transform 必须随时间变化
+report.flow = await evaluate(`(async () => {
+  const d = document.querySelector('.pt-dust')
+  const cs = getComputedStyle(d)
+  const a = cs.transform
+  const anim = cs.animationName
+  await new Promise((r) => setTimeout(r, 1200))
+  const b = getComputedStyle(d).transform
+  return { animationName: anim, a, b, flowing: a !== b }
+})()`)
 report.seeked = await evaluate(`(async () => {
   __musicTest.toggle()
   await new Promise((r) => setTimeout(r, 220))
@@ -177,11 +187,39 @@ report.shotLightRest = await shot('dust-light-rest.png')
   fs.writeFileSync(report.shotLightPage, Buffer.from(s.data, 'base64'))
 }
 
-// ---------- 拖拽 seek 回归：光带已删除，热区与 seek 精度必须不变 ----------
+// ---------- 拖拽：只在顶端边框生效，且必须真的横向拖动 ----------
 const geo = await barGeo()
-const hoverY = geo.y + 6
-await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: Math.round(geo.x + geo.w * 0.42), y: Math.round(hoverY), button: 'left', clickCount: 1, buttons: 1 })
-await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(geo.x + geo.w * 0.72), y: Math.round(hoverY), button: 'left', buttons: 1 })
+const edgeY = geo.y + 2 /* 顶端边框细带（top:-3px / height:9px） */
+const midY = geo.y + 34 /* 条中部：按钮/文字区，绝不该开始拖拽 */
+
+await evaluate(`(async () => {
+  const st = __musicTest.playerState()
+  __musicTest.seek(st.duration * 0.42)
+  await new Promise((r) => setTimeout(r, 420))
+})()`)
+
+// 误触 1：在顶端边框点一下（不移动）→ 进度不动
+const tBefore = await evaluate(`__musicTest.playerState().currentTime`)
+await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: Math.round(geo.x + geo.w * 0.8), y: Math.round(edgeY), button: 'left', clickCount: 1, buttons: 1 })
+await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: Math.round(geo.x + geo.w * 0.8), y: Math.round(edgeY), button: 'left', buttons: 0 })
+await sleep(320)
+const tAfter = await evaluate(`__musicTest.playerState().currentTime`)
+report.edgeTap = { before: tBefore, after: tAfter, noSeek: Math.abs(tAfter - tBefore) < 0.08 }
+
+// 误触 2：在条中部横向拖动 → 不进入拖拽
+await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: Math.round(geo.x + geo.w * 0.3), y: Math.round(midY), button: 'left', clickCount: 1, buttons: 1 })
+await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(geo.x + geo.w * 0.6), y: Math.round(midY), button: 'left', buttons: 1 })
+await sleep(260)
+report.midDrag = await evaluate(`(() => ({
+  ringDragging: document.querySelector('.player-bar').className.includes('ring-dragging'),
+  cpP: Number(document.querySelector('.capsule-particles').style.getPropertyValue('--cp-p')),
+}))()`)
+await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: Math.round(geo.x + geo.w * 0.6), y: Math.round(midY), button: 'left', buttons: 0 })
+await sleep(200)
+
+// 真拖：从顶端边框按下并横移 → 必须生效且精确落位
+await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: Math.round(geo.x + geo.w * 0.42), y: Math.round(edgeY), button: 'left', clickCount: 1, buttons: 1 })
+await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(geo.x + geo.w * 0.72), y: Math.round(edgeY), button: 'left', buttons: 1 })
 await sleep(280)
 report.dragging = await evaluate(`(() => {
   const bar = document.querySelector('.player-bar')
@@ -189,7 +227,7 @@ report.dragging = await evaluate(`(() => {
   return { ringDragging: bar.className.includes('ring-dragging'), cpP: layer.style.getPropertyValue('--cp-p') }
 })()`)
 report.shotLightDrag = await shot('dust-light-drag.png')
-await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: Math.round(geo.x + geo.w * 0.72), y: Math.round(hoverY), button: 'left', buttons: 0 })
+await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: Math.round(geo.x + geo.w * 0.72), y: Math.round(edgeY), button: 'left', buttons: 0 })
 await sleep(220)
 
 // ---------- 深色主题 ----------

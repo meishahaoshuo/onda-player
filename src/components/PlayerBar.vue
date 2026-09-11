@@ -279,10 +279,11 @@ const DUST: DustLayer[] = Array.from({ length: DUST_LAYERS }, (_, li) => {
     }
   })
   return {
-    dx: Math.round((dustRand(li * 7 + 3) - 0.5) * 30), // ±15px 漂移
-    dy: Math.round((dustRand(li * 7 + 5) - 0.5) * 10), // ±5px
-    dur: 15000 + Math.round(dustRand(li * 7 + 1) * 12000), // 15~27s
-    del: -Math.round(dustRand(li * 7 + 2) * 15000), // 负延迟错峰
+    // 定向流动：所有层都朝播放头方向（向右）走，快慢不同 → 读起来是「光里的浮尘在流」
+    dx: 42 + Math.round(dustRand(li * 7 + 3) * 30), // 42~72px，单向
+    dy: Math.round((dustRand(li * 7 + 5) - 0.5) * 8), // ±4px 轻微起伏
+    dur: 9000 + Math.round(dustRand(li * 7 + 1) * 9000), // 9~18s 走完一段
+    del: -Math.round(dustRand(li * 7 + 2) * 12000), // 负延迟错峰
     twk: 6000 + Math.round(dustRand(li * 7 + 4) * 6000), // 6~12s 呼吸
     dots,
   }
@@ -329,28 +330,45 @@ function pctFromClientX(cx: number): number {
   return Math.min(1, Math.max(0, (cx - r.left) / r.width))
 }
 
+/** 拖拽门槛：按到顶边只算「预备」，横向移动超过这个距离才真的进入拖拽。
+    之前是「按下即跳到点按处」，去点按钮/封面时蹭到顶边就整条跳进度，很容易误触。 */
+const DRAG_THRESHOLD = 4
+let dragArmed = false
+let dragStartX = 0
+
 function onRingPointerDown(e: PointerEvent) {
   const dur = player.duration || player.current?.durationSec || 0
   if (dur <= 0) return
-  ringDragging.value = true
+  dragArmed = true
+  dragStartX = e.clientX
   // 合成指针（自动化测试）没有活动 pointer id，capture 失败不应阻断 seek
   try {
     progressLineEl.value?.setPointerCapture(e.pointerId)
   } catch {
     /* 忽略 */
   }
-  dragPct.value = pctFromClientX(e.clientX)
-  player.seek(dragPct.value * dur) // 按下即跳到点按处
+  // 按下本身不 seek：等确认是拖拽（见 onRingPointerMove）
 }
 
 function onRingPointerMove(e: PointerEvent) {
-  if (!ringDragging.value) return
+  if (!dragArmed) return
+  if (!ringDragging.value) {
+    // 还没确认拖拽：位移不够就什么都不做（点一下顶边不会改进度）
+    if (Math.abs(e.clientX - dragStartX) < DRAG_THRESHOLD) return
+    ringDragging.value = true
+    dragPct.value = pctFromClientX(e.clientX)
+    const dur = player.duration || player.current?.durationSec || 0
+    if (dur > 0) player.seek(dragPct.value * dur) // 确认拖拽的第一下落位
+    return
+  }
   // 拖动中只推进视觉进度，不反复 seek（频繁跳音频是卡顿感来源）
   dragPct.value = pctFromClientX(e.clientX)
 }
 
 function onRingPointerUp() {
-  if (!ringDragging.value) return
+  if (!dragArmed) return
+  dragArmed = false
+  if (!ringDragging.value) return // 只是点了一下顶边：不动进度
   const dur = player.duration || player.current?.durationSec || 0
   if (dur > 0) player.seek(dragPct.value * dur) // 松手落到最终位置
   ringDragging.value = false
@@ -760,12 +778,15 @@ function onRingPointerUp() {
   background: transparent;
   opacity: var(--dust-opacity);
   will-change: transform, opacity;
+  /* 流动 + 呼吸：流动是单向 linear 循环（层与层速度不同），呼吸负责明暗闪动。
+     单向循环回到起点时是「整层散点集体回跳」，但每颗只有 ~2px 且数量极多，
+     视线抓不住单颗，读起来就是连续流动（这也是不用逐颗 DOM 的代价很小的地方） */
   animation:
-    dust-drift var(--dur) ease-in-out var(--del) infinite alternate,
+    dust-flow var(--dur) linear var(--del) infinite,
     dust-twinkle var(--twk) ease-in-out var(--del) infinite;
 }
 
-@keyframes dust-drift {
+@keyframes dust-flow {
   from {
     transform: translate3d(0, 0, 0);
   }
@@ -801,16 +822,17 @@ function onRingPointerUp() {
   }
 }
 
-/* 拖拽热区：只占顶部 18px —— 旧版是 left/right:0 的整条全宽、高 26px，
-   覆盖胶囊 40% 高度，鼠标从上缘进出极易误触发 seek；压到 18px 后
-   同时避开了封面主体（封面从 11px 起）。本层无内容无底色，只负责命中。 */
+/* 拖拽热区：只在**顶端边框**上（以 1px 边框为中线，上下各 3px）。
+   点按钮、点封面、从条上滑过都不会碰到它；配合「先预备、移动够 4px 才算拖拽」，
+   按下本身也不再跳进度。按下后靠 setPointerCapture 跟手，指针可以离开这条细带。
+   本层无内容无底色，只负责命中。 */
 .capsule-progress {
   position: absolute;
-  top: 0;
+  top: -3px;
   left: 0;
   right: 0;
-  height: 18px;
-  cursor: pointer;
+  height: 9px;
+  cursor: ew-resize;
   touch-action: none;
 }
 
