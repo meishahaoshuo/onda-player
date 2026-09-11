@@ -58,12 +58,16 @@
   /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
   --ambient-fallback: rgba(92, 124, 224, 0.18);
 
-  /* 胶囊播放条「氛围光」进度：已播过的左半边覆盖的一层主色薄雾。
-     配色派生自 --accent，所以自定义主题换主色时自动跟随 */
-  --bar-glow: color-mix(in srgb, var(--accent) 20%, transparent);
-  --bar-glow-mid: color-mix(in srgb, var(--accent) 13%, transparent);
-  --bar-glow-far: color-mix(in srgb, var(--accent) 4%, transparent);
-  --bar-glow-edge: color-mix(in srgb, var(--accent) 60%, transparent);
+  /* 胶囊播放条「进度光粒子」：深色主题 = 发光粒子（混白提亮 + 外发光），
+     颜色本身由封面明亮色注入（--fc），这里只管「长什么样」 */
+  --dust-size: 2.4px;
+  --dust-opacity: 1;
+  --dust-bloom: 7px;
+  --dust-halo-opacity: 0.36;
+  --dust-mix: 80%;
+  --dust-tint: #ffffff;
+  /* 已播区间的氛围光浓度（与粒子共用一个封面色） */
+  --wash-opacity: 0.22;
 }
 
 :root[data-theme='light'] {
@@ -110,11 +114,16 @@
   /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
   --ambient-fallback: rgba(23, 37, 84, 0.1);
 
-  /* 胶囊播放条「氛围光」进度（同深色，浅底上主色本身很深，故取值略低） */
-  --bar-glow: color-mix(in srgb, var(--accent) 17%, transparent);
-  --bar-glow-mid: color-mix(in srgb, var(--accent) 11%, transparent);
-  --bar-glow-far: color-mix(in srgb, var(--accent) 3%, transparent);
-  --bar-glow-edge: color-mix(in srgb, var(--accent) 55%, transparent);
+  /* 胶囊播放条「进度光粒子」：浅色主题 = 彩色微尘（封面色朝黑压一档才在
+     白底玻璃上读得出来，不做强外发光），避免出现「脏色带」 */
+  --dust-size: 2.2px;
+  --dust-opacity: 0.9;
+  --dust-bloom: 3px;
+  --dust-halo-opacity: 0.3;
+  --dust-mix: 85%;
+  --dust-tint: #0b0b0d;
+  /* 浅色白底上氛围光要更克制，避免变成一条「脏色带」 */
+  --wash-opacity: 0.14;
 }
 
 /* ---------- 动效令牌 ---------- */
@@ -122,6 +131,13 @@
 /* 胶囊氛围光的进度值：注册成可过渡的 <number>，让 timeupdate（约 4Hz）
    的跳变变成连续推移；拖拽时由 .ring-dragging 关掉过渡以求 100% 跟手 */
 @property --cp-p {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+/* 光粒子的「聚拢」系数（0 静止 / 1 向指针聚拢）：hover 与拖拽切换 */
+@property --pull {
   syntax: '<number>';
   inherits: true;
   initial-value: 0;

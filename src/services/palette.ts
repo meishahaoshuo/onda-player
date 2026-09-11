@@ -128,65 +128,88 @@ export async function sampleBitmap(blob: Blob): Promise<{
 }
 
 /**
- * 提取封面的「明亮饱和色」2-3 个（给歌词页浅色流光背景用）：
+ * 提取封面的「明亮饱和色」2-3 个（歌词页流光、内容区氛围光、播放条光粒子用）：
  * 与 computeAmbient 的压暗策略相反——专挑饱和度高且足够亮的色块，
- * 过滤近黑/近白，按色距去重后轻微混白提亮。
+ * 过滤近黑/近白，按色距去重后按 lift 混白提亮（lift=0 即保留原始色）。
  */
-export async function extractBrightColors(blob: Blob): Promise<string[]> {
+function pickBrightColors(data: Uint8ClampedArray, W: number, H: number, lift: number): string[] {
+  const gridX = 4
+  const gridY = 3
+  const cands: { score: number; r: number; g: number; b: number }[] = []
+  for (let gy = 0; gy < gridY; gy++) {
+    for (let gx = 0; gx < gridX; gx++) {
+      let r = 0
+      let g = 0
+      let b = 0
+      let n = 0
+      const sy = Math.floor((gy * H) / gridY)
+      const ey = Math.floor(((gy + 1) * H) / gridY)
+      const sx = Math.floor((gx * W) / gridX)
+      const ex = Math.floor(((gx + 1) * W) / gridX)
+      for (let y = sy; y < ey; y++) {
+        for (let x = sx; x < ex; x++) {
+          const i = (y * W + x) * 4
+          r += data[i]
+          g += data[i + 1]
+          b += data[i + 2]
+          n++
+        }
+      }
+      r = Math.round(r / n)
+      g = Math.round(g / n)
+      b = Math.round(b / n)
+      const max = Math.max(r, g, b)
+      const min = Math.min(r, g, b)
+      const lum = (r + g + b) / 3
+      if (lum < 40) continue // 近黑
+      const sat = max === 0 ? 0 : (max - min) / max
+      // 低饱和灰调一律不要：灰色氛围光斑在浅色主题上就是一条「脏灰颜色断层」，
+      // 深色主题上也只会发灰发闷。氛围光只取有色彩倾向的颜色。
+      if (sat < 0.15) continue
+      cands.push({ score: sat * 0.7 + (lum / 255) * 0.3, r, g, b })
+    }
+  }
+  cands.sort((a, b) => b.score - a.score)
+  const out: string[] = []
+  for (const c of cands) {
+    // 色距去重：与已选颜色太接近的跳过
+    const dup = out.some((rgb) => {
+      const m = rgb.match(/\d+/g)
+      if (!m) return false
+      return Math.hypot(Number(m[0]) - c.r, Number(m[1]) - c.g, Number(m[2]) - c.b) < 60
+    })
+    if (dup) continue
+    const toward = (v: number) => Math.round(v + (255 - v) * lift)
+    out.push(`rgb(${toward(c.r)},${toward(c.g)},${toward(c.b)})`)
+    if (out.length >= 3) break
+  }
+  return out
+}
+
+/** 提取封面的「明亮饱和色」（默认混白 25% 提亮；lift=0 拿原始色）。 */
+export async function extractBrightColors(blob: Blob, opts?: { lift?: number }): Promise<string[]> {
+  const lift = Math.min(1, Math.max(0, opts?.lift ?? 0.25))
   const { W, H, data, bitmap } = await sampleBitmap(blob)
   try {
-    const gridX = 4
-    const gridY = 3
-    const cands: { score: number; r: number; g: number; b: number }[] = []
-    for (let gy = 0; gy < gridY; gy++) {
-      for (let gx = 0; gx < gridX; gx++) {
-        let r = 0
-        let g = 0
-        let b = 0
-        let n = 0
-        const sy = Math.floor((gy * H) / gridY)
-        const ey = Math.floor(((gy + 1) * H) / gridY)
-        const sx = Math.floor((gx * W) / gridX)
-        const ex = Math.floor(((gx + 1) * W) / gridX)
-        for (let y = sy; y < ey; y++) {
-          for (let x = sx; x < ex; x++) {
-            const i = (y * W + x) * 4
-            r += data[i]
-            g += data[i + 1]
-            b += data[i + 2]
-            n++
-          }
-        }
-        r = Math.round(r / n)
-        g = Math.round(g / n)
-        b = Math.round(b / n)
-        const max = Math.max(r, g, b)
-        const min = Math.min(r, g, b)
-        const lum = (r + g + b) / 3
-        if (lum < 40) continue // 近黑
-        const sat = max === 0 ? 0 : (max - min) / max
-        // 低饱和灰调一律不要：灰色氛围光斑在浅色主题上就是一条「脏灰颜色断层」，
-        // 深色主题上也只会发灰发闷。氛围光只取有色彩倾向的颜色。
-        if (sat < 0.15) continue
-        cands.push({ score: sat * 0.7 + (lum / 255) * 0.3, r, g, b })
-      }
+    return pickBrightColors(data, W, H, lift)
+  } finally {
+    bitmap.close()
+  }
+}
+
+/**
+ * 一次采样同时产出「压暗主色 base」与「原始明亮色 bright」：
+ * 播放条光粒子要的是原始饱和色（明暗交给主题令牌），页面过渡要的是 base，
+ * 两者共用同一次解码，避免同一个封面解码两次。
+ */
+export async function sampleCoverColors(blob: Blob): Promise<{ base: string; bright: string[] }> {
+  const { W, H, data, bitmap } = await sampleBitmap(blob)
+  try {
+    const { base } = computeAmbient(data, W, H)
+    return {
+      base: `rgb(${base.r},${base.g},${base.b})`,
+      bright: pickBrightColors(data, W, H, 0),
     }
-    cands.sort((a, b) => b.score - a.score)
-    const out: string[] = []
-    for (const c of cands) {
-      // 色距去重：与已选颜色太接近的跳过
-      const dup = out.some((rgb) => {
-        const m = rgb.match(/\d+/g)
-        if (!m) return false
-        return Math.hypot(Number(m[0]) - c.r, Number(m[1]) - c.g, Number(m[2]) - c.b) < 60
-      })
-      if (dup) continue
-      // 混白 25% 提亮：浅色底上的流光要"点缀"而非"色块"
-      const lift = (v: number) => Math.round(v + (255 - v) * 0.25)
-      out.push(`rgb(${lift(c.r)},${lift(c.g)},${lift(c.b)})`)
-      if (out.length >= 3) break
-    }
-    return out
   } finally {
     bitmap.close()
   }
@@ -203,20 +226,6 @@ export async function makeAmbientGradient(blob: Blob): Promise<string> {
     )
     const baseCss = `linear-gradient(rgb(${base.r},${base.g},${base.b}), rgb(${base.r},${base.g},${base.b}))`
     return radials.length ? `${radials.join(', ')}, ${baseCss}` : baseCss
-  } finally {
-    bitmap.close()
-  }
-}
-
-/**
- * 只取封面主色（base）：给页面过渡开场铺底用。
- * 比 makeAmbientGradient 便宜得多（不做多焦点渐变合成），可放进预取队列批量跑。
- */
-export async function coverBaseColor(blob: Blob): Promise<string> {
-  const { W, H, data, bitmap } = await sampleBitmap(blob)
-  try {
-    const { base } = computeAmbient(data, W, H)
-    return `rgb(${base.r},${base.g},${base.b})`
   } finally {
     bitmap.close()
   }

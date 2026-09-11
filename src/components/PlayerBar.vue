@@ -10,6 +10,7 @@ import { useSettingsStore, type PlayerStyle } from '@/stores/settings'
 import { useSongActions } from '@/composables/useSongActions'
 import { useUiStore } from '@/stores/ui'
 import { formatDuration } from '@/utils/format'
+import { paletteCache } from '@/services/paletteCache'
 import type { PlayMode, SongRecord } from '@/types'
 
 /** 底部播放条：液态玻璃 + 拖拽进度 + 队列面板；点封面打开全屏歌词 */
@@ -216,11 +217,12 @@ onMounted(() => {
     .finished.catch(() => {})
 })
 
-/* ---------- 胶囊进度「氛围光」：已播过的半边被照亮，点击/拖拽 seek ----------
-   进度不再是描在边框上的线，而是一层从主色派生的薄光：左半（已播）被照亮，
-   右边界用 mask 的软过渡收尾。常态软边界 68px（几乎看不出是控件），
-   悬停/拖拽收紧到 14px 并浮出一条 1px 分界线（此时才明确「这里能拖」）。
-   实现见下方 .capsule-glow / .cg-* 样式；进度值由 --cp-p（0~1）驱动。 */
+/* ---------- 胶囊进度「氛围光 + 光粒子」：点击/拖拽 seek ----------
+   已播区间 = 一层封面取色的氛围光（薄雾，右边界由 mask 软收边）
+   ＋ 浮在光上面的一层光尘粒子（密度由 PARTICLE_COUNT 决定，随进度自然变多）；
+   悬停/拖拽时粒子向指针聚拢、指针处浮起一圈柔和光晕 —— 取代了原先那条
+   「末端竖线」。未播区间保持干净（同一层 mask 收边）。
+   实现见下方 .capsule-particles / .pt-field / .pt 样式；进度值 --cp-p 驱动 mask。 */
 
 const ringDragging = ref(false)
 const progressLineEl = ref<HTMLElement | null>(null)
@@ -233,8 +235,73 @@ const ringPct = computed(() => {
     音频 seek 只在按下（跳到点按处）与松手（落到最终位置）各执行一次 */
 const dragPct = ref(0)
 const displayPct = computed(() => (ringDragging.value ? dragPct.value : ringPct.value))
-/** 氛围光层的行内进度变量：mask 软边界与分界线的位置都由它驱动 */
-const cpStyle = computed(() => ({ '--cp-p': String(displayPct.value) }))
+/** 指针在胶囊内的 x（px）：只服务光晕与粒子聚拢，不进任何数据流 */
+const pointerX = ref(0)
+/** 粒子层的行内变量：进度驱动 mask 收边，指针位置驱动光晕与聚拢 */
+const cpStyle = computed(() => ({
+  '--cp-p': String(displayPct.value),
+  '--cxpx': `${pointerX.value.toFixed(1)}px`,
+}))
+
+/* ---------- 进度光粒子：密度由 PARTICLE_COUNT 决定；每颗的位置/漂移/时长/权重
+   全部由下标用固定公式算出（无 Math.random，每次观感完全一致、可复现）。
+   x/y 是胶囊局部 px，dx/dy 是漂移幅度，w 是聚拢权重（越大越跟指针），
+   c 是颜色槽位（对应封面明亮色下标）。 ---------- */
+interface DustConfig {
+  x: number
+  y: number
+  dx: number
+  dy: number
+  dur: number
+  del: number
+  w: number
+  c: number
+}
+
+/** 粒子密度：改这一个数就能整体加密/减疏（其它参数都由下标算出） */
+const PARTICLE_COUNT = 48
+
+const PARTICLES: DustConfig[] = Array.from({ length: PARTICLE_COUNT }, (_, i) => {
+  const t = i / (PARTICLE_COUNT - 1)
+  const dir = i % 2 === 0 ? 1 : -1
+  return {
+    // 均匀铺满 12~752px，再用固定错位打散，避免排成一条直线
+    x: 12 + t * 740 + ((i * 7) % 9) - 4,
+    y: 12 + ((i * 13) % 42), // 12~53px（避开胶囊上下边缘）
+    dx: dir * (8 + ((i * 5) % 8)), // ±8~15px
+    dy: ((i % 3) - 1) * (5 + ((i * 3) % 6)), // -10~10px
+    dur: 11000 + ((i * 977) % 8000), // 11~19s，慢飘
+    del: -((i * 613) % 12000), // 负延迟错峰
+    w: 0.24 + ((i * 11) % 9) / 20, // 聚拢权重 0.24~0.64
+    c: i % 3, // 颜色槽位轮转
+  }
+})
+
+/** 当前曲目封面的明亮饱和色（最多 3 个）；切歌或开关变化时刷新 */
+const particleColors = ref<string[]>([])
+let dustSeq = 0
+
+/** 第 slot 颗粒子的颜色：封面明亮色轮转；灰阶封面/取色失败回落主题主色 */
+function particleColor(slot: number): string {
+  const list = particleColors.value
+  return list.length ? list[slot % list.length]! : 'var(--accent)'
+}
+
+watch(
+  [() => player.current?.coverId ?? null, () => settings.ambientGlow],
+  async ([coverId, on]) => {
+    const seq = ++dustSeq
+    if (!coverId || !on) {
+      particleColors.value = []
+      return
+    }
+    paletteCache.primeNow(coverId)
+    const colors = await paletteCache.brightColors(coverId).catch(() => [] as string[])
+    if (seq !== dustSeq) return
+    particleColors.value = colors.slice(0, 3)
+  },
+  { immediate: true },
+)
 
 function pctFromClientX(cx: number): number {
   const line = progressLineEl.value
@@ -259,6 +326,12 @@ function onRingPointerDown(e: PointerEvent) {
 }
 
 function onRingPointerMove(e: PointerEvent) {
+  // 指针位置只驱动光晕与聚拢（悬停也算，不限拖拽中）
+  const line = progressLineEl.value
+  if (line) {
+    const r = line.getBoundingClientRect()
+    if (r.width > 0) pointerX.value = Math.min(r.width, Math.max(0, e.clientX - r.left))
+  }
   if (!ringDragging.value) return
   // 拖动中只推进视觉进度，不反复 seek（频繁跳音频是卡顿感来源）
   dragPct.value = pctFromClientX(e.clientX)
@@ -276,24 +349,43 @@ function onRingPointerUp() {
   <footer
     ref="barEl"
     class="player-bar glass"
-    :class="{ capsule: localStyle === 'capsule', 'material-liquid': settings.barMaterial === 'liquid', 'material-frosted': settings.barMaterial === 'frosted', 'ring-dragging': ringDragging }"
+    :class="{ capsule: localStyle === 'capsule', 'material-liquid': settings.barMaterial === 'liquid', 'material-frosted': settings.barMaterial === 'frosted', 'ring-dragging': ringDragging, 'bar-paused': !player.playing }"
     @pointermove="onRingPointerMove"
     @pointerup="onRingPointerUp"
     @pointercancel="onRingPointerUp"
   >
-    <!-- 胶囊模式进度「氛围光」：已播过的左半边像被照亮（一层主色薄雾），
-         没有任何线条；指针悬停/拖拽时才把软边界收紧并浮出一条 1px 分界线。
+    <!-- 胶囊模式进度「氛围光 + 光粒子」：已播区间是一层封面取色的氛围光，
+         上面浮着一层封面色光尘（48 颗）；悬停/拖拽时粒子向指针聚拢、
+         指针处浮起一圈柔和光晕（取代原先那条竖线）。
          本层纯视觉：z-index:-1 沉到玻璃之上、内容之下，不接触指针 -->
     <div
-      v-if="localStyle === 'capsule'"
-      class="capsule-glow"
+      v-if="localStyle === 'capsule' && settings.ambientGlow"
+      class="capsule-particles"
       :style="cpStyle"
       aria-hidden="true"
     >
-      <!-- 常态：68px 软边界；悬停/拖拽交叉淡入下面那条 14px 的紧边界 -->
-      <div class="cg-fill cg-soft" />
-      <div class="cg-fill cg-tight" />
-      <div class="cg-edge" />
+      <!-- 进度 mask 层：氛围光与粒子都收在已播区间里（悬停时边界收紧） -->
+      <div class="pt-field">
+        <!-- 氛围光：封面色薄雾铺在已播侧，没有任何线条 -->
+        <div class="pt-wash" :style="{ '--fc': particleColor(0) }" />
+        <span
+          v-for="(p, i) in PARTICLES"
+          :key="i"
+          class="pt"
+          :style="{
+            '--px': `${p.x}px`,
+            '--py': `${p.y}px`,
+            '--dx': `${p.dx}px`,
+            '--dy': `${p.dy}px`,
+            '--dur': `${p.dur}ms`,
+            '--del': `${p.del}ms`,
+            '--w': String(p.w),
+            '--fc': particleColor(p.c),
+          }"
+        />
+      </div>
+      <!-- 指针光晕：跟随 --cxpx，不受进度 mask 约束（指针落在未播区也看得见） -->
+      <div class="pt-halo" :style="{ '--fc': particleColor(0) }" />
     </div>
     <!-- 拖拽热区：仍只占顶部 18px，避开封面与按钮（见下方 .capsule-progress 注释） -->
     <div
@@ -577,99 +669,134 @@ function onRingPointerUp() {
     0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
-/* ---------- 胶囊进度「氛围光」 ----------
-   进度不做成线，而是「已播过的左半边被照亮」：一层从主色派生的薄光。
-   右边界由 mask 的线性渐变收尾 —— 常态 68px 软过渡（远看只是一片渐变，
-   不像控件），悬停/拖拽时交叉淡入 14px 的紧边界并浮出一条 1px 分界线。
-   全程只有 opacity 交叉淡入与 mask 位置变化，没有 filter: blur
-   （见 03-设计规范 §9 动画性能红线）。 */
-.capsule-glow {
+/* ---------- 胶囊进度「氛围光 + 光粒子」 ----------
+   已播区间 = 氛围光（.pt-wash，封面色薄雾）＋ 浮在其上的光尘（.pt，48 颗）：
+   每颗粒子的静止点/漂移幅度/时长/聚拢权重都由下标用固定公式算出，
+   用 transform 慢漂移（@keyframes）＋ translate 做「向指针聚拢」
+   （两个属性互不干扰，项目已有先例：歌词页视差）。
+   进度约束在 .pt-field 上：mask 收边位置由 --cp-p 驱动，边界宽度 --pt-fall
+   常态 68px、悬停/拖拽收到 14px（@property 注册后可直接过渡）。
+   全程没有 filter: blur、没有逐帧 JS（见 03-设计规范 §9 动画性能红线）。 */
+.capsule-particles {
   position: absolute;
   inset: 0; /* 贴到边框内侧，与胶囊轮廓同形 */
   z-index: -1; /* 页脚自建层叠上下文（z-index:6），负值即落在玻璃之上、内容之下 */
   border-radius: 999px;
+  overflow: hidden; /* 氛围光与粒子都被裁进胶囊轮廓里 */
   pointer-events: none; /* 纯视觉层：命中一律交给下方 18px 热区 */
   /* --cp-p 已在 main.css 用 @property 注册成 <number>，
      故这里的过渡能把 timeupdate（约 4Hz）的跳变抹成连续推移 */
   transition: --cp-p 160ms linear;
 }
 
-.player-bar.ring-dragging .capsule-glow {
+.player-bar.ring-dragging .capsule-particles {
   transition: none; /* 拖拽 100% 跟手 */
 }
 
-.cg-fill {
+/* 进度 mask 层：氛围光与粒子共用一条收边（未播区间保持干净）。
+   收边宽度固定 68px —— 悬停不再收紧：收紧会在末端又读成「一条硬边」，
+   而悬停的可拖暗示已经由粒子聚拢＋指针光晕承担了。 */
+.pt-field {
   position: absolute;
   inset: 0;
-  border-radius: inherit;
+  --pt-fall: 68px;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    #000 0,
+    #000 calc(var(--cp-p) * 100% - var(--pt-fall)),
+    transparent calc(var(--cp-p) * 100%)
+  );
+  mask-image: linear-gradient(
+    90deg,
+    #000 0,
+    #000 calc(var(--cp-p) * 100% - var(--pt-fall)),
+    transparent calc(var(--cp-p) * 100%)
+  );
+}
+
+/* 悬停/拖拽：粒子开始向指针聚拢（光晕见 .pt-halo） */
+.player-bar.capsule:hover .capsule-particles,
+.player-bar.ring-dragging .capsule-particles {
+  --pull: 1;
+}
+
+/* 氛围光：封面色薄雾铺在已播侧（深色混白提亮 / 浅色朝黑压一档，见主题令牌） */
+.pt-wash {
+  position: absolute;
+  inset: 0;
+  --fc-mix: color-mix(in srgb, var(--fc) var(--dust-mix), var(--dust-tint));
   background: linear-gradient(
     90deg,
-    var(--bar-glow) 0%,
-    var(--bar-glow-mid) 58%,
-    var(--bar-glow-far) 100%
+    var(--fc-mix) 0%,
+    var(--fc-mix) 55%,
+    color-mix(in srgb, var(--fc-mix) 28%, transparent) 100%
   );
-  transition: opacity var(--dur-med) var(--ease-out);
+  opacity: var(--wash-opacity);
+  transition: background 600ms var(--ease-out);
 }
 
-/* 常态：68px 软边界（进度为 0 时整层被 mask 收光，天然不可见） */
-.cg-soft {
-  -webkit-mask-image: linear-gradient(
-    90deg,
-    #000 0,
-    #000 calc(var(--cp-p) * 100% - 68px),
-    transparent calc(var(--cp-p) * 100%)
-  );
-  mask-image: linear-gradient(
-    90deg,
-    #000 0,
-    #000 calc(var(--cp-p) * 100% - 68px),
-    transparent calc(var(--cp-p) * 100%)
-  );
-}
-
-/* 悬停/拖拽：14px 紧边界，进度位置读起来明确 */
-.cg-tight {
-  opacity: 0;
-  -webkit-mask-image: linear-gradient(
-    90deg,
-    #000 0,
-    #000 calc(var(--cp-p) * 100% - 14px),
-    transparent calc(var(--cp-p) * 100%)
-  );
-  mask-image: linear-gradient(
-    90deg,
-    #000 0,
-    #000 calc(var(--cp-p) * 100% - 14px),
-    transparent calc(var(--cp-p) * 100%)
-  );
-}
-
-.player-bar.capsule:hover .capsule-glow .cg-soft,
-.player-bar.ring-dragging .capsule-glow .cg-soft {
-  opacity: 0;
-}
-
-.player-bar.capsule:hover .capsule-glow .cg-tight,
-.player-bar.ring-dragging .capsule-glow .cg-tight {
-  opacity: 1;
-}
-
-/* 分界线：只在悬停/拖拽时浮出的一条 1px 细线，给「能拖」一个落点 */
-.cg-edge {
+/* 单颗粒子：--fc 是封面色（经主题令牌调过明暗），
+   --px/--py 静止点、--dx/--dy 漂移幅度、--w 聚拢权重、--dur/--del 错峰时长 */
+.capsule-particles .pt {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(var(--cp-p) * 100%);
-  width: 1px;
-  transform: translateX(-0.5px);
-  background: var(--bar-glow-edge);
-  opacity: 0;
+  left: var(--px);
+  top: var(--py);
+  width: var(--dust-size);
+  height: var(--dust-size);
+  border-radius: 50%;
+  /* 深色主题混白提亮（--dust-mix 78% + 白），浅色主题保留封面原始色 */
+  --fc-mix: color-mix(in srgb, var(--fc) var(--dust-mix), var(--dust-tint));
+  background: var(--fc-mix);
+  box-shadow: 0 0 var(--dust-bloom) var(--fc-mix);
+  opacity: var(--dust-opacity);
+  /* 聚拢：朝指针侧倾（--pull 常态 0，悬停/拖拽为 1）。
+     位移封顶 34px —— 指针离得远时是「整片光尘一起轻轻侧倾」，
+     而不是把所有粒子搬到指针那里（那就成了重新排布，不像光尘） */
+  translate: clamp(-34px, calc((var(--cxpx) - var(--px)) * var(--w) * var(--pull)), 34px) 0;
+  transition:
+    translate 420ms var(--ease-out),
+    background 600ms var(--ease-out),
+    box-shadow 600ms var(--ease-out),
+    opacity 320ms var(--ease-out);
+  animation: dust-drift var(--dur) ease-in-out var(--del) infinite alternate;
+}
+
+@keyframes dust-drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(var(--dx), var(--dy), 0);
+  }
+}
+
+/* 暂停/未播放：粒子停在原地、光弱一档（仍要一眼看得见，别暗到消失） */
+.player-bar.bar-paused .capsule-particles .pt {
+  animation-play-state: paused;
+  opacity: calc(var(--dust-opacity) * 0.72);
+}
+
+/* 指针光晕：取代原先的「末端竖线」，只在悬停/拖拽时浮现并跟随指针 */
+.capsule-particles .pt-halo {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 132px;
+  height: 56px;
+  border-radius: 50%;
+  --fc-mix: color-mix(in srgb, var(--fc) var(--dust-mix), var(--dust-tint));
+  background: radial-gradient(closest-side, var(--fc-mix), transparent 72%);
+  /* 用 translate 定位（--cxpx 是指针在胶囊内的 x），不动 left，避免布局抖动 */
+  translate: calc(var(--cxpx) - 50%) -50%;
+  opacity: calc(var(--dust-halo-opacity) * var(--pull));
   transition: opacity var(--dur-med) var(--ease-out);
 }
 
-.player-bar.capsule:hover .capsule-glow .cg-edge,
-.player-bar.ring-dragging .capsule-glow .cg-edge {
-  opacity: 1;
+@media (prefers-reduced-motion: reduce) {
+  /* 降级：关掉漂移，只留静态光尘（聚拢与光晕仍可用，属用户触发） */
+  .capsule-particles .pt {
+    animation: none;
+  }
 }
 
 /* 拖拽热区：只占顶部 18px —— 旧版是 left/right:0 的整条全宽、高 26px，
