@@ -123,7 +123,7 @@ report.playing = await evaluate(`(() => {
   const d = document.querySelector('.pt-dust')
   return { barPaused: document.querySelector('.player-bar').className.includes('bar-paused'), playState: getComputedStyle(d).animationPlayState }
 })()`)
-// 定向流动：播放中同一层的光尘 transform 必须随时间变化
+// 自由浮动：播放中同一层的光尘 transform 必须随时间变化
 report.flow = await evaluate(`(async () => {
   const d = document.querySelector('.pt-dust')
   const cs = getComputedStyle(d)
@@ -187,11 +187,11 @@ report.shotLightRest = await shot('dust-light-rest.png')
   fs.writeFileSync(report.shotLightPage, Buffer.from(s.data, 'base64'))
 }
 
-// ---------- 拖拽：只在顶端边框生效，且必须真的横向拖动 ----------
+// ---------- 点/拖：空白处可用，控件不抢；光尘只在拖拽时出现在播放头附近 ----------
 const geo = await barGeo()
-const edgeY = geo.y + 6 /* 顶部 12px 热区中部 */
-const bandY = geo.y + 10 /* 热区下缘附近，也该能拖 */
-const midY = geo.y + 34 /* 条中部：按钮/文字区，绝不该开始拖拽 */
+const blankY = geo.y + 34 /* 条中部：标题/艺术家右侧的空白带 */
+const playBtnX = geo.x + geo.w * 0.5 /* 中间播放键（控件） */
+const coverX = geo.x + 40 /* 左侧封面（控件） */
 
 await evaluate(`(async () => {
   const st = __musicTest.playerState()
@@ -199,43 +199,69 @@ await evaluate(`(async () => {
   await new Promise((r) => setTimeout(r, 420))
 })()`)
 
-// 误触 1：在顶端边框点一下（不移动）→ 进度不动
-report.dustAtRest = await evaluate(`getComputedStyle(document.querySelector('.pt-dusts')).opacity`)
-const tBefore = await evaluate(`__musicTest.playerState().currentTime`)
-await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: Math.round(geo.x + geo.w * 0.8), y: Math.round(edgeY), button: 'left', clickCount: 1, buttons: 1 })
-await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: Math.round(geo.x + geo.w * 0.8), y: Math.round(edgeY), button: 'left', buttons: 0 })
-await sleep(320)
-const tAfter = await evaluate(`__musicTest.playerState().currentTime`)
-report.edgeTap = { before: tBefore, after: tAfter, noSeek: Math.abs(tAfter - tBefore) < 0.08 }
-
-// 误触 2：在条中部横向拖动 → 不进入拖拽
-await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: Math.round(geo.x + geo.w * 0.3), y: Math.round(midY), button: 'left', clickCount: 1, buttons: 1 })
-await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(geo.x + geo.w * 0.6), y: Math.round(midY), button: 'left', buttons: 1 })
-await sleep(260)
-report.midDrag = await evaluate(`(() => ({
-  ringDragging: document.querySelector('.player-bar').className.includes('ring-dragging'),
-  cpP: Number(document.querySelector('.capsule-particles').style.getPropertyValue('--cp-p')),
+// 常态：无光尘、无辉光、空白处是「抓手」光标
+report.restState = await evaluate(`(() => ({
+  dustOpacity: getComputedStyle(document.querySelector('.pt-dusts')).opacity,
+  glowOpacity: getComputedStyle(document.querySelector('.player-bar'), '::after').opacity,
+  barCursor: getComputedStyle(document.querySelector('.player-bar')).cursor,
+  bandCursor: getComputedStyle(document.querySelector('.capsule-progress')).cursor,
 }))()`)
-await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: Math.round(geo.x + geo.w * 0.6), y: Math.round(midY), button: 'left', buttons: 0 })
-await sleep(200)
 
-// 真拖：从热区**下缘**（y+10，不再是细边框）按下并横移 → 必须生效且精确落位
-await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: Math.round(geo.x + geo.w * 0.42), y: Math.round(bandY), button: 'left', clickCount: 1, buttons: 1 })
-await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(geo.x + geo.w * 0.72), y: Math.round(bandY), button: 'left', buttons: 1 })
+// 点空白处 → 跳到该位置
+const tBlankBefore = await evaluate(`__musicTest.playerState().currentTime`)
+await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: Math.round(geo.x + geo.w * 0.7), y: Math.round(blankY), button: 'left', clickCount: 1, buttons: 1 })
+await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: Math.round(geo.x + geo.w * 0.7), y: Math.round(blankY), button: 'left', buttons: 0 })
+await sleep(360)
+const tBlankAfter = await evaluate(`__musicTest.playerState().currentTime`)
+report.blankClick = { before: tBlankBefore, after: tBlankAfter, seeked: tBlankAfter > tBlankBefore + 0.2 }
+
+// 点控件（模式按钮：只切播放模式、不影响时钟）→ 绝不能 seek
+await evaluate(`(async () => {
+  const st = __musicTest.playerState()
+  __musicTest.seek(st.duration * 0.42)
+  await new Promise((r) => setTimeout(r, 420))
+})()`)
+const btn = await evaluate(
+  `(() => { const b = document.querySelector('.player-bar .controls .icon-btn').getBoundingClientRect(); return { x: Math.round(b.x + b.width / 2), y: Math.round(b.y + b.height / 2) } })()`,
+)
+const tCtrlBefore = await evaluate(`__musicTest.playerState().currentTime`)
+await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: btn.x, y: btn.y, button: 'left', clickCount: 1, buttons: 1 })
+await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: btn.x, y: btn.y, button: 'left', buttons: 0 })
+await sleep(300)
+const ctrlState = await evaluate(`(() => { const s = __musicTest.playerState(); return { t: s.currentTime, playing: s.playing } })()`)
+report.controlClick = {
+  before: tCtrlBefore,
+  after: ctrlState.t,
+  noSeek: Math.abs(ctrlState.t - tCtrlBefore) < 0.08,
+  stillPaused: !ctrlState.playing,
+}
+
+// 从空白处按下并横移 → 进入拖拽：进度跟手、光尘团出现并挂在播放头、整条发光、光标变抓住
+await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: Math.round(geo.x + geo.w * 0.42), y: Math.round(blankY), button: 'left', clickCount: 1, buttons: 1 })
+await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(geo.x + geo.w * 0.72), y: Math.round(blankY), button: 'left', buttons: 1 })
 await sleep(280)
 report.dragging = await evaluate(`(() => {
   const bar = document.querySelector('.player-bar')
   const layer = document.querySelector('.capsule-particles')
+  const dusts = document.querySelector('.pt-dusts')
+  const lr = layer.getBoundingClientRect()
   return {
     ringDragging: bar.className.includes('ring-dragging'),
     cpP: layer.style.getPropertyValue('--cp-p'),
-    dustDuringDrag: getComputedStyle(document.querySelector('.pt-dusts')).opacity,
+    dustOpacity: getComputedStyle(dusts).opacity,
+    dustTranslateX: Math.round(parseFloat(dusts.getBoundingClientRect().x - lr.x)),
+    headX: Math.round(parseFloat(layer.style.getPropertyValue('--cp-x')) || 0),
+    glowOpacity: getComputedStyle(bar, '::after').opacity,
+    cursor: getComputedStyle(bar).cursor,
   }
 })()`)
 report.shotLightDrag = await shot('dust-light-drag.png')
-await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: Math.round(geo.x + geo.w * 0.72), y: Math.round(bandY), button: 'left', buttons: 0 })
+await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: Math.round(geo.x + geo.w * 0.72), y: Math.round(blankY), button: 'left', buttons: 0 })
 await sleep(320)
-report.dustAfterRelease = await evaluate(`getComputedStyle(document.querySelector('.pt-dusts')).opacity`)
+report.afterRelease = await evaluate(`(() => ({
+  dustOpacity: getComputedStyle(document.querySelector('.pt-dusts')).opacity,
+  glowOpacity: getComputedStyle(document.querySelector('.player-bar'), '::after').opacity,
+}))()`)
 
 // ---------- 深色主题 ----------
 await evaluate(`(async () => {

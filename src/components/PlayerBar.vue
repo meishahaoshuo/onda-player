@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import CoverImage from './CoverImage.vue'
 import ProgressSlider from './ProgressSlider.vue'
@@ -136,6 +136,15 @@ const localStyle = ref<PlayerStyle>(settings.playerStyle)
 const barEl = ref<HTMLElement | null>(null)
 let morphing = false
 
+/* 光尘团挂在播放头位置（--cp-x 是 px），所以需要真实内宽：
+   inset:0 的视觉层贴在边框内侧，内宽 = 页脚宽度 - 左右各 1px 边框 */
+const barWidth = ref(758)
+let barRO: ResizeObserver | null = null
+function measureBar() {
+  const w = (barEl.value?.getBoundingClientRect().width ?? 0) - 2
+  if (w > 0) barWidth.value = w
+}
+
 watch(
   () => settings.playerStyle,
   async (nv) => {
@@ -216,13 +225,26 @@ onMounted(() => {
     )
     .finished.catch(() => {})
 
+  // 光尘团要用真实内宽算播放头 px（--cp-x），窗口缩放与形态切换都要跟上
+  measureBar()
+  if (typeof ResizeObserver !== 'undefined' && barEl.value) {
+    barRO = new ResizeObserver(measureBar)
+    barRO.observe(barEl.value)
+  }
+  window.addEventListener('resize', measureBar)
 })
 
-/* ---------- 胶囊进度「封面色氛围光 + 光尘」：点击/拖拽 seek ----------
+onBeforeUnmount(() => {
+  barRO?.disconnect()
+  barRO = null
+  window.removeEventListener('resize', measureBar)
+})
+
+/* ---------- 胶囊进度「封面色氛围光 + 播放头光尘」：点击/拖拽 seek ----------
    已播区间 = 一层封面取色的氛围光（.pt-wash）＋ 一层极细的白色光尘
-   （.pt-dust × DUST_LAYERS，每层用一条 box-shadow 画出一整片散点，
-   480 颗只占 8 个合成图层）。两者共用一条 mask 收边（--cp-p 驱动），
-   悬停/拖拽只做 seek，不再有光带、光晕或换歌光扫。
+   （.pt-dust × DUST_LAYERS，每层用一条 box-shadow 画出一整片散点）。
+   氛围光被 --cp-p 的 mask 收在已播区间；光尘只在拖拽时出现，
+   整团挂在播放头位置（--cp-x）随指针移动。没有光带、光晕或换歌光扫。
    实现见下方 .capsule-particles / .pt-field / .pt-wash / .pt-dust 样式。 */
 
 const ringDragging = ref(false)
@@ -239,17 +261,17 @@ const displayPct = computed(() => (ringDragging.value ? dragPct.value : ringPct.
 /** 动画层的行内变量：进度驱动 mask 收边，封面色驱动氛围光与光尘颜色 */
 const cpStyle = computed(() => ({
   '--cp-p': String(displayPct.value),
-  '--fc': particleColor(0),
+  '--cp-x': `${(displayPct.value * barWidth.value).toFixed(1)}px`,
 }))
 
-/* ---------- 光尘：极小 + 极密 ----------
-   每层是一个 0×0 元素，靠一条 box-shadow 一次画出 DUST_PER_LAYER 颗
-   （颜色/模糊/扩散走主题令牌，主题切换自动跟随）；480 颗只占 8 个图层。
-   点位由下标哈希算出（不用 Math.random，观感固定可复现）；
-   每层有自己的漂移与呼吸相位，整体像一束光里的浮尘。 ---------- */
+/* ---------- 播放头光尘：极小 + 只在播放头附近自由浮动 ----------
+   每层是一个 1px 圆点，靠一条 box-shadow 一次画出 DUST_PER_LAYER 颗
+   （颜色/模糊/扩散走主题令牌，主题切换自动跟随）；整团挂在播放头
+   （.pt-dusts 用 --cp-x 平移），所以只在拖拽时围着手指/播放头活动。
+   点位由下标哈希算出（不用 Math.random，观感固定可复现）。 ---------- */
 const DUST_LAYERS = 8
-const DUST_PER_LAYER = 60
-const DUST_W = 750 /* 铺满胶囊内宽（758）留一点边 */
+const DUST_PER_LAYER = 20
+const DUST_SPAN = 72 /* 横向 ±72px：光是「播放头附近的一团」，不是整条铺满 */
 const DUST_TOP = 7
 const DUST_H = 52 /* 纵向 7~59px，避开上下边缘 */
 
@@ -274,15 +296,15 @@ const DUST: DustLayer[] = Array.from({ length: DUST_LAYERS }, (_, li) => {
   const dots = Array.from({ length: DUST_PER_LAYER }, (_, di) => {
     const seed = li * DUST_PER_LAYER + di
     return {
-      x: Number((dustRand(seed * 2) * DUST_W).toFixed(1)),
+      x: Number(((dustRand(seed * 2) - 0.5) * 2 * DUST_SPAN).toFixed(1)),
       y: Number((DUST_TOP + dustRand(seed * 2 + 1) * DUST_H).toFixed(1)),
     }
   })
   return {
-    // 定向流动：所有层都朝播放头方向（向右）走，快慢不同 → 读起来是「光里的浮尘在流」
-    dx: 42 + Math.round(dustRand(li * 7 + 3) * 30), // 42~72px，单向
-    dy: Math.round((dustRand(li * 7 + 5) - 0.5) * 8), // ±4px 轻微起伏
-    dur: 9000 + Math.round(dustRand(li * 7 + 1) * 9000), // 9~18s 走完一段
+    // 自由浮动：来回摆（alternate），幅度小、周期错开 → 像浮在光里的一团尘
+    dx: Math.round((dustRand(li * 7 + 3) - 0.5) * 2 * 16), // ±16px
+    dy: Math.round((dustRand(li * 7 + 5) - 0.5) * 2 * 7), // ±7px
+    dur: 7000 + Math.round(dustRand(li * 7 + 1) * 7000), // 7~14s 一个来回
     del: -Math.round(dustRand(li * 7 + 2) * 12000), // 负延迟错峰
     twk: 6000 + Math.round(dustRand(li * 7 + 4) * 6000), // 6~12s 呼吸
     dots,
@@ -330,45 +352,37 @@ function pctFromClientX(cx: number): number {
   return Math.min(1, Math.max(0, (cx - r.left) / r.width))
 }
 
-/** 拖拽门槛：按到顶边只算「预备」，横向移动超过这个距离才真的进入拖拽。
-    之前是「按下即跳到点按处」，去点按钮/封面时蹭到顶边就整条跳进度，很容易误触。 */
-const DRAG_THRESHOLD = 4
-let dragArmed = false
-let dragStartX = 0
+/** 只有「播放条空白处」算拖拽/点击区域：控件（按钮、音量条、封面、队列面板）
+    自己处理指针，滚过它们不会改进度——这样点击和拖拽都能落在空白区上。 */
+function isBlankArea(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null
+  if (!el || typeof el.closest !== 'function') return false
+  return !el.closest('button, input, a, .cover, .queue-panel, .pslider')
+}
 
-function onRingPointerDown(e: PointerEvent) {
+function onBarPointerDown(e: PointerEvent) {
   const dur = player.duration || player.current?.durationSec || 0
   if (dur <= 0) return
-  dragArmed = true
-  dragStartX = e.clientX
+  if (!isBlankArea(e.target)) return // 控件自己处理，不抢指针
+  ringDragging.value = true
   // 合成指针（自动化测试）没有活动 pointer id，capture 失败不应阻断 seek
   try {
-    progressLineEl.value?.setPointerCapture(e.pointerId)
+    barEl.value?.setPointerCapture(e.pointerId)
   } catch {
     /* 忽略 */
   }
-  // 按下本身不 seek：等确认是拖拽（见 onRingPointerMove）
+  dragPct.value = pctFromClientX(e.clientX)
+  player.seek(dragPct.value * dur) // 点空白处 = 跳到该位置
 }
 
 function onRingPointerMove(e: PointerEvent) {
-  if (!dragArmed) return
-  if (!ringDragging.value) {
-    // 还没确认拖拽：位移不够就什么都不做（点一下顶边不会改进度）
-    if (Math.abs(e.clientX - dragStartX) < DRAG_THRESHOLD) return
-    ringDragging.value = true
-    dragPct.value = pctFromClientX(e.clientX)
-    const dur = player.duration || player.current?.durationSec || 0
-    if (dur > 0) player.seek(dragPct.value * dur) // 确认拖拽的第一下落位
-    return
-  }
+  if (!ringDragging.value) return
   // 拖动中只推进视觉进度，不反复 seek（频繁跳音频是卡顿感来源）
   dragPct.value = pctFromClientX(e.clientX)
 }
 
 function onRingPointerUp() {
-  if (!dragArmed) return
-  dragArmed = false
-  if (!ringDragging.value) return // 只是点了一下顶边：不动进度
+  if (!ringDragging.value) return
   const dur = player.duration || player.current?.durationSec || 0
   if (dur > 0) player.seek(dragPct.value * dur) // 松手落到最终位置
   ringDragging.value = false
@@ -380,6 +394,8 @@ function onRingPointerUp() {
     ref="barEl"
     class="player-bar glass"
     :class="{ capsule: localStyle === 'capsule', 'material-liquid': settings.barMaterial === 'liquid', 'material-frosted': settings.barMaterial === 'frosted', 'ring-dragging': ringDragging, 'bar-paused': !player.playing }"
+    :style="{ '--fc': particleColor(0) }"
+    @pointerdown="onBarPointerDown"
     @pointermove="onRingPointerMove"
     @pointerup="onRingPointerUp"
     @pointercancel="onRingPointerUp"
@@ -397,31 +413,30 @@ function onRingPointerUp() {
       <div class="pt-field">
         <!-- 氛围光：封面色薄雾铺在已播侧，没有任何线条 -->
         <div class="pt-wash" />
-        <!-- 光尘：只在拖拽时浮现（.pt-dusts 由 .ring-dragging 淡入），
-             每层一个 1px 圆点 + 一条 box-shadow，画满整层散点 -->
-        <div class="pt-dusts">
-          <div
-            v-for="(l, i) in DUST"
-            :key="i"
-            class="pt-dust"
-            :style="{
-              '--dx': `${l.dx}px`,
-              '--dy': `${l.dy}px`,
-              '--dur': `${l.dur}ms`,
-              '--del': `${l.del}ms`,
-              '--twk': `${l.twk}ms`,
-              boxShadow: dustShadow(l),
-            }"
-          />
-        </div>
+      </div>
+      <!-- 光尘：只在拖拽时浮现（.pt-dusts 由 .ring-dragging 淡入），整团挂在
+           播放头位置（--cp-x）随指针走，每层一个 1px 圆点 + 一条 box-shadow -->
+      <div class="pt-dusts">
+        <div
+          v-for="(l, i) in DUST"
+          :key="i"
+          class="pt-dust"
+          :style="{
+            '--dx': `${l.dx}px`,
+            '--dy': `${l.dy}px`,
+            '--dur': `${l.dur}ms`,
+            '--del': `${l.del}ms`,
+            '--twk': `${l.twk}ms`,
+            boxShadow: dustShadow(l),
+          }"
+        />
       </div>
     </div>
-    <!-- 拖拽热区：仍只占顶部 18px，避开封面与按钮（见下方 .capsule-progress 注释） -->
+    <!-- 顶部 12px 细带：只提供「抓手」光标提示（点/拖已由整条空白处接管） -->
     <div
       v-if="localStyle === 'capsule'"
       ref="progressLineEl"
       class="capsule-progress"
-      @pointerdown="onRingPointerDown"
     />
     <!-- 左：曲目信息 -->
     <div class="track">
@@ -659,6 +674,20 @@ function onRingPointerUp() {
   gap: 14px;
   padding: 0 18px;
   border-radius: 999px;
+  /* 空白处可点可拖：给「抓手」，控件自己再覆盖成 pointer */
+  cursor: grab;
+  user-select: none;
+}
+
+.player-bar.capsule button,
+.player-bar.capsule input,
+.player-bar.capsule .cover.clickable {
+  cursor: pointer;
+}
+
+/* 拖拽中：整条切成「抓住」的手型，控件此时也不响应指针 */
+.player-bar.capsule.ring-dragging {
+  cursor: grabbing;
 }
 
 /* 胶囊 + 液态玻璃：全边框 + 更强立体投影（折射感↑：边框/顶缘高光更亮，玻璃更「厚」） */
@@ -715,12 +744,35 @@ function onRingPointerUp() {
   border-radius: 999px;
   overflow: hidden; /* 氛围光与光尘都被裁进胶囊轮廓里 */
   pointer-events: none; /* 纯视觉层：命中一律交给下方 18px 热区 */
-  /* --fc 由行内写入（封面明亮色），这里派生出氛围光/光尘共用的颜色：
-     深色主题往白里提亮、浅色主题朝黑压一档（见主题令牌） */
-  --fc-mix: color-mix(in srgb, var(--fc) var(--dust-mix), var(--dust-tint));
   /* --cp-p 已在 main.css 用 @property 注册成 <number>，
      故这里的过渡能把 timeupdate（约 4Hz）的跳变抹成连续推移 */
   transition: --cp-p 160ms linear;
+}
+
+/* --fc 由页脚行内写入（封面明亮色），这里派生出氛围光/光尘/拖拽辉光共用的颜色：
+   深色主题往白里提亮、浅色主题朝黑压一档（见主题令牌）。
+   定义在页脚上，子元素与页脚自身的 ::after 辉光都能继承。 */
+.player-bar {
+  --fc-mix: color-mix(in srgb, var(--fc) var(--dust-mix), var(--dust-tint));
+}
+
+/* 拖拽时整条微微发光：外圈一层封面色辉光 + 内侧一层同色呼吸（不碰材质的 box-shadow） */
+.player-bar.capsule::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 1;
+  box-shadow:
+    0 0 38px color-mix(in srgb, var(--fc-mix) 55%, transparent),
+    inset 0 0 26px color-mix(in srgb, var(--fc-mix) 26%, transparent);
+  opacity: 0;
+  transition: opacity var(--dur-med) var(--ease-out);
+}
+
+.player-bar.capsule.ring-dragging::after {
+  opacity: 1;
 }
 
 .player-bar.ring-dragging .capsule-particles {
@@ -771,10 +823,17 @@ function onRingPointerUp() {
    暂停即停、reduced-motion 即静（见下方两条规则）。 */
 .capsule-particles .pt-dusts {
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  /* 整团挂在播放头位置：拖拽时跟着指针走（160ms 线性跟随，略带惯性） */
+  translate: var(--cp-x) 0;
+  transition:
+    translate 160ms linear,
+    opacity 200ms var(--ease-out);
   /* 光尘只在拖拽时出现：常态完全隐去，拖拽淡入、松手淡出 */
   opacity: 0;
-  transition: opacity 200ms var(--ease-out);
 }
 
 .player-bar.ring-dragging .capsule-particles .pt-dusts {
@@ -793,15 +852,14 @@ function onRingPointerUp() {
   background: transparent;
   opacity: var(--dust-opacity);
   will-change: transform, opacity;
-  /* 流动 + 呼吸：流动是单向 linear 循环（层与层速度不同），呼吸负责明暗闪动。
-     单向循环回到起点时是「整层散点集体回跳」，但每颗只有 ~2px 且数量极多，
-     视线抓不住单颗，读起来就是连续流动（这也是不用逐颗 DOM 的代价很小的地方） */
+  /* 自由浮动 + 呼吸：每层各自 ±16px/±7px 来回摆（alternate，周期 7~14s 错开），
+     呼吸负责明暗闪动 —— 读起来是「播放头附近浮着的一团光尘」 */
   animation:
-    dust-flow var(--dur) linear var(--del) infinite,
+    dust-float var(--dur) ease-in-out var(--del) infinite alternate,
     dust-twinkle var(--twk) ease-in-out var(--del) infinite;
 }
 
-@keyframes dust-flow {
+@keyframes dust-float {
   from {
     transform: translate3d(0, 0, 0);
   }
@@ -837,17 +895,15 @@ function onRingPointerUp() {
   }
 }
 
-/* 拖拽热区：顶部 12px 的横带 —— 再往下就压到播放键（40px 圆钮从 y=13 起），
-   点按钮时蹭到热区就会开始拖进度，是误触的主要来源。
-   防误触靠的是 onRingPointerDown 的「先预备、移动够 4px 才算拖拽」：
-   按下不 seek，点一下不会跳进度。本层无内容无底色，只负责命中。 */
+/* 顶部 12px 细带：只提供「抓手」光标提示（点/拖已由整条空白处接管）。
+   压在按钮上会挡住点击，所以只占顶部 12px —— 播放键从 y=13 起。 */
 .capsule-progress {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   height: 12px;
-  cursor: ew-resize;
+  cursor: grab;
   touch-action: none;
 }
 
