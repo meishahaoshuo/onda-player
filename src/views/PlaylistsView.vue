@@ -5,18 +5,16 @@ import CollageCover from '@/components/CollageCover.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import AppSwitch from '@/components/AppSwitch.vue'
 import FrostedPanel from '@/components/FrostedPanel.vue'
+import SongList from '@/components/SongList.vue'
 import { beginAlbumEnter, playAlbumEnter, playAlbumExit } from '@/services/pageTransition'
 import { extractBrightColors } from '@/services/palette'
 import * as db from '@/services/db'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { usePlaylistStore, playlistManualCoverId } from '@/stores/playlist'
-import { useFavoritesStore } from '@/stores/favorites'
 import { useStatsStore } from '@/stores/stats'
-import { useSongActions } from '@/composables/useSongActions'
 import { usePlaylistMenu } from '@/composables/usePlaylistMenu'
 import { useStaggerReveal } from '@/composables/useStaggerReveal'
-import { flyToPlayerFromRow } from '@/services/coverFlight'
 import { imageToCoverThumb } from '@/services/cover'
 import { useUiStore } from '@/stores/ui'
 import { formatDuration } from '@/utils/format'
@@ -29,9 +27,7 @@ import type { SongRecord } from '@/types'
 const library = useLibraryStore()
 const player = usePlayerStore()
 const playlistStore = usePlaylistStore()
-const favorites = useFavoritesStore()
 const stats = useStatsStore()
-const { openSongMenu } = useSongActions()
 const { open: openPlaylistMenu } = usePlaylistMenu()
 const ui = useUiStore()
 
@@ -242,7 +238,7 @@ function openPlaylist(p: { id: string }, e: MouseEvent) {
     gridSel: '.pl-grid',
     cardSel: '.pl-card',
     waveInfo: '.pl-info, .pl-sideinfo',
-    waveRows: '.drag-row',
+    waveRows: '.song-row',
   })
 }
 
@@ -326,11 +322,10 @@ function confirmAddSelected() {
   addSelected.value = new Set()
 }
 
-/* ---------- 右键菜单 ---------- */
+/* ---------- 播放（SongList 行点击；封面飞行由组件内部处理） ---------- */
 
-function onRowMenu(song: SongRecord, e: MouseEvent) {
-  if (!current.value) return
-  openSongMenu(e, song, { playlistId: current.value.id, context: currentSongs.value })
+function onPlaySong(song: SongRecord) {
+  void player.playSong(song, displaySongs.value)
 }
 
 /* ---------- 自定义排序：显示顺序与播放队列分离，排序选择持久化到 kv ---------- */
@@ -381,15 +376,6 @@ const displaySongs = computed<SongRecord[]>(() => {
     }
   }
 })
-
-/* ---------- 播放 ---------- */
-
-
-function onPlay(song: SongRecord, e?: MouseEvent) {
-  if (e) flyToPlayerFromRow(e)
-  if (!currentSongs.value) return
-  void player.playSong(song, currentSongs.value)
-}
 
 /* ---------- 头部流光光斑：取色自当前封面（手动封面优先，否则拼贴首图），带缓存 ---------- */
 const flowColors = ref<string[]>([])
@@ -459,7 +445,8 @@ const totalPlaysOfSongs = computed(() =>
 <template>
   <div class="playlists-root">
   <!-- 歌单详情：覆盖层，网格常驻其下 -->
-  <div v-if="current" ref="detailEl" class="playlist-detail">
+  <!-- scroll-host：详情层自身是滚动容器，SongList 的虚拟列表与定位悬浮球都就近找这个标记 -->
+  <div v-if="current" ref="detailEl" class="playlist-detail scroll-host">
     <!-- 歌单间切换的过渡：与顶部板块切换同款动向（key 变化触发 out-in）；
          打开/关闭由外层 v-if 走引力坍缩编排，初始挂载不播 enter，不会双重动画 -->
     <Transition name="view" mode="out-in">
@@ -530,34 +517,13 @@ const totalPlaysOfSongs = computed(() =>
       </div>
       <div v-if="sortOpen" class="sort-mask" @click="sortOpen = false" />
 
-      <div class="drag-list">
-        <div
-          v-for="song in displaySongs"
-          :key="song.path"
-          class="drag-row"
-          :class="{ playing: song.path === player.currentPath }"
-          @click="onPlay(song, $event)"
-          @contextmenu.prevent="onRowMenu(song, $event)"
-        >
-          <CoverImage :cover-id="song.coverId" :size="36" data-flight-cover />
-        <span class="drag-title">{{ song.title }}</span>
-        <span class="row-actions" @pointerdown.stop @click.stop>
-          <button
-            class="row-act"
-            :class="{ active: favorites.has(song.path) }"
-            :title="favorites.has(song.path) ? '取消收藏' : '收藏'"
-            @click="favorites.toggle(song.path)"
-          >
-            <AppIcon name="heart" :size="14" :class="{ filled: favorites.has(song.path) }" />
-          </button>
-          <button class="row-act" title="更多操作" @click="onRowMenu(song, $event)">
-            <AppIcon name="more" :size="14" />
-          </button>
-        </span>
-        <span class="drag-artist">{{ song.artist }}</span>
-        <span class="drag-dur">{{ formatDuration(song.durationSec) }}</span>
-      </div>
-      </div>
+      <!-- 与其他页面统一的 SongList：虚拟列表 + 悬浮操作 + 来源专辑 + 时长 + 定位悬浮球 -->
+      <SongList
+        :songs="displaySongs"
+        :current-path="player.currentPath"
+        :playlist-id="current.id"
+        @play="onPlaySong"
+      />
     </template>
       </div>
     </Transition>
@@ -1183,93 +1149,7 @@ const totalPlaysOfSongs = computed(() =>
   z-index: 4;
 }
 
-/* 播放列表 */
-.drag-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.drag-row {
-  position: relative;
-  display: grid;
-  /* 封面 | 标题 | 收藏·更多操作 | 歌手 | 时长 */
-  grid-template-columns: 36px minmax(0, 1fr) auto minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  height: 52px;
-  padding: 0 12px;
-  border-radius: 8px;
-  transition: background 0.12s var(--ease-out), opacity 0.12s var(--ease-out);
-}
-
-.drag-row:hover {
-  background: var(--bg-hover);
-}
-
-.drag-row.playing {
-  background: var(--bg-active);
-}
-
-.drag-title {
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.drag-artist {
-  font-size: 12px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.row-act {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  color: var(--text-tertiary);
-}
-
-/* 收藏/更多操作：常驻在标题与歌手之间的空白列（不再悬浮浮现） */
-.row-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.row-actions .row-act {
-  color: var(--text-tertiary);
-}
-
-.drag-dur {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-.row-act {
-  color: var(--text-secondary);
-  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
-}
-
-.row-act:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.row-act.active {
-  color: var(--accent);
-}
-
-.row-act :deep(svg.filled) {
-  fill: currentColor;
-}
+/* 详情歌曲列表复用全局 SongList 组件，行样式见 SongList.vue */
 
 /* 歌单列表 */
 .toolbar {

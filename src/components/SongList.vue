@@ -12,7 +12,7 @@ import { useFavoritesStore } from '@/stores/favorites'
 import { flyToPlayerFromRow } from '@/services/coverFlight'
 import type { SongRecord } from '@/types'
 
-const props = defineProps<{ songs: SongRecord[]; currentPath?: string | null; persistKey?: string; hideRowActions?: boolean }>()
+const props = defineProps<{ songs: SongRecord[]; currentPath?: string | null; persistKey?: string; hideRowActions?: boolean; playlistId?: string }>()
 const emit = defineEmits<{ play: [song: SongRecord] }>()
 
 const ROW_HEIGHT = 56
@@ -43,7 +43,8 @@ function onRowClick(song: SongRecord, e: MouseEvent) {
 }
 
 function onRowMenu(song: SongRecord, e: MouseEvent) {
-  openSongMenu(e, song, { context: props.songs })
+  // playlistId（歌单详情内）：菜单追加「从歌单移除」等歌单项
+  openSongMenu(e, song, { context: props.songs, playlistId: props.playlistId })
 }
 
 /** 悬停时测量本行「标题内容」的右端（从标题列左缘算起），写入 --title-end。
