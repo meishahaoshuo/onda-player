@@ -997,7 +997,7 @@ const totalPlaysOfSongs = computed(() =>
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  justify-content: space-between; /* 名字贴块顶、按钮贴块底，总高与原「名字+统计」块持平 */
 }
 
 .pl-name {
