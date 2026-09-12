@@ -493,12 +493,11 @@ const totalPlaysOfSongs = computed(() =>
         </button>
       </div>
 
-      <!-- 头部右侧信息卡：创建于 / 最近播放 / 累计播放 / 歌曲数（填平右侧留白） -->
+      <!-- 头部右侧信息卡：创建于 / 最近播放 / 累计播放（方案 D，填平右侧留白） -->
       <div class="pl-sideinfo">
         <div class="row"><span class="k">创建于</span><span class="v">{{ createdLabel }}</span></div>
         <div class="row"><span class="k">最近播放</span><span class="v">{{ lastPlayedLabel }}</span></div>
         <div class="row"><span class="k">累计播放</span><span class="v">{{ totalPlaysOfSongs }} <small>次</small></span></div>
-        <div class="row"><span class="k">歌曲数</span><span class="v">{{ currentSongs.length }}</span></div>
       </div>
     </header>
 
@@ -1014,7 +1013,7 @@ const totalPlaysOfSongs = computed(() =>
   align-self: flex-start;
 }
 
-/* 头部右侧信息卡：竖分隔线 + 四行小信息（创建于/最近播放/累计播放/歌曲数），填平右侧留白 */
+/* 头部右侧信息卡：竖分隔线 + 三行小信息（创建于/最近播放/累计播放），填平右侧留白 */
 .pl-sideinfo {
   position: relative;
   z-index: 2;
@@ -1031,8 +1030,7 @@ const totalPlaysOfSongs = computed(() =>
   display: flex;
   flex-direction: column;
   gap: 2px;
-  /* 行距收紧：四行总高必须 ≤ 封面 176px，否则信息卡成为行内最高元素、把名字顶出封面顶缘 */
-  padding: 4px 0;
+  padding: 9px 0;
 }
 
 .pl-sideinfo .row + .row {
@@ -1041,13 +1039,11 @@ const totalPlaysOfSongs = computed(() =>
 
 .pl-sideinfo .k {
   font-size: 11px;
-  line-height: 1.25;
   color: var(--text-tertiary);
 }
 
 .pl-sideinfo .v {
   font-size: 13.5px;
-  line-height: 1.25;
   font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
