@@ -58,9 +58,30 @@ function play() {
   close()
 }
 
+/** 随机播放：随机起曲 + 切随机模式（原详情头部「随机」按钮的能力） */
+function shufflePlay() {
+  if (!pl.value) return
+  const byPath = new Map(library.songs.map((s) => [s.path, s]))
+  const songs = pl.value.songPaths.map((p) => byPath.get(p)).filter((s) => s !== undefined)
+  if (songs.length > 0) {
+    player.setPlayMode('shuffle')
+    void player.playSong(songs[Math.floor(Math.random() * songs.length)] ?? songs[0], songs)
+  }
+  close()
+}
+
 function editCover() {
   if (!pl.value) return
   ui.playlistEditCover = pl.value.id
+  ui.activeView = 'playlists'
+  ui.detailKey = pl.value.id
+  close()
+}
+
+/** 添加歌曲：跳转详情并发出请求标记（PlaylistsView 消费后弹出添加弹层） */
+function addSongs() {
+  if (!pl.value) return
+  ui.playlistAddSongs = pl.value.id
   ui.activeView = 'playlists'
   ui.detailKey = pl.value.id
   close()
@@ -122,6 +143,8 @@ watch(
         </template>
         <template v-else>
           <button class="menu-item" @click="play"><AppIcon name="play" :size="14" /> 播放</button>
+          <button class="menu-item" @click="shufflePlay"><AppIcon name="shuffle" :size="14" /> 随机播放</button>
+          <button class="menu-item" @click="addSongs"><AppIcon name="plus" :size="14" /> 添加歌曲</button>
           <button class="menu-item" @click="openRename"><AppIcon name="lyrics" :size="14" /> 重命名</button>
           <button class="menu-item" @click="editCover"><AppIcon name="image" :size="14" /> 设置封面</button>
           <div class="menu-sep" />

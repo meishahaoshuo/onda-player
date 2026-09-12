@@ -25,6 +25,8 @@ export const useUiStore = defineStore('ui', () => {
   const folderRootId = ref<string | null>(null)
   /** 侧栏歌单右键「设置封面」请求：歌单 id，PlaylistsView 消费后清空 */
   const playlistEditCover = ref<string | null>(null)
+  /** 歌单右键「添加歌曲」请求：歌单 id，PlaylistsView 消费后清空（详情头部按钮已精简） */
+  const playlistAddSongs = ref<string | null>(null)
 
   /* ---------- 侧栏导航顺序（长按拖拽调整，localStorage 持久化） ---------- */
   const NAV_ORDER_KEY = 'ui.navOrder'
@@ -127,6 +129,7 @@ export const useUiStore = defineStore('ui', () => {
     playlistCreateRequested,
     playlistCreateSeedPaths,
     playlistEditCover,
+    playlistAddSongs,
     searchQuery,
     searchAll,
     folderRootId,

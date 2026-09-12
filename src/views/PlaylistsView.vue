@@ -71,6 +71,32 @@ watch(
   { flush: 'post' },
 )
 
+// 歌单右键「添加歌曲」：详情打开后弹出添加弹层（详情头部按钮已精简，入口收敛到右键菜单）
+watch(
+  () => ui.playlistAddSongs,
+  (id) => {
+    if (!id) return
+    ui.playlistAddSongs = null
+    if (current.value?.id === id) {
+      openAdd()
+      return
+    }
+    // 菜单已切 activeView/detailKey，等详情就位后补弹
+    const stop = watch(
+      current,
+      (pl) => {
+        if (pl?.id === id) {
+          openAdd()
+          stop()
+        }
+      },
+      { flush: 'post' },
+    )
+    window.setTimeout(() => stop(), 2000)
+  },
+  { flush: 'post' },
+)
+
 function consumeCreateRequest() {
   if (ui.playlistCreateRequested) {
     ui.playlistCreateRequested = false
@@ -231,14 +257,6 @@ function confirmCreate() {
   ui.openDetail(p.id)
 }
 
-const showRename = ref(false)
-const renameText = ref('')
-
-function confirmRename() {
-  if (current.value) playlistStore.rename(current.value.id, renameText.value)
-  showRename.value = false
-}
-
 const showAdd = ref(false)
 const addFilter = ref('')
 const addOnlyNew = ref(false)
@@ -361,13 +379,6 @@ const displaySongs = computed<SongRecord[]>(() => {
 
 /* ---------- 播放 ---------- */
 
-function playAll(shuffle = false) {
-  if (!current.value || currentSongs.value.length === 0) return
-  player.setPlayMode(shuffle ? 'shuffle' : 'loop')
-  const songs = currentSongs.value
-  const first = shuffle ? (songs[Math.floor(Math.random() * songs.length)] ?? songs[0]) : songs[0]
-  void player.playSong(first, songs)
-}
 
 function onPlay(song: SongRecord, e?: MouseEvent) {
   if (e) flyToPlayerFromRow(e)
@@ -408,11 +419,6 @@ const totalDurationLabel = computed(() =>
 
 /* ---------- 拖拽排序已移除：改为列表工具栏的自定义排序 ---------- */
 
-function confirmRemove() {
-  if (!current.value) return
-  playlistStore.remove(current.value.id)
-  ui.closeDetail()
-}
 </script>
 
 <template>
@@ -454,31 +460,10 @@ function confirmRemove() {
           <span>{{ currentSongs.length }}</span><span class="stat-label">歌曲</span>
           <span>{{ totalDurationLabel }}</span><span class="stat-label">时长</span>
         </div>
-        <div class="pl-actions">
-          <button class="action-btn primary" :disabled="currentSongs.length === 0" @click="playAll(false)">
-            <AppIcon name="play" :size="14" /> 播放全部
-          </button>
-          <button class="action-btn" :disabled="currentSongs.length === 0" @click="playAll(true)">
-            <AppIcon name="shuffle" :size="15" /> 随机
-          </button>
-          <button class="action-btn" @click="openAdd">
-            <AppIcon name="plus" :size="15" /> 添加歌曲
-          </button>
-          <button
-            class="action-btn"
-            @click="
-              renameText = current.name;
-              showRename = true
-            "
-          >
-            重命名
-          </button>
-          <button class="action-btn danger" @click="confirmRemove">删除歌单</button>
-        </div>
       </div>
     </header>
 
-    <div v-if="currentSongs.length === 0" class="empty-hint">歌单还是空的，点击「添加歌曲」吧</div>
+    <div v-if="currentSongs.length === 0" class="empty-hint">歌单还是空的，右键歌单选择「添加歌曲」吧</div>
     <template v-else>
       <!-- 列表工具栏：排序方式（持久化，全局生效） -->
       <div class="list-toolbar">
@@ -537,20 +522,6 @@ function confirmRemove() {
     </template>
       </div>
     </Transition>
-
-    <!-- 重命名弹层 -->
-    <teleport to="body">
-      <Transition name="modal"><div v-if="showRename" class="modal-mask" @click.self="showRename = false">
-        <FrostedPanel class="modal" radius="12px">
-          <h3 class="modal-title">重命名歌单</h3>
-          <input v-model="renameText" class="text-input" type="text" @keyup.enter="confirmRename" />
-          <div class="modal-actions">
-            <button class="action-btn" @click="showRename = false">取消</button>
-            <button class="action-btn primary" @click="confirmRename">确定</button>
-          </div>
-        </FrostedPanel>
-      </div></Transition>
-    </teleport>
 
     <!-- 添加歌曲：大号二级弹层（多选批量添加：全选/反选/仅看未添加） -->
     <teleport to="body">
@@ -1007,11 +978,6 @@ function confirmRemove() {
   margin-right: 10px;
 }
 
-.pl-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
 
 .action-btn {
   display: inline-flex;
