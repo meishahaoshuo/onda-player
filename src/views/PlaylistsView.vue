@@ -52,6 +52,7 @@ watch(
 )
 onBeforeUnmount(() => {
   plReveal.disconnect()
+  document.body.classList.remove('modal-open')
 })
 
 // 侧边栏在其他页面点击「新建歌单」时也会置位请求标记
@@ -260,6 +261,8 @@ function confirmCreate() {
 }
 
 const showAdd = ref(false)
+/* 弹层打开期间暂停页面呼吸光斑（backdrop-filter 逐帧重模糊是卡顿主因） */
+watch(showAdd, (v) => document.body.classList.toggle('modal-open', v))
 const addFilter = ref('')
 const addOnlyNew = ref(false)
 /** 多选批量添加的选中集 */
@@ -538,7 +541,6 @@ const totalPlaysOfSongs = computed(() =>
         >
           <CoverImage :cover-id="song.coverId" :size="36" data-flight-cover />
         <span class="drag-title">{{ song.title }}</span>
-        <span class="drag-artist">{{ song.artist }}</span>
         <span class="row-actions" @pointerdown.stop @click.stop>
           <button
             class="row-act"
@@ -551,10 +553,9 @@ const totalPlaysOfSongs = computed(() =>
           <button class="row-act" title="更多操作" @click="onRowMenu(song, $event)">
             <AppIcon name="more" :size="14" />
           </button>
-          <button class="row-act" title="从歌单移除" @click="playlistStore.removeSong(current!.id, song.path)">
-            <AppIcon name="close" :size="14" />
-          </button>
         </span>
+        <span class="drag-artist">{{ song.artist }}</span>
+        <span class="drag-dur">{{ formatDuration(song.durationSec) }}</span>
       </div>
       </div>
     </template>
@@ -1192,7 +1193,8 @@ const totalPlaysOfSongs = computed(() =>
 .drag-row {
   position: relative;
   display: grid;
-  grid-template-columns: 36px 1fr 1fr 32px;
+  /* 封面 | 标题 | 收藏·更多操作 | 歌手 | 时长 */
+  grid-template-columns: 36px minmax(0, 1fr) auto minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   height: 52px;
@@ -1234,24 +1236,21 @@ const totalPlaysOfSongs = computed(() =>
   color: var(--text-tertiary);
 }
 
-/* 悬停快捷操作（收藏/更多/移除）：透明底浮出行尾空白区，过渡浮现 */
+/* 收藏/更多操作：常驻在标题与歌手之间的空白列（不再悬浮浮现） */
 .row-actions {
-  position: absolute;
-  right: 8px;
   display: flex;
   align-items: center;
   gap: 2px;
-  opacity: 0;
-  transform: translateX(6px);
-  pointer-events: none;
-  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 
-.drag-row:hover .row-actions,
-.drag-row:focus-within .row-actions {
-  opacity: 1;
-  transform: translateX(0);
-  pointer-events: auto;
+.row-actions .row-act {
+  color: var(--text-tertiary);
+}
+
+.drag-dur {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 
 .row-act {
@@ -1567,8 +1566,8 @@ const totalPlaysOfSongs = computed(() =>
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 4px 2px;
+  gap: 8px;
+  padding: 6px 2px;
 }
 
 .add-row {
@@ -1576,27 +1575,23 @@ const totalPlaysOfSongs = computed(() =>
   grid-template-columns: 44px 1fr auto auto;
   gap: 14px;
   align-items: center;
-  height: 60px;
+  height: 62px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-item);
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+  transition: background var(--dur-fast) var(--ease-out);
+  /* 长列表性能：视口外的行跳过渲染（行高 62px） */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 62px;
 }
 
 .add-row:hover {
   background: var(--bg-hover);
 }
 
-/* S7 光晕行：无勾选标记——选中 = 实底 + 主题色描边 + 外发光，歌名转主题色 */
+/* 选中 = 侧边栏同款选中胶囊（--bg-active 圆角底，无描边无发光） */
 .add-row.checked {
-  background: var(--bg-base);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
-    0 0 18px color-mix(in srgb, var(--accent) 22%, transparent);
-}
-
-.add-row.checked .add-title {
-  color: var(--accent);
+  background: var(--bg-active);
 }
 
 .add-row.added {
@@ -1604,7 +1599,7 @@ const totalPlaysOfSongs = computed(() =>
   cursor: default;
 }
 
-/* 勾选框仅作状态载体：视觉隐藏（行整体即勾选区），键盘聚焦时整行亮环 */
+/* 勾选框仅作状态载体：视觉隐藏（行整体即勾选区） */
 .add-check {
   position: absolute;
   width: 1px;
@@ -1615,9 +1610,7 @@ const totalPlaysOfSongs = computed(() =>
 }
 
 .add-row:has(.add-check:focus-visible) {
-  box-shadow:
-    inset 0 0 0 2px var(--accent),
-    0 0 18px color-mix(in srgb, var(--accent) 22%, transparent);
+  background: var(--bg-active);
 }
 
 .add-cover :deep(.cover-img),
