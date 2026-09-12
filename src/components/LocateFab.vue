@@ -98,8 +98,10 @@ watch(
 
 const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
 
-/** 拟物指向：行在下方 = 180deg（朝下），在上方 = 0deg（朝上） */
-const dirAngle = computed(() => (pointDown.value ? '180deg' : '0deg'))
+/** 拟物指向：灰色尾翼指向歌曲——行在下方 = 0deg（灰尾朝下），在上方 = 180deg（罗盘转半圈、灰尾朝上） */
+const dirAngle = computed(() => (pointDown.value ? '0deg' : '180deg'))
+/** 旋钮指示点本身是「指针」：直接指向歌曲（行在下方 = 180deg） */
+const knobDirAngle = computed(() => (pointDown.value ? '180deg' : '0deg'))
 </script>
 
 <template>
@@ -127,7 +129,7 @@ const dirAngle = computed(() => (pointDown.value ? '180deg' : '0deg'))
         <span class="orb" aria-hidden="true"></span>
       </template>
       <template v-else-if="settings.locateFabStyle === 'knob'">
-        <span class="face" aria-hidden="true"><span class="dot"></span></span>
+        <span class="face" :style="{ transform: `rotate(${knobDirAngle})` }" aria-hidden="true"><span class="dot"></span></span>
       </template>
       <template v-else>
         <span class="labelbar" aria-hidden="true"></span>
@@ -220,6 +222,7 @@ const dirAngle = computed(() => (pointDown.value ? '180deg' : '0deg'))
 .locate-fab .tick.w { transform: rotate(270deg); }
 
 /* 磁针旋转座：随歌曲方位转（上方 0° / 下方 180°），弹簧过渡 + 常态 ±3° 微颤 */
+/* 磁针旋转座：随歌曲方位转（上方 0° / 下方 180°），弹簧过渡；针身保持原版双锥外形 */
 .locate-fab .needle-mount {
   position: absolute;
   left: 50%;
@@ -229,16 +232,6 @@ const dirAngle = computed(() => (pointDown.value ? '180deg' : '0deg'))
   transform: rotate(var(--dir, 0deg));
   transition: transform 0.9s var(--ease-spring);
   pointer-events: none;
-}
-
-.locate-fab .needle-mount::after {
-  content: '';
-  position: absolute;
-  left: -3px;
-  top: 0;
-  border-left: 3px solid transparent;
-  border-right: 3px solid transparent;
-  border-top: 6px solid rgba(140, 145, 158, 0.9);
 }
 
 .locate-fab .needle {
@@ -251,8 +244,18 @@ const dirAngle = computed(() => (pointDown.value ? '180deg' : '0deg'))
   border-right: 3px solid transparent;
   border-bottom: 16px solid var(--halo-c, var(--accent));
   filter: drop-shadow(0 0 2.5px color-mix(in srgb, var(--halo-c, var(--accent)) 55%, transparent));
-  animation: fab-needle-idle 2.8s ease-in-out infinite alternate;
+  animation: fab-settle 3.6s var(--ease-out) infinite;
   pointer-events: none;
+}
+
+.locate-fab .needle::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: 16px;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 6px solid rgba(140, 145, 158, 0.9);
 }
 
 .locate-fab .cap {
@@ -268,9 +271,12 @@ const dirAngle = computed(() => (pointDown.value ? '180deg' : '0deg'))
   pointer-events: none;
 }
 
-@keyframes fab-needle-idle {
-  from { transform: rotate(-3deg); }
-  to { transform: rotate(3deg); }
+@keyframes fab-settle {
+  0% { transform: rotate(-38deg); }
+  24% { transform: rotate(14deg); }
+  46% { transform: rotate(-7deg); }
+  66% { transform: rotate(4deg); }
+  82%, 100% { transform: rotate(0deg); }
 }
 
 /* ── 露珠：品牌「澜」的水滴——三层折光 + 封面色内斑，轮廓表面张力呼吸 ── */
@@ -362,12 +368,11 @@ const dirAngle = computed(() => (pointDown.value ? '180deg' : '0deg'))
     0 4px 10px rgba(0, 0, 0, 0.18);
 }
 
-/* 旋钮刻度盘：整体随歌曲方位转（指示点始终指向目标方向），弹簧过渡 */
+/* 旋钮刻度盘：指示点直接指向歌曲方位（行内样式注入旋转角），弹簧过渡 */
 .locate-fab .face {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  transform: rotate(var(--dir, 0deg));
   transition: transform 0.9s var(--ease-spring);
   pointer-events: none;
 }

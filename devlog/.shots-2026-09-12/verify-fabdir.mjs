@@ -90,5 +90,6 @@ report.dropAbove = await evaluate(`(() => {
   return { dir: fab?.style.getPropertyValue('--dir'), down: fab?.classList.contains('down'), orb: orb ? getComputedStyle(orb).transform.slice(0, 40) : null }
 })()`)
 
+await send('Page.captureScreenshot', { format: 'png', clip: { x: 1040, y: 480, width: 400, height: 420, scale: 2 } }).then((sh) => fs.writeFileSync('D:/项目/音乐播放器/devlog/.shots-2026-09-12/fabdir-compass.png', Buffer.from(sh.data, 'base64')))
 console.log(JSON.stringify(report, null, 2))
 ws.close(); proc.kill()
