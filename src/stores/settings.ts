@@ -106,6 +106,14 @@ function loadBarMaterial(): BarMaterial {
   return localStorage.getItem(BAR_MATERIAL_KEY) === 'frosted' ? 'frosted' : 'liquid'
 }
 
+/** 定位悬浮球外观：compass 罗盘 / drop 露珠 / knob 电木旋钮 / tape 迷你卡带 */
+export type LocateFabStyle = 'compass' | 'drop' | 'knob' | 'tape'
+const LOCATE_FAB_KEY = 'settings.locateFabStyle'
+function loadLocateFabStyle(): LocateFabStyle {
+  const v = localStorage.getItem(LOCATE_FAB_KEY)
+  return v === 'drop' || v === 'knob' || v === 'tape' ? v : 'compass'
+}
+
 /**
  * 主题设置：跟随系统 / 深色 / 浅色，切换即时生效并持久化。
  * 注：第 2 阶段 IndexedDB 就绪后仍保留 localStorage——主题需要在
@@ -121,6 +129,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const playerStyle = ref<PlayerStyle>(loadPlayerStyle())
   const barMorph = ref<BarMorph>(loadBarMorph())
   const barMaterial = ref<BarMaterial>(loadBarMaterial())
+  /** 定位悬浮球外观（拟物四形态，见 LocateFab 组件） */
+  const locateFabStyle = ref<LocateFabStyle>(loadLocateFabStyle())
   const autoRestoreQueue = ref(loadAutoRestore())
   const autoResume = ref(loadAutoResume())
   /** 自定义主题色：'' = 默认海军蓝 */
@@ -227,6 +237,12 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(ACCENT_KEY, accentColor.value)
   }
 
+  /** 设置定位悬浮球外观 */
+  function setLocateFabStyle(v: LocateFabStyle) {
+    locateFabStyle.value = v
+    localStorage.setItem(LOCATE_FAB_KEY, v)
+  }
+
   return {
     themeMode,
     resolvedTheme,
@@ -246,6 +262,8 @@ export const useSettingsStore = defineStore('settings', () => {
     setBarMorph,
     barMaterial,
     setBarMaterial,
+    locateFabStyle,
+    setLocateFabStyle,
     autoRestoreQueue,
     setAutoRestoreQueue,
     autoResume,

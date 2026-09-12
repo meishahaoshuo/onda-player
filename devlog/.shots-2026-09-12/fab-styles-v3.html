@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<title>ONDA·澜 — 定位悬浮球 · 拟物化方案 v3</title>
+<style>
+:root, :root[data-theme='dark'] {
+  --bg-base: #0a0a0a;
+  --bg-hover: rgba(255, 255, 255, 0.08);
+  --accent: #5c7ce0;
+  --text-primary: #ffffff;
+  --text-tertiary: #7c7c80;
+  --border-subtle: rgba(255, 255, 255, 0.12);
+  --row-line: rgba(255, 255, 255, 0.05);
+  --card: rgba(255, 255, 255, 0.03);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --cover: #d9a158;
+  --metal-hi: rgba(255, 255, 255, 0.5);
+}
+:root[data-theme='light'] {
+  --bg-base: #ffffff;
+  --bg-hover: rgba(0, 0, 0, 0.05);
+  --accent: #172554;
+  --text-primary: #000000;
+  --text-tertiary: #aeaeb2;
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --row-line: rgba(0, 0, 0, 0.04);
+  --card: rgba(0, 0, 0, 0.025);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --cover: #b3742e;
+  --metal-hi: rgba(255, 255, 255, 0.95);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg-base); color: var(--text-primary);
+  font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  padding: 28px 34px 60px; transition: background 0.3s, color 0.3s;
+}
+.head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+h1 { font-size: 19px; font-weight: 600; }
+.sub { color: var(--text-tertiary); font-size: 12.5px; margin-bottom: 22px; }
+.toggle { border: 1px solid var(--border-subtle); background: none; color: var(--text-secondary); font-size: 12.5px; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; max-width: 1060px; }
+.card { border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; background: var(--card); }
+.card h2 { font-size: 13.5px; padding: 12px 16px 2px; font-weight: 600; }
+.card p { font-size: 12px; color: var(--text-tertiary); padding: 4px 16px 12px; line-height: 1.55; }
+.mock { position: relative; height: 190px; overflow: hidden; border-top: 1px solid var(--border-subtle); padding: 10px 14px; }
+.mrow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--row-line); }
+.mcover { width: 26px; height: 26px; border-radius: 6px; background: linear-gradient(135deg, #3a3f52, #23263a); flex: none; }
+.mrow.lit .mcover { background: linear-gradient(135deg, #d9a158, #8a5a2c); }
+.mline { height: 8px; border-radius: 4px; background: var(--bg-hover); }
+.mline.t { width: 34%; } .mline.a { width: 18%; } .mdot { flex: 1; } .mline.d { width: 26px; }
+.mrow.playing .mline.t { background: var(--accent); opacity: 0.75; }
+.zoom { display: flex; align-items: center; gap: 16px; padding: 10px 16px 16px; }
+.zoom .stage { position: relative; width: 92px; height: 92px; border-radius: 50%; background: var(--bg-hover); display: flex; align-items: center; justify-content: center; }
+.zoom .fab { position: static; transform: scale(2.6); }
+.zoom .stage .fab:hover { transform: scale(2.75); }
+.zoom span { font-size: 11.5px; color: var(--text-tertiary); line-height: 1.6; }
+
+.fab {
+  position: absolute; right: 16px; bottom: 14px;
+  width: 26px; height: 26px; border-radius: 50%; border: none; cursor: pointer;
+  transition: transform 0.25s var(--ease-spring);
+  -webkit-tap-highlight-color: transparent;
+}
+.fab:hover { transform: scale(1.09); }
+
+/* ── A 罗盘：金属圈 + 玻璃面 + 封面色磁针，指针带弹簧摆动回正 ── */
+.fab-compass {
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.35), transparent 45%),
+    radial-gradient(circle at 50% 55%, rgba(30, 32, 40, 0.92), rgba(12, 12, 16, 0.96) 75%);
+  box-shadow:
+    0 0 0 1.5px rgba(190, 195, 205, 0.35),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.22),
+    0 5px 12px rgba(0, 0, 0, 0.45);
+}
+:root[data-theme='light'] .fab-compass {
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.7), transparent 45%),
+    radial-gradient(circle at 50% 55%, rgba(245, 246, 250, 0.95), rgba(225, 228, 236, 0.98) 75%);
+  box-shadow:
+    0 0 0 1.5px rgba(140, 145, 158, 0.5),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.08),
+    inset 0 1px 1px rgba(255, 255, 255, 0.9),
+    0 5px 12px rgba(0, 0, 0, 0.18);
+}
+.fab-compass .tick { position: absolute; left: 50%; top: 50%; width: 1px; height: 22px; margin: -11px 0 0 -0.5px; }
+.fab-compass .tick::before { content: ''; position: absolute; left: 0; top: 0; width: 1px; height: 3px; background: var(--text-tertiary); }
+.fab-compass .tick.e { transform: rotate(90deg); }
+.fab-compass .tick.s { transform: rotate(180deg); }
+.fab-compass .tick.w { transform: rotate(270deg); }
+.fab-compass .needle {
+  position: absolute; left: 50%; top: 50%; width: 0; height: 0; margin: -8px 0 0 -3px;
+  border-left: 3px solid transparent; border-right: 3px solid transparent;
+  border-bottom: 16px solid var(--cover);
+  filter: drop-shadow(0 0 2.5px color-mix(in srgb, var(--cover) 55%, transparent));
+  transform-origin: 50% 50%;
+  animation: settle 3.6s var(--ease-out) infinite;
+}
+.fab-compass .needle::after {
+  content: ''; position: absolute; left: -3px; top: 16px;
+  border-left: 3px solid transparent; border-right: 3px solid transparent;
+  border-top: 6px solid rgba(140, 145, 158, 0.9);
+}
+.fab-compass .cap { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #888); box-shadow: 0 0 2px rgba(0, 0, 0, 0.6); }
+@keyframes settle {
+  0% { transform: rotate(-38deg); }
+  24% { transform: rotate(14deg); }
+  46% { transform: rotate(-7deg); }
+  66% { transform: rotate(4deg); }
+  82%, 100% { transform: rotate(0deg); }
+}
+
+/* ── B 露珠：品牌「澜」的水滴，实体折光 + 内部封面色光斑，悬停轻微颤动 ── */
+.fab-drop {
+  border-radius: 50% 50% 50% 50% / 58% 58% 42% 42%;
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.95) 0 9%, rgba(255, 255, 255, 0.28) 16%, transparent 36%),
+    radial-gradient(circle at 62% 78%, color-mix(in srgb, var(--cover) 75%, transparent) 0 20%, transparent 50%),
+    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.16), rgba(120, 150, 190, 0.22) 70%, rgba(70, 100, 150, 0.32) 100%);
+  box-shadow:
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.6),
+    inset 0 -2px 3px color-mix(in srgb, var(--cover) 35%, rgba(0, 0, 40, 0.25)),
+    0 5px 12px rgba(0, 0, 0, 0.4);
+  animation: quiver 3.8s ease-in-out infinite;
+}
+:root[data-theme='light'] .fab-drop {
+  box-shadow:
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.95),
+    inset 0 -2px 3px color-mix(in srgb, var(--cover) 30%, rgba(0, 0, 60, 0.14)),
+    0 5px 12px rgba(0, 0, 0, 0.16);
+}
+.fab-drop .gleam { position: absolute; left: 30%; top: 18%; width: 4px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.85); transform: rotate(18deg); filter: blur(0.4px); }
+@keyframes quiver {
+  0%, 100% { border-radius: 50% 50% 50% 50% / 58% 58% 42% 42%; }
+  30% { border-radius: 48% 52% 51% 49% / 56% 60% 40% 44%; }
+  60% { border-radius: 52% 48% 49% 51% / 60% 56% 44% 40%; }
+}
+
+/* ── C 电木旋钮：滚花外缘 + 拉丝面 + 封面色指示点，悬停带「档位感」转一下 ── */
+.fab-knob {
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.3), transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(52, 54, 62, 0.95) 0 58%, transparent 60%),
+    repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.14) 0 5deg, rgba(0, 0, 0, 0.28) 5deg 10deg);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.25),
+    0 4px 10px rgba(0, 0, 0, 0.45);
+}
+:root[data-theme='light'] .fab-knob {
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.75), transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(238, 240, 246, 0.98) 0 58%, transparent 60%),
+    repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.5) 0 5deg, rgba(0, 0, 0, 0.12) 5deg 10deg);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.1),
+    inset 0 1px 1px rgba(255, 255, 255, 0.9),
+    0 4px 10px rgba(0, 0, 0, 0.18);
+}
+.fab-knob .dot {
+  position: absolute; left: 50%; top: 50%; width: 3.5px; height: 3.5px; margin: -10.5px 0 0 -1.75px;
+  border-radius: 50%; background: var(--cover);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--cover) 65%, transparent);
+}
+.fab-knob:hover { transform: rotate(32deg) scale(1.09); }
+.fab-knob:hover .dot { box-shadow: 0 0 6px color-mix(in srgb, var(--cover) 90%, transparent); }
+
+/* ── D 迷你卡带：实体磁带，双带轮慢转，标签条用封面色 ── */
+.fab-tape {
+  width: 32px; height: 21px; border-radius: 4px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 40%),
+    linear-gradient(180deg, #26262c, #17171b);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 0 1px 1px rgba(255, 255, 255, 0.2),
+    0 4px 10px rgba(0, 0, 0, 0.45);
+  border-radius: 4px;
+}
+:root[data-theme='light'] .fab-tape {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent 40%), linear-gradient(180deg, #f2f2f5, #dcdce2);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 4px 10px rgba(0, 0, 0, 0.16);
+}
+.fab-tape .labelbar {
+  position: absolute; left: 3px; right: 3px; top: 2.5px; height: 6px; border-radius: 2px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cover) 80%, #fff), var(--cover));
+  box-shadow: inset 0 0.5px 0.5px rgba(255, 255, 255, 0.55), inset 0 -0.5px 0.5px rgba(0, 0, 0, 0.25);
+}
+.fab-tape .reel {
+  position: absolute; top: 11px; width: 6.5px; height: 6.5px; border-radius: 50%;
+  background: radial-gradient(circle, var(--bg-base) 0 1.5px, rgba(200, 205, 215, 0.75) 1.5px 2px, transparent 2.5px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.5);
+  animation: reel 2.8s linear infinite;
+}
+.fab-tape .reel.l { left: 5px; }
+.fab-tape .reel.r { right: 5px; animation-duration: 3.4s; }
+@keyframes reel { to { transform: rotate(360deg); } }
+.fab-tape .window { position: absolute; left: 9px; right: 9px; top: 10.5px; height: 8px; border-radius: 2px; background: rgba(0, 0, 0, 0.28); }
+:root[data-theme='light'] .fab-tape .window { background: rgba(0, 0, 0, 0.08); }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>定位悬浮球 · 拟物化方案 v3</h1>
+    <button class="toggle" onclick="const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'">切换深 / 浅主题</button>
+  </div>
+  <p class="sub">26px（卡带 32×21），全部无外圈涟漪。悬停看交互细节，2.6× 放大区看材质。回字母或混搭。</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>A · 罗盘</h2>
+      <p>「定位」这个词最正统的拟物：金属包边、玻璃盘面、方位刻度，封面色磁针带弹簧式摆动——甩开、回弹、晃两下、归北，像刚被碰过的真指南针。寓意与功能完全同构：它就是用来「回到原点」的。</p>
+      <div class="mock">
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow playing lit"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <button class="fab fab-compass"><span class="tick"></span><span class="tick e"></span><span class="tick s"></span><span class="tick w"></span><span class="needle"></span><span class="cap"></span></button>
+      </div>
+      <div class="zoom">
+        <div class="stage"><button class="fab fab-compass"><span class="tick"></span><span class="tick e"></span><span class="tick s"></span><span class="tick w"></span><span class="needle"></span><span class="cap"></span></button></div>
+        <span>26px · 金属包边 + 玻璃盘面<br>磁针 3.6s 弹簧摆动归北（封面色）</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>B · 露珠</h2>
+      <p>品牌「澜」的字面化身：一滴饱满的水珠。左上实心高光、内部封面色光斑、底部折射暗边，整个水滴以极缓的频率改变轮廓——像表面张力在呼吸。悬停时轮廓颤得更明显。全方案里最贴品牌的一颗。</p>
+      <div class="mock">
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow playing lit"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <button class="fab fab-drop"><span class="gleam"></span></button>
+      </div>
+      <div class="zoom">
+        <div class="stage"><button class="fab fab-drop"><span class="gleam"></span></button></div>
+        <span>26px · 三层折光 + 封面色内斑<br>轮廓 3.8s 表面张力呼吸</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>C · 电木旋钮</h2>
+      <p>老收音机上的实体旋钮：外缘一圈滚花齿、拉丝金属面、封面色指示点。悬停时旋钮「拧」过 32° 一个档位再稳住——弹簧缓动带出机械阻尼感。经典音响件，和播放器的气质天然契合。</p>
+      <div class="mock">
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow playing lit"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <button class="fab fab-knob"><span class="dot"></span></button>
+      </div>
+      <div class="zoom">
+        <div class="stage"><button class="fab fab-knob"><span class="dot"></span></button></div>
+        <span>26px · 滚花外缘 + 拉丝面<br>悬停拧 32° 一个档位（弹簧回稳）</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>D · 迷你卡带</h2>
+      <p>一盘真的小磁带：塑料壳体、封面色标签条、透明观察窗里双带轮缓缓走带。唯一一枚方形——在一片圆形按钮里反而最有辨识度，「实体感」直接来自我们最熟悉的音乐物件。</p>
+      <div class="mock">
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow playing lit"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <button class="fab fab-tape"><span class="labelbar"></span><span class="window"></span><span class="reel l"></span><span class="reel r"></span></button>
+      </div>
+      <div class="zoom">
+        <div class="stage"><button class="fab fab-tape"><span class="labelbar"></span><span class="window"></span><span class="reel l"></span><span class="reel r"></span></button></div>
+        <span>32×21px · 塑料壳 + 封面色标签<br>双带轮异步慢转（暂停时停转）</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

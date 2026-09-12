@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useLibraryStore } from '@/stores/library'
-import { useSettingsStore } from '@/stores/settings'
+import { useSettingsStore, type LocateFabStyle } from '@/stores/settings'
 import { useStatsStore } from '@/stores/stats'
 import {
   HOTKEY_ACTIONS,
@@ -257,6 +257,31 @@ function onRecordKeydown(e: KeyboardEvent) {
                 @click="settings.setBarMorph('slide')"
               >
                 交叉滑移
+              </button>
+            </div>
+          </div>
+
+          <!-- 定位悬浮球 -->
+          <p class="panel-sub accent-heading">定位悬浮球</p>
+          <div class="opt-row">
+            <div class="opt-text">
+              <span class="opt-name">外观</span>
+              <span class="opt-desc">歌曲列表里「回到正在播放」的拟物悬浮球，滚出视野时浮现</span>
+            </div>
+            <div class="seg-choice">
+              <button
+                v-for="s in [
+                  { id: 'compass', label: '罗盘' },
+                  { id: 'drop', label: '露珠' },
+                  { id: 'knob', label: '旋钮' },
+                  { id: 'tape', label: '卡带' },
+                ]"
+                :key="s.id"
+                class="seg-choice-btn"
+                :class="{ on: settings.locateFabStyle === s.id }"
+                @click="settings.setLocateFabStyle(s.id as LocateFabStyle)"
+              >
+                {{ s.label }}
               </button>
             </div>
           </div>
