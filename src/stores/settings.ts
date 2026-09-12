@@ -106,19 +106,10 @@ function loadBarMaterial(): BarMaterial {
   return localStorage.getItem(BAR_MATERIAL_KEY) === 'frosted' ? 'frosted' : 'liquid'
 }
 
-/** 定位悬浮球外观：compass 罗盘 / drop 露珠 / knob 电木旋钮 / tape 迷你卡带 /
-    scale 吊簧秤 / yoyo 悠悠球 / float 钓鱼浮漂 / balloon 热气球 */
-export type LocateFabStyle =
-  | 'compass'
-  | 'drop'
-  | 'knob'
-  | 'tape'
-  | 'scale'
-  | 'yoyo'
-  | 'float'
-  | 'balloon'
+/** 定位悬浮球外观：compass 罗盘 / knob 电木旋钮 / tape 迷你卡带 */
+export type LocateFabStyle = 'compass' | 'knob' | 'tape'
 const LOCATE_FAB_KEY = 'settings.locateFabStyle'
-const LOCATE_FAB_STYLES: LocateFabStyle[] = ['drop', 'knob', 'tape', 'scale', 'yoyo', 'float', 'balloon']
+const LOCATE_FAB_STYLES: LocateFabStyle[] = ['knob', 'tape']
 function loadLocateFabStyle(): LocateFabStyle {
   const v = localStorage.getItem(LOCATE_FAB_KEY)
   return LOCATE_FAB_STYLES.includes(v as LocateFabStyle) ? (v as LocateFabStyle) : 'compass'

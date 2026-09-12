@@ -32,7 +32,7 @@ await evaluate(`__musicTest.playAt(0)`)
 await sleep(600)
 
 const report = {}
-for (const v of ['compass', 'drop', 'knob', 'tape']) {
+for (const v of ['compass', 'knob', 'tape']) {
   await evaluate(`localStorage.setItem('settings.locateFabStyle', '${v}')`)
   await send('Page.navigate', { url: 'http://localhost:5180/' })
   await sleep(2200)
