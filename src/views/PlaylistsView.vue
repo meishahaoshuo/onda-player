@@ -14,11 +14,12 @@ import { usePlaylistStore, playlistManualCoverId } from '@/stores/playlist'
 import { useFavoritesStore } from '@/stores/favorites'
 import { useStatsStore } from '@/stores/stats'
 import { useSongActions } from '@/composables/useSongActions'
+import { usePlaylistMenu } from '@/composables/usePlaylistMenu'
 import { useStaggerReveal } from '@/composables/useStaggerReveal'
 import { flyToPlayerFromRow } from '@/services/coverFlight'
 import { imageToCoverThumb } from '@/services/cover'
 import { useUiStore } from '@/stores/ui'
-import { formatDuration, formatTotalDuration } from '@/utils/format'
+import { formatDuration } from '@/utils/format'
 import type { SongRecord } from '@/types'
 
 /**
@@ -31,6 +32,7 @@ const playlistStore = usePlaylistStore()
 const favorites = useFavoritesStore()
 const stats = useStatsStore()
 const { openSongMenu } = useSongActions()
+const { open: openPlaylistMenu } = usePlaylistMenu()
 const ui = useUiStore()
 
 onMounted(() => {
@@ -412,9 +414,39 @@ watch(
   { immediate: true },
 )
 
-/** 歌单总时长（统计行展示） */
-const totalDurationLabel = computed(() =>
-  formatTotalDuration(currentSongs.value.reduce((sum, s) => sum + (s.durationSec ?? 0), 0)),
+/* ---------- 头部右侧信息卡：创建于 / 最近播放 / 累计播放 ---------- */
+const createdLabel = computed(() => {
+  const ts = current.value?.createdAt
+  if (!ts) return '—'
+  const d = new Date(ts)
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+})
+
+/** 相对时间：今天 / 昨天 / N 天前 / N 周前 / 具体日期（超过一个月） */
+function relativeDayLabel(ts: number): string {
+  const day = 86400000
+  const diff = Math.floor((Date.now() - ts) / day)
+  if (diff <= 0) return '今天'
+  if (diff === 1) return '昨天'
+  if (diff < 7) return `${diff} 天前`
+  if (diff < 30) return `${Math.floor(diff / 7)} 周前`
+  const d = new Date(ts)
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** 歌单内歌曲最近一次播放（取各曲最大时间戳） */
+const lastPlayedLabel = computed(() => {
+  let max = 0
+  for (const s of currentSongs.value) {
+    const ts = stats.lastPlayed[s.path] ?? 0
+    if (ts > max) max = ts
+  }
+  return max ? relativeDayLabel(max) : '尚未播放'
+})
+
+/** 歌单内歌曲累计播放次数求和 */
+const totalPlaysOfSongs = computed(() =>
+  currentSongs.value.reduce((sum, s) => sum + (stats.counts[s.path] ?? 0), 0),
 )
 
 /* ---------- 拖拽排序已移除：改为列表工具栏的自定义排序 ---------- */
@@ -458,8 +490,14 @@ const totalDurationLabel = computed(() =>
         <h1 class="pl-name">{{ current.name }}</h1>
         <div class="pl-stats">
           <span>{{ currentSongs.length }}</span><span class="stat-label">歌曲</span>
-          <span>{{ totalDurationLabel }}</span><span class="stat-label">时长</span>
         </div>
+      </div>
+
+      <!-- 头部右侧信息卡：创建于 / 最近播放 / 累计播放（方案 D，填平右侧留白） -->
+      <div class="pl-sideinfo">
+        <div class="row"><span class="k">创建于</span><span class="v">{{ createdLabel }}</span></div>
+        <div class="row"><span class="k">最近播放</span><span class="v">{{ lastPlayedLabel }}</span></div>
+        <div class="row"><span class="k">累计播放</span><span class="v">{{ totalPlaysOfSongs }} <small>次</small></span></div>
       </div>
     </header>
 
@@ -660,6 +698,7 @@ const totalDurationLabel = computed(() =>
         :key="p.id"
         class="pl-card"
         @click="openPlaylist(p, $event)"
+        @contextmenu.prevent="openPlaylistMenu(p.id, $event)"
       >
         <CoverImage
           v-if="cardCoverOverride.get(p.id)"
@@ -970,6 +1009,48 @@ const totalDurationLabel = computed(() =>
   align-items: baseline;
   gap: 6px;
   font-size: 14px;
+}
+
+/* 头部右侧信息卡：竖分隔线 + 三行小信息（创建于/最近播放/累计播放），填平右侧留白 */
+.pl-sideinfo {
+  position: relative;
+  z-index: 2;
+  margin-left: auto;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  border-left: 1px solid var(--border-subtle);
+  padding-left: 26px;
+}
+
+.pl-sideinfo .row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 0;
+}
+
+.pl-sideinfo .row + .row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.pl-sideinfo .k {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.pl-sideinfo .v {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.pl-sideinfo .v small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-secondary);
 }
 
 .stat-label {

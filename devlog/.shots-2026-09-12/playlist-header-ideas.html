@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<title>ONDA·澜 — 歌单头部信息方案</title>
+<style>
+:root, :root[data-theme='dark'] {
+  --bg-base: #0a0a0a; --bg-panel: rgba(28, 28, 30, 0.66);
+  --text-primary: #ffffff; --text-secondary: #a1a1a6; --text-tertiary: #7c7c80;
+  --border-subtle: rgba(255, 255, 255, 0.12); --accent: #5c7ce0;
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+}
+:root[data-theme='light'] {
+  --bg-base: #f5f2ee; --bg-panel: #ffffff;
+  --text-primary: #000000; --text-secondary: #86868b; --text-tertiary: #aeaeb2;
+  --border-subtle: rgba(0, 0, 0, 0.08); --accent: #172554;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg-base); color: var(--text-primary); font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; padding: 28px 34px 60px; transition: background 0.3s; }
+.head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+h1 { font-size: 19px; font-weight: 600; }
+.sub { color: var(--text-tertiary); font-size: 12.5px; margin-bottom: 18px; line-height: 1.6; }
+.toggle { border: 1px solid var(--border-subtle); background: none; color: var(--text-secondary); font-size: 12.5px; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.scheme { margin-bottom: 26px; }
+.scheme h2 { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.scheme > p { font-size: 12px; color: var(--text-tertiary); margin-bottom: 10px; line-height: 1.55; }
+
+/* 歌单详情头 mock：与实际详情页同构 */
+.plhead { display: flex; align-items: center; gap: 26px; padding: 34px 40px; border-radius: 14px;
+  background: linear-gradient(150deg, #ffffff, #e8e4de 70%, #ddd6cc);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08); position: relative; overflow: hidden; }
+:root[data-theme='dark'] .plhead { background: linear-gradient(150deg, #2a2a30, #1c1c22 70%, #141418); }
+.plhead::after { content: ''; position: absolute; right: -60px; top: -80px; width: 320px; height: 320px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(217, 161, 88, 0.35), transparent 70%); pointer-events: none; }
+.cover { width: 150px; height: 150px; border-radius: 10px; flex: none;
+  background: linear-gradient(160deg, #2c2c34, #101014 60%), linear-gradient(20deg, transparent 55%, rgba(255,255,255,0.14) 56%);
+  display: flex; align-items: flex-end; padding: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35); }
+.cover span { color: rgba(255, 255, 255, 0.75); writing-mode: vertical-rl; letter-spacing: 6px; font-size: 15px; font-family: "Songti SC", serif; }
+.plinfo { min-width: 0; }
+.plname { font-size: 26px; font-weight: 700; letter-spacing: 0.5px; }
+.pmeta { margin-top: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 0; font-size: 13px; color: var(--text-secondary); }
+.pmeta .num { font-weight: 600; color: var(--text-primary); }
+:root[data-theme='light'] .pmeta .num { color: #1d1d1f; }
+.pmeta .sep { margin: 0 12px; color: var(--text-tertiary); opacity: 0.55; }
+.pmeta .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--text-tertiary); margin: 0 12px; }
+
+/* B 简介 */
+.pdesc { margin-top: 10px; font-size: 12.5px; color: var(--text-secondary); line-height: 1.6;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 560px; }
+.pdesc .edit { color: var(--accent); cursor: pointer; font-size: 11.5px; margin-left: 8px; white-space: nowrap; }
+
+/* C 胶囊组 */
+.chips { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+.chip { display: flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 999px;
+  background: var(--bg-panel); border: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-secondary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
+:root[data-theme='dark'] .chip { background: rgba(255, 255, 255, 0.06); }
+.chip .k { color: var(--text-tertiary); font-size: 11px; }
+.chip .v { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* D 右侧竖排信息卡 */
+.sideinfo { margin-left: auto; position: relative; z-index: 1; display: flex; flex-direction: column; gap: 0;
+  border-left: 1px solid var(--border-subtle); padding-left: 26px; min-width: 150px; }
+.sideinfo .row { display: flex; flex-direction: column; gap: 2px; padding: 9px 0; }
+.sideinfo .row + .row { border-top: 1px solid var(--border-subtle); }
+.sideinfo .k { font-size: 11px; color: var(--text-tertiary); }
+.sideinfo .v { font-size: 13.5px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.sideinfo .v small { font-size: 11px; font-weight: 400; color: var(--text-secondary); }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>歌单详情头部 · 信息排布方案</h1>
+    <button class="toggle" onclick="const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'">切换深 / 浅主题</button>
+  </div>
+  <p class="sub">四个方案都以「创建时间」为核心补充信息，数据全部现成（创建时间存在歌单记录里，最近播放/播放次数/收藏数可从播放统计与收藏表直接聚合）。回字母即可，也可指定组合（比如 A 的元信息行 + B 的简介）。</p>
+
+  <div class="scheme">
+    <h2>A · 元信息行（推荐，最贴 Apple Music）</h2>
+    <p>统计行自然延长：歌曲数 · 总时长 · 创建日期 · 最近播放 · 累计播放次数，点分隔的单行元信息，克制且信息密度刚好。</p>
+    <div class="plhead">
+      <div class="cover"><span>羅生門</span></div>
+      <div class="plinfo">
+        <div class="plname">罗志祥</div>
+        <div class="pmeta">
+          <span><span class="num">25</span> 首歌曲</span><span class="dot"></span>
+          <span><span class="num">1 小时 42 分钟</span> 时长</span><span class="dot"></span>
+          <span>创建于 <span class="num">2026/08/30</span></span><span class="dot"></span>
+          <span>最近播放 <span class="num">3 天前</span></span><span class="dot"></span>
+          <span>累计播放 <span class="num">128</span> 次</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scheme">
+    <h2>B · 元信息行 + 歌单简介</h2>
+    <p>A 的基础上加一行可选「简介」：右键歌单新增「编辑简介」写入（需要给歌单记录加一个 description 字段）。让头部多一块有温度的留白内容，Apple Music 的歌单也是这个结构。</p>
+    <div class="plhead">
+      <div class="cover"><span>羅生門</span></div>
+      <div class="plinfo">
+        <div class="plname">罗志祥</div>
+        <div class="pmeta">
+          <span><span class="num">25</span> 首歌曲</span><span class="dot"></span>
+          <span><span class="num">1 小时 42 分钟</span> 时长</span><span class="dot"></span>
+          <span>创建于 <span class="num">2026/08/30</span></span><span class="dot"></span>
+          <span>最近播放 <span class="num">3 天前</span></span>
+        </div>
+        <div class="pdesc">健身房专属歌单——高 BPM 的都在前面，跑 5 公里刚好听完一遍。<span class="edit">✎ 编辑</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scheme">
+    <h2>C · 信息胶囊组</h2>
+    <p>统计拆成 4 枚玻璃小胶囊（歌曲 / 时长 / 创建 / 最近播放），与播放器的玻璃卡片语言呼应，视觉分量更足，但排版偏「展示性」。</p>
+    <div class="plhead">
+      <div class="cover"><span>羅生門</span></div>
+      <div class="plinfo">
+        <div class="plname">罗志祥</div>
+        <div class="chips">
+          <span class="chip"><span class="k">歌曲</span><span class="v">25</span></span>
+          <span class="chip"><span class="k">时长</span><span class="v">1h42m</span></span>
+          <span class="chip"><span class="k">创建于</span><span class="v">2026/08/30</span></span>
+          <span class="chip"><span class="k">最近播放</span><span class="v">3 天前</span></span>
+          <span class="chip"><span class="k">累计播放</span><span class="v">128 次</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scheme">
+    <h2>D · 右侧竖排信息卡</h2>
+    <p>利用头部右侧的空洞：左侧保持名称 + 歌曲数/时长，右侧一根竖分隔线带三行小信息（创建于 / 最近播放 / 累计播放），填满空白且平衡构图。</p>
+    <div class="plhead">
+      <div class="cover"><span>羅生門</span></div>
+      <div class="plinfo">
+        <div class="plname">罗志祥</div>
+        <div class="pmeta">
+          <span><span class="num">25</span> 首歌曲</span><span class="dot"></span>
+          <span><span class="num">1 小时 42 分钟</span> 时长</span>
+        </div>
+      </div>
+      <div class="sideinfo">
+        <div class="row"><span class="k">创建于</span><span class="v">2026/08/30</span></div>
+        <div class="row"><span class="k">最近播放</span><span class="v">3 天前</span></div>
+        <div class="row"><span class="k">累计播放</span><span class="v">128 <small>次</small></span></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
