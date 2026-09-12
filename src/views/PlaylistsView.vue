@@ -488,21 +488,20 @@ const totalPlaysOfSongs = computed(() =>
       </div>
       <div class="pl-info">
         <h1 class="pl-name">{{ current.name }}</h1>
-        <button class="action-btn add-songs-btn" @click="openAdd">
-          <AppIcon name="plus" :size="14" /> 添加歌曲
-        </button>
+        <div class="pl-stats">
+          <span>{{ currentSongs.length }}</span><span class="stat-label">歌曲</span>
+        </div>
       </div>
 
-      <!-- 头部右侧信息卡：创建于 / 最近播放 / 累计播放 / 歌曲数（方案 B，歌曲数从名字下方移入） -->
+      <!-- 头部右侧信息卡：创建于 / 最近播放 / 累计播放（方案 D，填平右侧留白） -->
       <div class="pl-sideinfo">
         <div class="row"><span class="k">创建于</span><span class="v">{{ createdLabel }}</span></div>
         <div class="row"><span class="k">最近播放</span><span class="v">{{ lastPlayedLabel }}</span></div>
         <div class="row"><span class="k">累计播放</span><span class="v">{{ totalPlaysOfSongs }} <small>次</small></span></div>
-        <div class="row"><span class="k">歌曲数</span><span class="v">{{ currentSongs.length }}</span></div>
       </div>
     </header>
 
-    <div v-if="currentSongs.length === 0" class="empty-hint">歌单还是空的，点上方「添加歌曲」或右键歌单菜单添加吧</div>
+    <div v-if="currentSongs.length === 0" class="empty-hint">歌单还是空的，右键歌单选择「添加歌曲」吧</div>
     <template v-else>
       <!-- 列表工具栏：排序方式（持久化，全局生效） -->
       <div class="list-toolbar">
@@ -997,7 +996,7 @@ const totalPlaysOfSongs = computed(() =>
   min-width: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between; /* 名字贴块顶、按钮贴块底，总高与原「名字+统计」块持平 */
+  gap: 10px;
 }
 
 .pl-name {
@@ -1005,12 +1004,14 @@ const totalPlaysOfSongs = computed(() =>
   font-weight: 600;
 }
 
-/* 名字下方的添加歌曲按钮：靠左不拉伸，与名字形成「标题 + 主操作」信息块 */
-.add-songs-btn {
-  align-self: flex-start;
+.pl-stats {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 14px;
 }
 
-/* 头部右侧信息卡：竖分隔线 + 四行小信息（创建于/最近播放/累计播放/歌曲数），填平右侧留白 */
+/* 头部右侧信息卡：竖分隔线 + 三行小信息（创建于/最近播放/累计播放），填平右侧留白 */
 .pl-sideinfo {
   position: relative;
   z-index: 2;
@@ -1051,6 +1052,13 @@ const totalPlaysOfSongs = computed(() =>
   font-weight: 400;
   color: var(--text-secondary);
 }
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-right: 10px;
+}
+
 
 .action-btn {
   display: inline-flex;
