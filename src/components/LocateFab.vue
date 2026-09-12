@@ -20,6 +20,8 @@ const ROW = 56
 const anchorEl = ref<HTMLElement | null>(null)
 let hostEl: HTMLElement | null = null
 const rowOffscreen = ref(false)
+/** 正在播放的行相对当前视野的方位：false = 在上方（指针朝上），true = 在下方（朝下） */
+const pointDown = ref(false)
 
 /** 正在播放的歌在本列表中的行号；不在本列表（播放上下文不同）为 -1 */
 const playingIndex = computed(() => {
@@ -44,7 +46,10 @@ function measureLocate() {
     rowOffscreen.value = false
     return
   }
-  rowOffscreen.value = top < host.scrollTop - 4 || top + ROW > host.scrollTop + host.clientHeight + 4
+  const above = top < host.scrollTop - 4
+  const below = top + ROW > host.scrollTop + host.clientHeight + 4
+  rowOffscreen.value = above || below
+  pointDown.value = below
 }
 
 function locatePlaying() {
@@ -92,6 +97,9 @@ watch(
 )
 
 const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
+
+/** 拟物指向：行在下方 = 180deg（朝下），在上方 = 0deg（朝上） */
+const dirAngle = computed(() => (pointDown.value ? '180deg' : '0deg'))
 </script>
 
 <template>
@@ -101,8 +109,8 @@ const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
     <button
       v-if="show"
       class="locate-fab"
-      :class="[`v-${settings.locateFabStyle}`, { light: settings.resolvedTheme === 'light' }]"
-      :style="{ '--halo-c': haloColor || 'var(--accent)' }"
+      :class="[`v-${settings.locateFabStyle}`, { light: settings.resolvedTheme === 'light', down: pointDown }]"
+      :style="{ '--halo-c': haloColor || 'var(--accent)', '--dir': dirAngle }"
       title="定位到正在播放"
       @click="locatePlaying"
     >
@@ -111,14 +119,15 @@ const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
         <span class="tick e" aria-hidden="true"></span>
         <span class="tick s" aria-hidden="true"></span>
         <span class="tick w" aria-hidden="true"></span>
-        <span class="needle" aria-hidden="true"></span>
+        <span class="needle-mount" aria-hidden="true"><span class="needle"></span></span>
         <span class="cap" aria-hidden="true"></span>
       </template>
       <template v-else-if="settings.locateFabStyle === 'drop'">
         <span class="gleam" aria-hidden="true"></span>
+        <span class="orb" aria-hidden="true"></span>
       </template>
       <template v-else-if="settings.locateFabStyle === 'knob'">
-        <span class="dot" aria-hidden="true"></span>
+        <span class="face" aria-hidden="true"><span class="dot"></span></span>
       </template>
       <template v-else>
         <span class="labelbar" aria-hidden="true"></span>
@@ -210,30 +219,40 @@ const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
 .locate-fab .tick.s { transform: rotate(180deg); }
 .locate-fab .tick.w { transform: rotate(270deg); }
 
-.locate-fab .needle {
+/* 磁针旋转座：随歌曲方位转（上方 0° / 下方 180°），弹簧过渡 + 常态 ±3° 微颤 */
+.locate-fab .needle-mount {
   position: absolute;
   left: 50%;
   top: 50%;
   width: 0;
   height: 0;
-  margin: -8px 0 0 -3px;
+  transform: rotate(var(--dir, 0deg));
+  transition: transform 0.9s var(--ease-spring);
+  pointer-events: none;
+}
+
+.locate-fab .needle-mount::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 6px solid rgba(140, 145, 158, 0.9);
+}
+
+.locate-fab .needle {
+  position: absolute;
+  left: -3px;
+  top: -8px;
+  width: 0;
+  height: 0;
   border-left: 3px solid transparent;
   border-right: 3px solid transparent;
   border-bottom: 16px solid var(--halo-c, var(--accent));
   filter: drop-shadow(0 0 2.5px color-mix(in srgb, var(--halo-c, var(--accent)) 55%, transparent));
-  transform-origin: 50% 50%;
-  animation: fab-settle 3.6s var(--ease-out) infinite;
+  animation: fab-needle-idle 2.8s ease-in-out infinite alternate;
   pointer-events: none;
-}
-
-.locate-fab .needle::after {
-  content: '';
-  position: absolute;
-  left: -3px;
-  top: 16px;
-  border-left: 3px solid transparent;
-  border-right: 3px solid transparent;
-  border-top: 6px solid rgba(140, 145, 158, 0.9);
 }
 
 .locate-fab .cap {
@@ -249,12 +268,9 @@ const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
   pointer-events: none;
 }
 
-@keyframes fab-settle {
-  0% { transform: rotate(-38deg); }
-  24% { transform: rotate(14deg); }
-  46% { transform: rotate(-7deg); }
-  66% { transform: rotate(4deg); }
-  82%, 100% { transform: rotate(0deg); }
+@keyframes fab-needle-idle {
+  from { transform: rotate(-3deg); }
+  to { transform: rotate(3deg); }
 }
 
 /* ── 露珠：品牌「澜」的水滴——三层折光 + 封面色内斑，轮廓表面张力呼吸 ── */
@@ -291,6 +307,32 @@ const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
   pointer-events: none;
 }
 
+/* 滴内光斑：封面色小珠游向歌曲方位一侧（上方浮到上半、下方沉到底部） */
+.locate-fab .orb {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, color-mix(in srgb, var(--halo-c, var(--accent)) 55%, #fff), var(--halo-c, var(--accent)) 72%);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--halo-c, var(--accent)) 55%, transparent);
+  transform: translateY(-3.5px) scale(0.95);
+  transition: transform 0.9s var(--ease-spring);
+  animation: fab-orb-breathe 3.2s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.locate-fab.down .orb {
+  transform: translateY(4px) scale(1.03);
+}
+
+@keyframes fab-orb-breathe {
+  from { filter: brightness(0.92); }
+  to { filter: brightness(1.12); }
+}
+
 @keyframes fab-quiver {
   0%, 100% { border-radius: 50% 50% 50% 50% / 58% 58% 42% 42%; }
   30% { border-radius: 48% 52% 51% 49% / 56% 60% 40% 44%; }
@@ -318,6 +360,16 @@ const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
     inset 0 0 0 1px rgba(0, 0, 0, 0.1),
     inset 0 1px 1px rgba(255, 255, 255, 0.9),
     0 4px 10px rgba(0, 0, 0, 0.18);
+}
+
+/* 旋钮刻度盘：整体随歌曲方位转（指示点始终指向目标方向），弹簧过渡 */
+.locate-fab .face {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  transform: rotate(var(--dir, 0deg));
+  transition: transform 0.9s var(--ease-spring);
+  pointer-events: none;
 }
 
 .locate-fab .dot {
@@ -428,9 +480,16 @@ const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
 
 @media (prefers-reduced-motion: reduce) {
   .locate-fab .needle,
+  .locate-fab .orb,
   .locate-fab.v-drop,
   .locate-fab .reel {
     animation: none;
+  }
+
+  .locate-fab .needle-mount,
+  .locate-fab .face,
+  .locate-fab .orb {
+    transition: none;
   }
 
   .fab-enter-active,
