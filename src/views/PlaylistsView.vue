@@ -608,7 +608,7 @@ function confirmRemove() {
                 <span class="add-subline">{{ song.artist }} · {{ song.album }}</span>
               </span>
               <span class="add-dur">{{ formatDuration(song.durationSec) }}</span>
-              <span class="add-state">{{ inPlaylist(song.path) ? '已在歌单' : '' }}</span>
+              <span v-if="inPlaylist(song.path)" class="add-state">已在歌单</span>
             </label>
             <div v-if="addCandidates.length === 0" class="add-empty">没有匹配的歌曲</div>
           </div>
@@ -1381,18 +1381,19 @@ function confirmRemove() {
 .modal.add-modal {
   width: min(900px, 92vw);
   height: min(640px, 86vh);
-  padding: 24px;
+  padding: 26px 26px 20px;
   gap: 14px;
 }
 
 .add-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
 }
 
 .add-head .modal-title {
-  font-size: 18px;
+  font-size: 19px;
+  letter-spacing: 0.2px;
 }
 
 .add-sub {
@@ -1405,15 +1406,18 @@ function confirmRemove() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid transparent;
   color: var(--text-tertiary);
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 }
 
 .add-close:hover {
   background: var(--bg-hover);
+  border-color: var(--border-subtle);
   color: var(--text-primary);
 }
 
@@ -1428,16 +1432,18 @@ function confirmRemove() {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 38px;
+  height: 40px;
   padding: 0 14px;
-  border-radius: 9px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-hover);
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: var(--bg-panel);
   color: var(--text-tertiary);
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 
 .add-search:focus-within {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .add-search-input {
@@ -1470,10 +1476,12 @@ function confirmRemove() {
   justify-content: space-between;
   font-size: 12px;
   color: var(--text-secondary);
+  padding: 0 4px;
 }
 
 .add-selected-count {
   font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
 }
 
 .add-select-btns {
@@ -1483,9 +1491,10 @@ function confirmRemove() {
 
 .mini-link {
   font-size: 12px;
+  font-weight: 500;
   color: var(--accent);
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: 7px;
   transition: background var(--dur-fast) var(--ease-out);
 }
 
@@ -1505,8 +1514,8 @@ function confirmRemove() {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 2px;
+  gap: 3px;
+  padding: 4px 2px;
 }
 
 .add-row {
@@ -1514,11 +1523,12 @@ function confirmRemove() {
   grid-template-columns: 20px 44px 1fr auto auto;
   gap: 14px;
   align-items: center;
-  height: 58px;
-  padding: 0 10px;
-  border-radius: 9px;
+  height: 60px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out);
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
 }
 
 .add-row:hover {
@@ -1527,6 +1537,7 @@ function confirmRemove() {
 
 .add-row.checked {
   background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .add-row.added {
@@ -1534,16 +1545,51 @@ function confirmRemove() {
   cursor: default;
 }
 
+/* 自定义勾选框：圆角方框，选中填充主题色并打出对勾 */
 .add-check {
-  width: 15px;
-  height: 15px;
-  accent-color: var(--accent);
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-subtle);
+  background: var(--bg-base);
   cursor: pointer;
+  position: relative;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.add-check:hover {
+  border-color: var(--accent);
+}
+
+.add-check:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.add-check:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 1.5px;
+  width: 4px;
+  height: 9px;
+  border-right: 2px solid var(--accent-text);
+  border-bottom: 2px solid var(--accent-text);
+  transform: rotate(45deg);
+}
+
+.add-check:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .add-cover :deep(.cover-img),
 .add-cover :deep(.cover-fallback) {
-  border-radius: 7px;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 .add-meta {
@@ -1577,18 +1623,30 @@ function confirmRemove() {
 }
 
 .add-state {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-tertiary);
-  min-width: 56px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
   text-align: right;
 }
 
 .add-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 10px;
   padding-top: 14px;
   border-top: 1px solid var(--border-subtle);
+}
+
+.add-footer .action-btn {
+  padding: 8px 20px;
+  border-radius: 9px;
+}
+
+.add-footer .action-btn.primary {
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .add-empty {

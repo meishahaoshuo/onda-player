@@ -62,18 +62,23 @@ const brandLogo = computed(() =>
 const songCount = computed(() => library.songs.length)
 
 /** 主题色预设（首项"默认"在模板单独渲染） */
-/* 现代鲜亮 8 色：明度/饱和度跨主题均衡（简单亮度 0.42~0.52，统一白字，
-   离 accent-text 派生阈值 0.62 均 ≥0.10 余量），色相覆盖全环 */
+/* 知名配色：简单亮度 0.42~0.52 区间（统一白字可读），色相覆盖常用口味 */
 const ACCENT_PRESETS: { c: string; name: string }[] = [
-  { c: '#5865f2', name: '靛蓝' },
-  { c: '#0284c7', name: '天青' },
-  { c: '#0ca678', name: '翡翠' },
-  { c: '#d97706', name: '琥珀' },
-  { c: '#ef5350', name: '珊瑚' },
-  { c: '#e64980', name: '玫红' },
-  { c: '#8b5cf6', name: '紫罗兰' },
-  { c: '#64748b', name: '石墨' },
+  { c: '#EC4141', name: '网易云红' },
+  { c: '#31C27C', name: 'QQ音乐绿' },
+  { c: '#0A84FF', name: '晴空蓝' },
+  { c: '#D97706', name: '芒果橙' },
+  { c: '#E64980', name: '玫红' },
+  { c: '#5B4BD5', name: '罗兰紫' },
+  { c: '#64748B', name: '石墨' },
 ]
+
+/** 当前选中预设的名称（供标题旁显示） */
+const accentCurrentName = computed(() => {
+  if (!settings.accentColor) return 'ONDA 蓝'
+  const hit = ACCENT_PRESETS.find((p) => p.c.toLowerCase() === settings.accentColor.toLowerCase())
+  return hit ? hit.name : '自定义'
+})
 
 /* ---------- 数据：清空播放统计 ---------- */
 const confirmClearStats = ref(false)
@@ -161,12 +166,12 @@ function onRecordKeydown(e: KeyboardEvent) {
           </div>
 
           <!-- 主题色 -->
-          <p class="panel-sub accent-heading">主题色</p>
+          <p class="panel-sub accent-heading">主题色<span class="accent-current">{{ accentCurrentName }}</span></p>
           <div class="accent-row">
             <button
               class="accent-swatch default"
               :class="{ active: settings.accentColor === '' }"
-              title="默认海军蓝"
+              title="ONDA 蓝（默认）"
               @click="settings.setAccentColor('')"
             >
               <AppIcon v-if="settings.accentColor === ''" name="check" :size="15" />
@@ -509,7 +514,7 @@ function onRecordKeydown(e: KeyboardEvent) {
 }
 
 .panel-section {
-  padding: 22px 24px;
+  padding: 24px 26px;
   border-radius: var(--radius-panel);
   background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
@@ -545,6 +550,8 @@ function onRecordKeydown(e: KeyboardEvent) {
 .panel-title {
   font-size: 18px;
   font-weight: 600;
+  letter-spacing: 0.2px;
+  margin-bottom: 2px;
 }
 
 .panel-sub {
@@ -665,7 +672,12 @@ function onRecordKeydown(e: KeyboardEvent) {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 0;
+  padding: 15px 2px;
+}
+
+/* 相邻选项行之间加发丝分隔线，形成可扫读的节奏 */
+.opt-row + .opt-row {
+  border-top: 1px solid var(--border-subtle);
 }
 
 .opt-text {
@@ -1010,6 +1022,14 @@ function onRecordKeydown(e: KeyboardEvent) {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+/* 当前预设名：标题旁的小字提示 */
+.accent-current {
+  margin-left: 10px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-tertiary);
 }
 
 .accent-row {

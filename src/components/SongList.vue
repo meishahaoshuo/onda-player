@@ -12,7 +12,7 @@ import { useFavoritesStore } from '@/stores/favorites'
 import { flyToPlayerFromRow } from '@/services/coverFlight'
 import type { SongRecord } from '@/types'
 
-const props = defineProps<{ songs: SongRecord[]; currentPath?: string | null; persistKey?: string }>()
+const props = defineProps<{ songs: SongRecord[]; currentPath?: string | null; persistKey?: string; hideRowActions?: boolean }>()
 const emit = defineEmits<{ play: [song: SongRecord] }>()
 
 const ROW_HEIGHT = 56
@@ -91,8 +91,8 @@ function onRowHover(e: MouseEvent) {
                 <span class="title-text">{{ item.title }}</span>
               </span>
               <span class="subtitle-text">{{ item.artist }}</span>
-              <!-- 悬停快捷操作：锚在标题列右端空白（标题与艺术家列之间） -->
-              <span class="row-actions" @click.stop>
+              <!-- 悬停快捷操作：锚在标题列右端空白（标题与艺术家列之间）；hideRowActions 时整体隐藏 -->
+              <span v-if="!props.hideRowActions" class="row-actions" @click.stop>
                 <button
                   class="row-act"
                   :class="{ active: favorites.has(item.path) }"

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<title>ONDA·澜 — 进度条 & 按键样式对比稿 v2（参考特写版）</title>
+<style>
+:root, :root[data-theme='dark'] {
+  --bg-base: #0a0a0a; --text-primary: #ffffff; --text-tertiary: #7c7c80;
+  --border-subtle: rgba(255, 255, 255, 0.12); --accent: #5c7ce0;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --cover: #d9a158;
+}
+:root[data-theme='light'] {
+  --bg-base: #f5f2ee; --text-primary: #000000; --text-tertiary: #aeaeb2;
+  --border-subtle: rgba(0, 0, 0, 0.08); --accent: #172554;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --cover: #b3742e;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg-base); color: var(--text-primary); font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; padding: 28px 34px 60px; }
+.head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+h1 { font-size: 19px; font-weight: 600; }
+.sub { color: var(--text-tertiary); font-size: 12.5px; margin-bottom: 18px; }
+.toggle { border: 1px solid var(--border-subtle); background: none; color: var(--text-secondary); font-size: 12.5px; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; max-width: 1080px; }
+.card { border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; background: var(--card); }
+.card h3 { font-size: 13px; padding: 10px 14px 2px; font-weight: 600; }
+.card p { font-size: 11.5px; color: var(--text-tertiary); padding: 3px 14px 10px; line-height: 1.5; }
+.mock { position: relative; height: 130px; padding: 18px 18px 0;
+  background:
+    radial-gradient(140% 120% at 20% 0%, rgba(255, 255, 255, 0.14), transparent 55%),
+    linear-gradient(150deg, #9a6a44, #7a4e30 55%, #5f3c26); }
+
+/* ═══ 进度条公共（可拖拽） ═══ */
+.bar { position: relative; height: 24px; display: flex; align-items: center; cursor: pointer; touch-action: none; user-select: none; }
+.bar .track { position: relative; width: 100%; }
+.bar .times { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: rgba(255, 255, 255, 0.8); font-variant-numeric: tabular-nums; }
+.bar .chip { padding: 2px 7px; border-radius: 5px; background: rgba(0, 0, 0, 0.28); color: rgba(255, 255, 255, 0.92); font-size: 10px; font-weight: 600; }
+
+/* P7 参考还原「药丸头」：白填充 + 更亮的圆头药丸帽 */
+.p7 .track { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.22); }
+.p7 .fill { height: 100%; width: calc(var(--p) * 100%); border-radius: 999px; background: rgba(255, 255, 255, 0.85); }
+.p7 .pillhead { position: absolute; top: 50%; left: calc(var(--p) * 100%); width: 16px; height: 12px; border-radius: 999px;
+  transform: translate(-85%, -50%); background: #fff; box-shadow: 0 1px 5px rgba(0, 0, 0, 0.28); transition: width 0.15s var(--ease-out); }
+.p7:hover .pillhead { width: 20px; }
+
+/* P8 厚药丸：8px 厚白药丸，直接就是一根白粉笔 */
+.p8 .track { height: 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.22); }
+.p8 .fill { height: 100%; width: calc(var(--p) * 100%); border-radius: 999px; background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25); transition: height 0.15s var(--ease-out); }
+.p8:hover .fill { height: 12px; margin-top: -1.5px; }
+
+/* P9 渐隐尾：填充从头到尾渐隐，头部最亮（能量拖尾） */
+.p9 .track { height: 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.18); }
+.p9 .fill { height: 100%; width: calc(var(--p) * 100%); border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.35), #fff 85%); }
+.p9 .head { position: absolute; top: 50%; left: calc(var(--p) * 100%); width: 10px; height: 10px; border-radius: 50%;
+  transform: translate(-50%, -50%); background: #fff; box-shadow: 0 0 10px rgba(255, 255, 255, 0.75); }
+
+/* ═══ 按键公共：实心粗圆 glyph（参考特写语汇） ═══ */
+.ctls { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+.ctls .ic { border: none; background: none; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.18s var(--ease-spring), opacity 0.15s; }
+.ctls svg { display: block; }
+.ctls .i-pause { display: none; }
+.ctls.playing .i-pause { display: block; }
+.ctls.playing .i-play { display: none; }
+
+/* C6 参考还原：实心 glyph 原尺寸层级（播放键 1.4 倍） */
+.c6 .side svg { width: 22px; height: 22px; }
+.c6 .play svg { width: 30px; height: 30px; }
+.c6 .ic:hover { transform: scale(1.12); }
+.c6 .ic:active { transform: scale(0.95); }
+
+/* C7 大小对比组：层级更夸张，播放键 2 倍（海报感） */
+.c7 .side svg { width: 20px; height: 20px; opacity: 0.92; }
+.c7 .play svg { width: 40px; height: 40px; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3)); }
+.c7 .play:hover { transform: scale(1.1); }
+.c7 .side:hover { opacity: 1; transform: scale(1.12); }
+
+/* C8 玻璃药丸浮层：glyph 常态裸露，悬停时整键浮出白色玻璃药丸底 */
+.c8 .side { width: 38px; height: 38px; border-radius: 999px; }
+.c8 .side:hover { background: rgba(255, 255, 255, 0.16); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.c8 .side svg { width: 20px; height: 20px; }
+.c8 .play { width: 52px; height: 40px; border-radius: 999px; background: rgba(255, 255, 255, 0.18);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22); }
+.c8 .play svg { width: 26px; height: 26px; }
+.c8 .play:hover { background: rgba(255, 255, 255, 0.3); transform: scale(1.05); }
+.c8 .play svg { width: 26px; height: 26px; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>进度条 & 按键 · 对比稿 v2（参考特写语汇）</h1>
+    <button class="toggle" onclick="const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'">切换深 / 浅主题</button>
+  </div>
+  <p class="sub">从你给的两张特写提炼：按键 = <b>实心粗圆白色 glyph、播放键大一号、无底框</b>；进度 = <b>白色药丸填充、圆头发亮</b>。以下方案都基于这套语汇再变化，进度条可拖拽、播放键可点击。</p>
+
+  <div class="grid" id="bars">
+    <div class="card">
+      <h3>P7 · 药丸头（参考还原）</h3>
+      <p>6px 白线，填充末端是一枚更亮更粗的圆头药丸帽，悬停时药丸变长提示可抓——参考图第二张的直接还原。</p>
+      <div class="mock"><div class="bar p7" data-p="0.24"><div class="track"><div class="fill"></div><div class="pillhead"></div></div><div class="times"><span>00:45</span><span class="chip">无损</span><span>03:51</span></div></div></div>
+    </div>
+    <div class="card">
+      <h3>P8 · 厚药丸</h3>
+      <p>9px 厚的纯白药丸，像一支白粉笔搭在轨道上，悬停时会再鼓起一圈。粗壮、直观、抓取面积大。</p>
+      <div class="mock"><div class="bar p8" data-p="0.24"><div class="track"><div class="fill"></div></div><div class="times"><span>00:45</span><span class="chip">无损</span><span>03:51</span></div></div></div>
+    </div>
+    <div class="card">
+      <h3>P9 · 渐隐尾</h3>
+      <p>填充从头到尾渐隐——越靠近播放头越亮，像一道能量的拖尾，末端一颗发光圆珠收尾。最有「流」的感觉。</p>
+      <div class="mock"><div class="bar p9" data-p="0.24"><div class="track"><div class="fill"></div><div class="head"></div></div><div class="times"><span>00:45</span><span class="chip">无损</span><span>03:51</span></div></div></div>
+    </div>
+  </div>
+
+  <h2 class="sec" style="max-width:1080px">控制按键（全部使用参考特写的实心粗圆 glyph）</h2>
+  <div class="grid" id="ctls">
+    <div class="card">
+      <h3>C6 · 参考还原</h3>
+      <p>完全按特写：实心粗圆 glyph 无底框，播放/暂停键比两侧大 1.4 倍。悬停放大、按下缩小。</p>
+      <div class="mock"><div class="ctls c6">
+        <button class="ic side"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 20L9 12l10-8z" fill="currentColor" stroke="none"/><path d="M5 19V5" stroke-linecap="round"/></svg></button>
+        <button class="ic play"><svg class="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l10.9-6.86a1.04 1.04 0 000-1.76L9.56 4.26A1.04 1.04 0 008 5.14z"/></svg><svg class="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="5.5" y="4" width="5.4" height="16" rx="2.2"/><rect x="13.1" y="4" width="5.4" height="16" rx="2.2"/></svg></button>
+        <button class="ic side"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4l10 8-10 8z" fill="currentColor" stroke="none"/><path d="M19 5v14" stroke-linecap="round"/></svg></button>
+      </div></div>
+    </div>
+    <div class="card">
+      <h3>C7 · 海报层级</h3>
+      <p>层级拉得更开：播放键 2 倍大并带投影，像海报的主视觉——远看也能第一眼找到播放键。</p>
+      <div class="mock"><div class="ctls c7">
+        <button class="ic side"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 20L9 12l10-8z" fill="currentColor" stroke="none"/><path d="M5 19V5" stroke-linecap="round"/></svg></button>
+        <button class="ic play"><svg class="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l10.9-6.86a1.04 1.04 0 000-1.76L9.56 4.26A1.04 1.04 0 008 5.14z"/></svg><svg class="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="5.5" y="4" width="5.4" height="16" rx="2.2"/><rect x="13.1" y="4" width="5.4" height="16" rx="2.2"/></svg></button>
+        <button class="ic side"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4l10 8-10 8z" fill="currentColor" stroke="none"/><path d="M19 5v14" stroke-linecap="round"/></svg></button>
+      </div></div>
+    </div>
+    <div class="card">
+      <h3>C8 · 玻璃药丸浮层</h3>
+      <p>glyph 常态裸露（和 C6 一样干净），但播放键常罩一枚白色玻璃药丸底、两侧键悬停时才浮出玻璃圆底——裸与玻璃的两态切换。</p>
+      <div class="mock"><div class="ctls c8">
+        <button class="ic side"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 20L9 12l10-8z" fill="currentColor" stroke="none"/><path d="M5 19V5" stroke-linecap="round"/></svg></button>
+        <button class="ic play"><svg class="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l10.9-6.86a1.04 1.04 0 000-1.76L9.56 4.26A1.04 1.04 0 008 5.14z"/></svg><svg class="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="5.5" y="4" width="5.4" height="16" rx="2.2"/><rect x="13.1" y="4" width="5.4" height="16" rx="2.2"/></svg></button>
+        <button class="ic side"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4l10 8-10 8z" fill="currentColor" stroke="none"/><path d="M19 5v14" stroke-linecap="round"/></svg></button>
+      </div></div>
+    </div>
+  </div>
+
+<script>
+document.querySelectorAll('.bar').forEach((bar) => {
+  const track = bar.querySelector('.track')
+  const set = (clientX) => {
+    const r = track.getBoundingClientRect()
+    const p = Math.min(1, Math.max(0, (clientX - r.left) / r.width))
+    bar.style.setProperty('--p', p)
+    const t = bar.querySelector('.times span')
+    if (t) { const cur = Math.round(p * 231); t.textContent = '00:' + String(cur % 60).padStart(2, '0') }
+  }
+  bar.addEventListener('pointerdown', (e) => { bar.setPointerCapture(e.pointerId); set(e.clientX); bar.onmv = (ev) => set(ev.clientX) })
+  bar.addEventListener('pointermove', (e) => { if (bar.onmv) bar.onmv(e) })
+  bar.addEventListener('pointerup', () => { bar.onmv = null })
+  bar.addEventListener('pointercancel', () => { bar.onmv = null })
+})
+document.querySelectorAll('.ctls .play').forEach((b) => {
+  b.addEventListener('click', () => b.closest('.ctls').classList.toggle('playing'))
+})
+</script>
+</body>
+</html>

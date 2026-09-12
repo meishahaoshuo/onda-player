@@ -118,6 +118,7 @@ function selectRoot(id: string) {
             :songs="rootSongs"
             :current-path="player.currentPath"
             :persist-key="`list:folder:${selectedRootId}`"
+            hide-row-actions
             @play="onPlay"
           />
           <div v-else class="list-empty">这个文件夹里没有可播放的音乐</div>

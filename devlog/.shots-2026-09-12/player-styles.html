@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<title>ONDA·澜 — 播放进度条 & 控制按键样式对比稿</title>
+<style>
+:root, :root[data-theme='dark'] {
+  --bg-base: #0a0a0a;
+  --text-primary: #ffffff;
+  --text-secondary: #a1a1a6;
+  --text-tertiary: #7c7c80;
+  --border-subtle: rgba(255, 255, 255, 0.12);
+  --accent: #5c7ce0;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --cover: #d9a158;
+}
+:root[data-theme='light'] {
+  --bg-base: #f5f2ee;
+  --text-primary: #000000;
+  --text-secondary: #86868b;
+  --text-tertiary: #aeaeb2;
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --accent: #172554;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --cover: #b3742e;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg-base); color: var(--text-primary); font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; padding: 28px 34px 60px; transition: background 0.3s, color 0.3s; }
+.head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+h1 { font-size: 19px; font-weight: 600; }
+h2.sec { font-size: 15px; font-weight: 600; margin: 30px 0 4px; }
+.sub { color: var(--text-tertiary); font-size: 12.5px; margin-bottom: 18px; }
+.toggle { border: 1px solid var(--border-subtle); background: none; color: var(--text-secondary); font-size: 12.5px; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; max-width: 1080px; }
+.card { border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; background: var(--card); }
+.card h3 { font-size: 13px; padding: 10px 14px 2px; font-weight: 600; }
+.card p { font-size: 11.5px; color: var(--text-tertiary); padding: 3px 14px 10px; line-height: 1.5; }
+/* 封面色氛围 mock：模拟播放条真实所在环境 */
+.mock { position: relative; height: 130px; padding: 18px 18px 0;
+  background:
+    radial-gradient(140% 120% at 20% 0%, rgba(255, 255, 255, 0.14), transparent 55%),
+    linear-gradient(150deg, #9a6a44, #7a4e30 55%, #5f3c26);
+}
+:root[data-theme='light'] .mock {
+  background:
+    radial-gradient(140% 120% at 20% 0%, rgba(255, 255, 255, 0.25), transparent 55%),
+    linear-gradient(150deg, #b98756, #96613c 55%, #7a4e30);
+}
+
+/* ═══ 进度条公共：可拖拽，--p 0~1 驱动 ═══ */
+.bar { position: relative; height: 24px; display: flex; align-items: center; cursor: pointer; touch-action: none; user-select: none; }
+.bar .track { position: relative; width: 100%; }
+.bar .times { display: flex; justify-content: space-between; margin-top: 4px; font-size: 10.5px; color: rgba(255, 255, 255, 0.75); font-variant-numeric: tabular-nums; }
+
+/* P1 现状：主题色线 */
+.p1 .track { height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.28); transition: height 0.15s var(--ease-out); }
+.p1 .fill { height: 100%; width: calc(var(--p) * 100%); border-radius: 999px; background: var(--accent); }
+.p1:hover .track { height: 6px; }
+.p1 .thumb { position: absolute; top: 50%; left: calc(var(--p) * 100%); width: 11px; height: 11px; border-radius: 50%; background: #fff;
+  transform: translate(-50%, -50%) scale(0); transition: transform 0.15s var(--ease-spring); box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+.p1:hover .thumb { transform: translate(-50%, -50%) scale(1); }
+
+/* P2 单色细线（Apple） */
+.p2 .track { height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.25); }
+.p2 .fill { height: 100%; width: calc(var(--p) * 100%); border-radius: 999px; background: #fff; }
+.p2 .thumb { position: absolute; top: 50%; left: calc(var(--p) * 100%); width: 10px; height: 10px; border-radius: 50%; background: #fff;
+  transform: translate(-50%, -50%) scale(0); transition: transform 0.15s var(--ease-spring); }
+.p2:hover .thumb { transform: translate(-50%, -50%) scale(1); }
+
+/* P3 光晕播放头：白色线 + 播放头常亮光点拖尾 */
+.p3 .track { height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.22); }
+.p3 .fill { height: 100%; width: calc(var(--p) * 100%); border-radius: 999px; background: rgba(255, 255, 255, 0.9); }
+.p3 .head { position: absolute; top: 50%; left: calc(var(--p) * 100%); width: 7px; height: 7px; border-radius: 50%; background: #fff;
+  transform: translate(-50%, -50%); box-shadow: 0 0 8px rgba(255, 255, 255, 0.9), 0 0 18px color-mix(in srgb, var(--cover) 70%, transparent); }
+.p3 .halo { position: absolute; top: 50%; left: calc(var(--p) * 100%); width: 34px; height: 14px; transform: translate(-100%, -50%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45)); border-radius: 999px; filter: blur(3px); pointer-events: none; }
+
+/* P4 水波液面：玻璃管里的封面色液体，末端随波动 */
+.p4 .tube { position: relative; height: 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), inset 0 1px 2px rgba(0, 0, 0, 0.15); overflow: hidden; }
+.p4 .liquid { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--p) * 100%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cover) 55%, #fff), var(--cover)); }
+.p4 .liquid::after { content: ''; position: absolute; right: -5px; top: 50%; width: 12px; height: 12px; margin-top: -6px;
+  background: color-mix(in srgb, var(--cover) 55%, #fff); border-radius: 42% 58% 55% 45% / 55% 44% 56% 45%;
+  animation: wave 2.2s linear infinite; }
+@keyframes wave { to { transform: rotate(360deg); } }
+
+/* P5 声纹刻度：波形式样，播过的亮 */
+.p5 .bars { display: flex; align-items: center; gap: 2.5px; height: 26px; }
+.p5 .bars i { width: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.28); }
+.p5 .bars i.on { background: #fff; }
+
+/* P6 玻璃珠：厚玻璃管 + 常驻玻璃珠拇指 */
+.p6 .tube { position: relative; height: 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2), inset 0 1px 2px rgba(0, 0, 0, 0.2); }
+.p6 .fill { height: 100%; width: calc(var(--p) * 100%); border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 60%, #fff), var(--accent)); }
+.p6 .bead { position: absolute; top: 50%; left: calc(var(--p) * 100%); width: 15px; height: 15px; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.35) 45%, rgba(255, 255, 255, 0.12) 70%);
+  box-shadow: inset 0 -1px 2px rgba(0, 0, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.4); }
+
+/* ═══ 控制按键公共行 ═══ */
+.ctls { display: flex; align-items: center; justify-content: space-between; height: 52px; }
+.ctls .ic { color: rgba(255, 255, 255, 0.8); display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; background: none; transition: all 0.18s var(--ease-out); }
+.ctls svg { width: 20px; height: 20px; }
+
+/* C1 现状：主色圆底播放键 */
+.c1 .play { width: 42px; height: 42px; border-radius: 50%; background: var(--accent); color: #fff; box-shadow: 0 3px 8px rgba(0,0,0,0.3); }
+.c1 .play:hover { transform: scale(1.07); }
+.c1 .ic:hover { color: #fff; }
+
+/* C2 Apple 白键 */
+.c2 .play { width: 40px; height: 40px; border-radius: 12px; background: #fff; color: #1d1d1f; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+.c2 .play:hover { transform: scale(1.06); }
+.c2 .ic:hover { color: #fff; }
+
+/* C3 玻璃圆钮：全部磨砂玻璃圆底，播放键带封面色光环 */
+.c3 .ic { width: 38px; height: 38px; border-radius: 50%; background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.c3 .ic:hover { background: rgba(255, 255, 255, 0.22); color: #fff; }
+.c3 .play { width: 46px; height: 46px; border-radius: 50%; background: rgba(255, 255, 255, 0.16); color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0 0 2px color-mix(in srgb, var(--cover) 65%, transparent), 0 4px 12px rgba(0,0,0,0.35); }
+.c3 .play:hover { background: rgba(255, 255, 255, 0.26); }
+
+/* C4 实体凸钮：真实可按压 */
+.c4 .ic { width: 36px; height: 36px; border-radius: 50%; color: rgba(255, 255, 255, 0.85);
+  background: linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.04));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -2px 3px rgba(0,0,0,0.3), 0 3px 0 rgba(0,0,0,0.25), 0 6px 10px rgba(0,0,0,0.3); }
+.c4 .ic:active { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), inset 0 2px 4px rgba(0,0,0,0.35), 0 1px 0 rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.25); }
+.c4 .play { width: 46px; height: 46px; color: #1d1d1f;
+  background: linear-gradient(180deg, #ffffff, #d9d9de);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -2px 3px rgba(0,0,0,0.18), 0 4px 0 rgba(0,0,0,0.28), 0 8px 14px rgba(0,0,0,0.35); }
+.c4 .play:active { transform: translateY(3px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 2px 5px rgba(0,0,0,0.3), 0 1px 0 rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.25); }
+
+/* C5 极简光晕：无底纯图标 + 播放键柔光环呼吸 */
+.c5 .ic { color: rgba(255, 255, 255, 0.7); }
+.c5 .ic:hover { color: #fff; transform: scale(1.08); }
+.c5 .play { position: relative; width: 44px; height: 44px; color: #fff; }
+.c5 .play::before { content: ''; position: absolute; inset: 4px; border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--cover) 40%, transparent), transparent 70%);
+  animation: halo 2.4s var(--ease-out) infinite alternate; }
+@keyframes halo { from { opacity: 0.4; transform: scale(0.85); } to { opacity: 1; transform: scale(1.1); } }
+.c5 .play svg { position: relative; width: 24px; height: 24px; }
+
+/* 播放/暂停图标切换 */
+.ctls .i-pause { display: none; }
+.ctls.playing .i-pause { display: block; }
+.ctls.playing .i-play { display: none; }
+svg { display: block; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>播放进度条 & 控制按键 · 样式对比稿</h1>
+    <button class="toggle" onclick="const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'">切换深 / 浅主题</button>
+  </div>
+  <p class="sub">背景模拟播放条所在的封面氛围环境；<b>所有进度条都可以直接拖拽</b>，播放键可以点击切换播放/暂停看动效。回组合即可，如「进度 P3 + 按键 C2」。</p>
+
+  <h2 class="sec">一、播放进度条</h2>
+  <div class="grid" id="bars">
+    <div class="card">
+      <h3>P1 · 现状——主题色线</h3>
+      <p>当前的样式：accent 主题色填充，悬停加粗并浮出白色拇指。</p>
+      <div class="mock"><div class="bar p1" data-p="0.24" data-pkind="line"><div class="track"><div class="fill"></div><div class="thumb"></div></div><div class="times"><span>0:46</span><span>3:51</span></div></div></div>
+    </div>
+    <div class="card">
+      <h3>P2 · 单色细线（Apple）</h3>
+      <p>半透明轨道 + 纯白填充，拇指只在悬停时浮现。最贴近参考图，低调耐看。</p>
+      <div class="mock"><div class="bar p2" data-p="0.24" data-pkind="line"><div class="track"><div class="fill"></div><div class="thumb"></div></div><div class="times"><span>0:46</span><span>3:51</span></div></div></div>
+    </div>
+    <div class="card">
+      <h3>P3 · 光晕播放头</h3>
+      <p>白线尽头一颗常亮光点，带封面色辉光拖尾——播放头本身就是「光源」，和你播放条胶囊的光尘语言同宗。</p>
+      <div class="mock"><div class="bar p3" data-p="0.24" data-pkind="line"><div class="track"><div class="halo"></div><div class="fill"></div><div class="head"></div></div><div class="times"><span>0:46</span><span>3:51</span></div></div></div>
+    </div>
+    <div class="card">
+      <h3>P4 · 水波液面</h3>
+      <p>玻璃管里的封面色「液体」，液面末端是一枚缓缓转动的水滴——品牌「澜」的水波意象，动态最足。</p>
+      <div class="mock"><div class="bar p4" data-p="0.24" data-pkind="tube"><div class="tube"><div class="liquid"></div></div><div class="times"><span>0:46</span><span>3:51</span></div></div></div>
+    </div>
+    <div class="card">
+      <h3>P5 · 声纹刻度</h3>
+      <p>44 根波形式样的小柱，播过的点亮成白色——像 SoundCloud 的声纹，进度信息量最大。</p>
+      <div class="mock"><div class="bar p5" data-p="0.24" data-pkind="bars"><div class="bars"></div><div class="times"><span>0:46</span><span>3:51</span></div></div></div>
+    </div>
+    <div class="card">
+      <h3>P6 · 玻璃珠滑轨</h3>
+      <p>9px 厚玻璃管 + accent 渐变填充 + 一颗常驻玻璃珠拇指（呼应定位悬浮球的弹珠质感），最好抓。</p>
+      <div class="mock"><div class="bar p6" data-p="0.24" data-pkind="tube"><div class="tube"><div class="fill"></div><div class="bead"></div></div><div class="times"><span>0:46</span><span>3:51</span></div></div></div>
+    </div>
+  </div>
+
+  <h2 class="sec">二、控制按键</h2>
+  <div class="grid" id="ctls">
+    <div class="card">
+      <h3>C1 · 现状——主色圆底播放键</h3>
+      <p>当前的样式：普通键纯图标，播放键 accent 圆底。</p>
+      <div class="mock"><div class="ctls c1"><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 20L9 12l10-8z" fill="currentColor" stroke="none"/><path d="M5 19V5" stroke-linecap="round"/></svg></button><button class="play ic"><svg class="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg><svg class="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4l10 8-10 8z" fill="currentColor" stroke="none"/><path d="M19 5v14" stroke-linecap="round"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 01-4 4H3"/></svg></button></div></div>
+    </div>
+    <div class="card">
+      <h3>C2 · Apple 白键</h3>
+      <p>普通键纯图标，播放键白色圆角方块 + 深色图标——参考图同款。</p>
+      <div class="mock"><div class="ctls c2"><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 20L9 12l10-8z" fill="currentColor" stroke="none"/><path d="M5 19V5" stroke-linecap="round"/></svg></button><button class="play ic"><svg class="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg><svg class="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4l10 8-10 8z" fill="currentColor" stroke="none"/><path d="M19 5v14" stroke-linecap="round"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 01-4 4H3"/></svg></button></div></div>
+    </div>
+    <div class="card">
+      <h3>C3 · 玻璃圆钮</h3>
+      <p>所有键都是磨砂玻璃圆底，播放键更大一圈并带封面色光环——和播放条液态玻璃材质最统一。</p>
+      <div class="mock"><div class="ctls c3"><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 20L9 12l10-8z" fill="currentColor" stroke="none"/><path d="M5 19V5" stroke-linecap="round"/></svg></button><button class="play ic"><svg class="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg><svg class="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4l10 8-10 8z" fill="currentColor" stroke="none"/><path d="M19 5v14" stroke-linecap="round"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 01-4 4H3"/></svg></button></div></div>
+    </div>
+    <div class="card">
+      <h3>C4 · 实体凸钮</h3>
+      <p>拟物按压：每颗键都有厚度，<b>按住试试——会真实下陷</b>，播放键是更大的白色实体键。</p>
+      <div class="mock"><div class="ctls c4"><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 20L9 12l10-8z" fill="currentColor" stroke="none"/><path d="M5 19V5" stroke-linecap="round"/></svg></button><button class="play ic"><svg class="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg><svg class="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4l10 8-10 8z" fill="currentColor" stroke="none"/><path d="M19 5v14" stroke-linecap="round"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 01-4 4H3"/></svg></button></div></div>
+    </div>
+    <div class="card">
+      <h3>C5 · 极简光晕</h3>
+      <p>全部无底纯图标，播放键背后一圈封面色柔光呼吸——最轻的存在感，光就是按钮。</p>
+      <div class="mock"><div class="ctls c5"><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 20L9 12l10-8z" fill="currentColor" stroke="none"/><path d="M5 19V5" stroke-linecap="round"/></svg></button><button class="play ic"><svg class="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg><svg class="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4l10 8-10 8z" fill="currentColor" stroke="none"/><path d="M19 5v14" stroke-linecap="round"/></svg></button><button class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 01-4 4H3"/></svg></button></div></div>
+    </div>
+  </div>
+
+<script>
+// 进度条拖拽：--p 驱动；声纹条同步点亮
+document.querySelectorAll('.bar').forEach((bar) => {
+  const track = bar.querySelector('.track') || bar.querySelector('.tube') || bar.querySelector('.bars')
+  const set = (clientX) => {
+    const r = track.getBoundingClientRect()
+    let p = Math.min(1, Math.max(0, (clientX - r.left) / r.width))
+    if (bar.classList.contains('p5')) {
+      const n = Math.floor(p * 44)
+      bar.querySelectorAll('.bars i').forEach((el, i) => el.classList.toggle('on', i < n))
+    }
+    bar.style.setProperty('--p', p)
+    const dur = 231, cur = Math.round(p * dur)
+    const t = bar.querySelector('.times span')
+    if (t) t.textContent = Math.floor(cur / 60) + ':' + String(cur % 60).padStart(2, '0')
+  }
+  const down = (e) => { bar.setPointerCapture(e.pointerId); set(e.clientX); bar.onmv = (ev) => set(ev.clientX) }
+  bar.addEventListener('pointerdown', down)
+  bar.addEventListener('pointermove', (e) => { if (bar.onmv) bar.onmv(e) })
+  bar.addEventListener('pointerup', () => { bar.onmv = null })
+  bar.addEventListener('pointercancel', () => { bar.onmv = null })
+})
+// 声纹刻度：确定性高度
+const b5 = document.querySelector('.p5 .bars')
+for (let i = 0; i < 44; i++) {
+  const el = document.createElement('i')
+  const h = 7 + Math.round((Math.sin(i * 2.7) * 0.5 + 0.5) * 16 + (Math.sin(i * 0.9) * 0.5 + 0.5) * 3)
+  el.style.height = h + 'px'
+  if (i < Math.floor(0.24 * 44)) el.classList.add('on')
+  b5.appendChild(el)
+}
+// 播放键点击切换播放/暂停
+document.querySelectorAll('.ctls .play').forEach((b) => {
+  b.addEventListener('click', () => b.closest('.ctls').classList.toggle('playing'))
+})
+</script>
+</body>
+</html>
