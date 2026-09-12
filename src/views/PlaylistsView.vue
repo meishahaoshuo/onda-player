@@ -1005,6 +1005,8 @@ const totalPlaysOfSongs = computed(() =>
 .pl-name {
   font-size: 24px;
   font-weight: 600;
+  /* 收紧行高：字面顶缘贴近块顶，与封面顶缘光学对齐 */
+  line-height: 1.15;
 }
 
 /* 名字下方贴底的添加歌曲按钮：靠左不拉伸 */
@@ -1029,7 +1031,8 @@ const totalPlaysOfSongs = computed(() =>
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 9px 0;
+  /* 行距收紧：四行总高必须 ≤ 封面 176px，否则信息卡成为行内最高元素、把名字顶出封面顶缘 */
+  padding: 4px 0;
 }
 
 .pl-sideinfo .row + .row {
@@ -1038,11 +1041,13 @@ const totalPlaysOfSongs = computed(() =>
 
 .pl-sideinfo .k {
   font-size: 11px;
+  line-height: 1.25;
   color: var(--text-tertiary);
 }
 
 .pl-sideinfo .v {
   font-size: 13.5px;
+  line-height: 1.25;
   font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
