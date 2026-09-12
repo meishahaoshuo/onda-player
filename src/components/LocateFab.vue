@@ -131,6 +131,29 @@ const knobDirAngle = computed(() => (pointDown.value ? '180deg' : '0deg'))
       <template v-else-if="settings.locateFabStyle === 'knob'">
         <span class="face" :style="{ transform: `rotate(${knobDirAngle})` }" aria-hidden="true"><span class="dot"></span></span>
       </template>
+      <template v-else-if="settings.locateFabStyle === 'scale'">
+        <span class="mount" aria-hidden="true"></span>
+        <svg class="spring" viewBox="0 0 10 22" aria-hidden="true">
+          <polyline points="5,0 0,3 10,6 0,9 10,12 0,15 10,18 5,21" />
+        </svg>
+        <span class="hook" aria-hidden="true"></span>
+      </template>
+      <template v-else-if="settings.locateFabStyle === 'yoyo'">
+        <span class="string" aria-hidden="true"></span>
+        <span class="disc" aria-hidden="true"></span>
+      </template>
+      <template v-else-if="settings.locateFabStyle === 'float'">
+        <span class="water" aria-hidden="true"></span>
+        <span class="ripple" aria-hidden="true"></span>
+        <span class="floatbody" aria-hidden="true"></span>
+      </template>
+      <template v-else-if="settings.locateFabStyle === 'balloon'">
+        <span class="env" aria-hidden="true"></span>
+        <span class="flame" aria-hidden="true"></span>
+        <span class="rope l" aria-hidden="true"></span>
+        <span class="rope r" aria-hidden="true"></span>
+        <span class="basket" aria-hidden="true"></span>
+      </template>
       <template v-else>
         <span class="labelbar" aria-hidden="true"></span>
         <span class="window" aria-hidden="true"></span>
@@ -483,17 +506,341 @@ const knobDirAngle = computed(() => (pointDown.value ? '180deg' : '0deg'))
   transform: scale(0.8);
 }
 
+/* ── 吊簧秤：歌曲的「份量」挂在弹簧上——行在下方弹簧真形变拉长、挂钩下沉 ── */
+.locate-fab.v-scale {
+  width: 26px;
+  height: 40px;
+  border-radius: 0;
+}
+
+.locate-fab .mount {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 14px;
+  height: 4px;
+  margin-left: -7px;
+  border-radius: 2px 2px 1px 1px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(140, 145, 158, 0.6));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+.locate-fab svg.spring {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  margin-left: -5px;
+  width: 10px;
+  height: 22px;
+  transform-origin: top center;
+  transition: transform 0.9s var(--ease-spring);
+  pointer-events: none;
+}
+
+.locate-fab.v-scale.down svg.spring {
+  transform: scaleY(1.55);
+}
+
+.locate-fab svg.spring polyline {
+  fill: none;
+  stroke: rgba(180, 186, 198, 0.85);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.locate-fab .hook {
+  position: absolute;
+  left: 50%;
+  width: 8px;
+  height: 10px;
+  margin-left: -4px;
+  top: 25px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--halo-c, var(--accent)) 70%, #fff), var(--halo-c, var(--accent)));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 2px 5px rgba(0, 0, 0, 0.4);
+  transition: top 0.9s var(--ease-spring);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.locate-fab.v-scale.down .hook {
+  top: 30px;
+}
+
+.locate-fab .hook::after {
+  content: '';
+  width: 2.5px;
+  height: 2.5px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+/* ── 悠悠球：线头拴在播放行方向——行在上方球收上去、在下方线放长球滚下去 ── */
+.locate-fab.v-yoyo {
+  width: 30px;
+  height: 44px;
+  border-radius: 0;
+}
+
+.locate-fab .string {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 1.5px;
+  height: 12px;
+  margin-left: -0.75px;
+  background: linear-gradient(180deg, rgba(200, 205, 215, 0.7), rgba(200, 205, 215, 0.35));
+  transition: height 0.9s var(--ease-spring);
+  pointer-events: none;
+}
+
+.locate-fab.v-yoyo.down .string {
+  height: 30px;
+}
+
+.locate-fab .disc {
+  position: absolute;
+  left: 50%;
+  margin-left: -7px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  top: 2px;
+  transition: top 0.9s var(--ease-spring);
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.5), transparent 42%),
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--halo-c, var(--accent)) 85%, #fff) 0 3px,
+      var(--halo-c, var(--accent)) 3px 5px,
+      color-mix(in srgb, var(--halo-c, var(--accent)) 60%, #000) 5px 6.5px,
+      var(--halo-c, var(--accent)) 7px
+    );
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.4),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.3),
+    0 3px 7px rgba(0, 0, 0, 0.4);
+  animation: fab-yy-spin 1.6s linear infinite;
+  pointer-events: none;
+}
+
+.locate-fab.v-yoyo.down .disc {
+  top: 26px;
+}
+
+.locate-fab .disc::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 5px;
+  margin: -2.5px 0 0 -1px;
+  border-radius: 1px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+@keyframes fab-yy-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── 钓鱼浮漂：行在上方浮漂上浮出水更多，在下方沉得只剩红头；涟漪荡开 ── */
+.locate-fab.v-float {
+  width: 30px;
+  height: 44px;
+  border-radius: 0;
+}
+
+.locate-fab .water {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 22px;
+  height: 20px;
+  border-radius: 6px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 24%, transparent),
+    color-mix(in srgb, var(--accent) 10%, transparent)
+  );
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent) 35%, transparent);
+  pointer-events: none;
+}
+
+.locate-fab .floatbody {
+  position: absolute;
+  left: 50%;
+  margin-left: -4px;
+  width: 8px;
+  height: 26px;
+  top: 6px;
+  border-radius: 4px 4px 2px 2px;
+  background: linear-gradient(180deg, #e05656 0 9px, #f2f2f2 9px 17px, #2c2c30 17px);
+  box-shadow:
+    inset -1.5px 0 1.5px rgba(0, 0, 0, 0.25),
+    inset 1px 0 1px rgba(255, 255, 255, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: top 0.9s var(--ease-spring);
+  animation: fab-bob 2.8s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.locate-fab.v-float.down .floatbody {
+  top: 16px;
+}
+
+@keyframes fab-bob {
+  from { transform: translateY(-1px) rotate(-2deg); }
+  to { transform: translateY(1px) rotate(2deg); }
+}
+
+.locate-fab .ripple {
+  position: absolute;
+  left: 50%;
+  top: 23px;
+  width: 22px;
+  height: 5px;
+  margin-left: -11px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  animation: fab-rip2 2.6s var(--ease-out) infinite;
+  pointer-events: none;
+}
+
+@keyframes fab-rip2 {
+  from { transform: scale(0.6); opacity: 0.6; }
+  to { transform: scale(1.5); opacity: 0; }
+}
+
+/* ── 热气球：行在上方整套上浮、在下方缓缓沉降，火焰用封面色烧着 ── */
+.locate-fab.v-balloon {
+  width: 30px;
+  height: 46px;
+  border-radius: 0;
+}
+
+.locate-fab .env {
+  position: absolute;
+  left: 50%;
+  margin-left: -8px;
+  width: 16px;
+  height: 19px;
+  top: 16px;
+  border-radius: 50% 50% 46% 46%;
+  transition: top 0.9s var(--ease-spring);
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.4), transparent 45%),
+    repeating-conic-gradient(
+      from 8deg at 50% 40%,
+      color-mix(in srgb, var(--halo-c, var(--accent)) 85%, #fff) 0 14deg,
+      var(--halo-c, var(--accent)) 14deg 28deg,
+      color-mix(in srgb, var(--halo-c, var(--accent)) 62%, #3a2a18) 28deg 42deg
+    );
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.18),
+    0 3px 8px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.locate-fab.v-balloon.down .env {
+  top: 22px;
+}
+
+.locate-fab .flame {
+  position: absolute;
+  left: 50%;
+  margin-left: -1.5px;
+  width: 3px;
+  height: 4.5px;
+  top: 34px;
+  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+  background: radial-gradient(circle at 50% 30%, #fff2c8, var(--halo-c, var(--accent)) 65%);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--halo-c, var(--accent)) 70%, transparent);
+  animation: fab-flick 0.9s ease-in-out infinite alternate;
+  transition: top 0.9s var(--ease-spring);
+  pointer-events: none;
+}
+
+.locate-fab.v-balloon.down .flame {
+  top: 40px;
+}
+
+@keyframes fab-flick {
+  from { transform: scaleY(0.75); opacity: 0.8; }
+  to { transform: scaleY(1.15); opacity: 1; }
+}
+
+.locate-fab .basket {
+  position: absolute;
+  left: 50%;
+  margin-left: -3px;
+  width: 6px;
+  height: 4.5px;
+  top: 39px;
+  border-radius: 1.5px;
+  background: linear-gradient(180deg, #9a744a, #6e5030);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: top 0.9s var(--ease-spring);
+  pointer-events: none;
+}
+
+.locate-fab.v-balloon.down .basket {
+  top: 45px;
+}
+
+.locate-fab .rope {
+  position: absolute;
+  left: 50%;
+  width: 0.75px;
+  height: 3px;
+  background: rgba(160, 130, 90, 0.8);
+  transition: top 0.9s var(--ease-spring);
+  pointer-events: none;
+}
+
+.locate-fab .rope.l {
+  margin-left: -2.5px;
+  top: 35px;
+}
+
+.locate-fab .rope.r {
+  margin-left: 2px;
+  top: 35px;
+}
+
+.locate-fab.v-balloon.down .rope {
+  top: 41px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .locate-fab .needle,
   .locate-fab .orb,
   .locate-fab.v-drop,
-  .locate-fab .reel {
+  .locate-fab .reel,
+  .locate-fab .disc,
+  .locate-fab .floatbody,
+  .locate-fab .ripple,
+  .locate-fab .flame {
     animation: none;
   }
 
   .locate-fab .needle-mount,
   .locate-fab .face,
-  .locate-fab .orb {
+  .locate-fab .orb,
+  .locate-fab svg.spring,
+  .locate-fab .hook,
+  .locate-fab .string,
+  .locate-fab .disc,
+  .locate-fab .floatbody,
+  .locate-fab .env,
+  .locate-fab .flame,
+  .locate-fab .basket,
+  .locate-fab .rope {
     transition: none;
   }
 

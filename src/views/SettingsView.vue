@@ -275,6 +275,10 @@ function onRecordKeydown(e: KeyboardEvent) {
                   { id: 'drop', label: '露珠' },
                   { id: 'knob', label: '旋钮' },
                   { id: 'tape', label: '卡带' },
+                  { id: 'scale', label: '吊簧秤' },
+                  { id: 'yoyo', label: '悠悠球' },
+                  { id: 'float', label: '浮漂' },
+                  { id: 'balloon', label: '热气球' },
                 ]"
                 :key="s.id"
                 class="seg-choice-btn"
