@@ -101,7 +101,7 @@ const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
     <button
       v-if="show"
       class="locate-fab"
-      :class="`v-${settings.locateFabStyle}`"
+      :class="[`v-${settings.locateFabStyle}`, { light: settings.resolvedTheme === 'light' }]"
       :style="{ '--halo-c': haloColor || 'var(--accent)' }"
       title="定位到正在播放"
       @click="locatePlaying"
@@ -175,7 +175,7 @@ const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
     0 5px 12px rgba(0, 0, 0, 0.45);
 }
 
-:global([data-theme='light']) .locate-fab.v-compass {
+.locate-fab.light.v-compass {
   background:
     radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.7), transparent 45%),
     radial-gradient(circle at 50% 55%, rgba(245, 246, 250, 0.95), rgba(225, 228, 236, 0.98) 75%);
@@ -271,7 +271,7 @@ const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
   animation: fab-quiver 3.8s ease-in-out infinite;
 }
 
-:global([data-theme='light']) .locate-fab.v-drop {
+.locate-fab.light.v-drop {
   box-shadow:
     inset 0 1.5px 1.5px rgba(255, 255, 255, 0.95),
     inset 0 -2px 3px color-mix(in srgb, var(--halo-c, var(--accent)) 30%, rgba(0, 0, 60, 0.14)),
@@ -309,7 +309,7 @@ const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
     0 4px 10px rgba(0, 0, 0, 0.45);
 }
 
-:global([data-theme='light']) .locate-fab.v-knob {
+.locate-fab.light.v-knob {
   background:
     radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.75), transparent 40%),
     radial-gradient(circle at 50% 50%, rgba(238, 240, 246, 0.98) 0 58%, transparent 60%),
@@ -355,7 +355,7 @@ const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
     0 4px 10px rgba(0, 0, 0, 0.45);
 }
 
-:global([data-theme='light']) .locate-fab.v-tape {
+.locate-fab.light.v-tape {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent 40%),
     linear-gradient(180deg, #f2f2f5, #dcdce2);
@@ -390,7 +390,7 @@ const show = computed(() => playingIndex.value >= 0 && rowOffscreen.value)
   pointer-events: none;
 }
 
-:global([data-theme='light']) .locate-fab .window {
+.locate-fab.light .window {
   background: rgba(0, 0, 0, 0.08);
 }
 
