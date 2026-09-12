@@ -401,16 +401,24 @@ const knobDirAngle = computed(() => (pointDown.value ? '180deg' : '0deg'))
   to { transform: rotate(360deg); }
 }
 
-/* 浮现 / 隐藏 */
-.fab-enter-active,
-.fab-leave-active {
-  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+/* 浮现 / 隐藏：从播放条方向向上浮出（澜），弹簧过冲；离场短促反向沉回，滚动中频繁触发不拖沓 */
+.fab-enter-active {
+  transition: opacity 240ms var(--ease-out), transform 320ms var(--ease-spring);
+  transition-delay: 40ms; /* 快速掠过时减少频闪 */
 }
 
-.fab-enter-from,
+.fab-enter-from {
+  opacity: 0;
+  transform: translateY(10px) scale(0.72);
+}
+
+.fab-leave-active {
+  transition: opacity 140ms var(--ease-out), transform 160ms var(--ease-out);
+}
+
 .fab-leave-to {
   opacity: 0;
-  transform: scale(0.8);
+  transform: translateY(6px) scale(0.85);
 }
 
 @media (prefers-reduced-motion: reduce) {
