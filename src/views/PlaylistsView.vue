@@ -1573,24 +1573,30 @@ const totalPlaysOfSongs = computed(() =>
 
 .add-row {
   display: grid;
-  grid-template-columns: 20px 44px 1fr auto auto;
+  grid-template-columns: 44px 1fr auto auto;
   gap: 14px;
   align-items: center;
   height: 60px;
   padding: 0 12px;
   border-radius: 10px;
-  border: 1px solid transparent;
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  transition: background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 
 .add-row:hover {
   background: var(--bg-hover);
 }
 
+/* S7 光晕行：无勾选标记——选中 = 实底 + 主题色描边 + 外发光，歌名转主题色 */
 .add-row.checked {
-  background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+  background: var(--bg-base);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 0 18px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.add-row.checked .add-title {
+  color: var(--accent);
 }
 
 .add-row.added {
@@ -1598,45 +1604,20 @@ const totalPlaysOfSongs = computed(() =>
   cursor: default;
 }
 
-/* 自定义勾选框：圆角方框，选中填充主题色并打出对勾 */
+/* 勾选框仅作状态载体：视觉隐藏（行整体即勾选区），键盘聚焦时整行亮环 */
 .add-check {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  border-radius: 6px;
-  border: 1.5px solid var(--border-subtle);
-  background: var(--bg-base);
-  cursor: pointer;
-  position: relative;
-  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
-}
-
-.add-check:hover {
-  border-color: var(--accent);
-}
-
-.add-check:checked {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.add-check:checked::after {
-  content: '';
   position: absolute;
-  left: 5px;
-  top: 1.5px;
-  width: 4px;
-  height: 9px;
-  border-right: 2px solid var(--accent-text);
-  border-bottom: 2px solid var(--accent-text);
-  transform: rotate(45deg);
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.add-check:disabled {
-  opacity: 0.35;
-  cursor: default;
+.add-row:has(.add-check:focus-visible) {
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    0 0 18px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .add-cover :deep(.cover-img),

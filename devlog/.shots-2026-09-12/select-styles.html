@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<title>ONDA·澜 — 勾选呈现形式对比</title>
+<style>
+:root, :root[data-theme='dark'] {
+  --bg-base: #0a0a0a; --bg-panel: rgba(28, 28, 30, 0.7); --bg-hover: rgba(255,255,255,0.08);
+  --text-primary: #ffffff; --text-secondary: #a1a1a6; --text-tertiary: #7c7c80;
+  --border-subtle: rgba(255, 255, 255, 0.12); --accent: #5c7ce0; --accent-soft: rgba(92,124,224,0.2); --accent-text: #fff;
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1); --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+:root[data-theme='light'] {
+  --bg-base: #f5f2ee; --bg-panel: rgba(255, 255, 255, 0.8); --bg-hover: rgba(0,0,0,0.05);
+  --text-primary: #000000; --text-secondary: #86868b; --text-tertiary: #aeaeb2;
+  --border-subtle: rgba(0, 0, 0, 0.08); --accent: #172554; --accent-soft: rgba(23,37,84,0.12); --accent-text: #fff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg-base); color: var(--text-primary); font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; padding: 28px 34px 60px; }
+.head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+h1 { font-size: 19px; font-weight: 600; }
+.sub { color: var(--text-tertiary); font-size: 12.5px; margin-bottom: 16px; }
+.toggle { border: 1px solid var(--border-subtle); background: none; color: var(--text-secondary); font-size: 12.5px; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.seg { display: flex; gap: 5px; flex-wrap: wrap; padding: 4px; border-radius: 11px; background: var(--bg-hover); max-width: 900px; margin-bottom: 16px; }
+.seg button { border: none; background: none; color: var(--text-secondary); font-size: 12.5px; padding: 7px 15px; border-radius: 8px; cursor: pointer; transition: all 0.15s var(--ease-out); }
+.seg button.on { background: var(--bg-panel); color: var(--text-primary); box-shadow: 0 1px 5px rgba(0,0,0,0.18); }
+.modal { max-width: 860px; height: 520px; border-radius: 14px; background: var(--bg-panel); border: 1px solid var(--border-subtle);
+  -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+  display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22); }
+.mhead { padding: 15px 20px 0; font-size: 16px; font-weight: 600; }
+.msub { font-size: 12px; color: var(--text-secondary); padding: 4px 20px 0; }
+.mtools { margin: 12px 20px 0; display: flex; align-items: center; gap: 12px; }
+.msearch { flex: 1; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px;
+  border-radius: 10px; border: 1px solid var(--border-subtle); background: var(--bg-hover); color: var(--text-tertiary); }
+.msearch input { flex: 1; border: none; outline: none; background: transparent; color: var(--text-primary); font-size: 12.5px; }
+.mcount { font-size: 12.5px; color: var(--text-secondary); white-space: nowrap; }
+.mcount b { color: var(--accent); }
+.mfoot { padding: 12px 20px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: flex-end; }
+.btn { padding: 8px 22px; border-radius: 9px; border: none; background: var(--accent); color: var(--accent-text); font-size: 13px; font-weight: 500; cursor: pointer; }
+.rows { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 10px; counter-reset: ridx; }
+.row { display: grid; grid-template-columns: 24px 44px 1fr auto; gap: 13px; align-items: center;
+  height: 54px; padding: 0 10px; border-radius: 11px; cursor: pointer; border: 1px solid transparent;
+  counter-increment: ridx; transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out), padding 0.15s var(--ease-out); }
+.row:hover { background: var(--bg-hover); }
+.cvr { width: 44px; height: 44px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); position: relative; }
+.rt { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rs { font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
+.rd { font-size: 11.5px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+/* 勾选标记基底：隐藏默认方框，按样式各自呈现 */
+.chk { position: relative; display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 7px; border: 1.5px solid var(--border-subtle);
+  color: transparent; font-size: 11px; transition: all 0.18s var(--ease-spring); }
+.row.sel { background: var(--accent-soft); }
+
+/* ── S1 经典方框（现状） ── */
+.sel-1 .row.sel .chk { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+
+/* ── S2 圆环形变：空心圆环 → 实心对勾，弹簧放大 ── */
+.sel-2 .chk { border-radius: 50%; transform: scale(1); }
+.sel-2 .row:hover .chk { border-color: var(--accent); transform: scale(1.1); }
+.sel-2 .row.sel .chk { background: var(--accent); border-color: var(--accent); color: var(--accent-text); transform: scale(1.15); }
+
+/* ── S3 序号徽标：显示挑选顺序，像购物车 ── */
+.sel-3 .chk { border: none; background: none; color: var(--text-tertiary); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.sel-3 .chk::before { content: counter(ridx); }
+.sel-3 .row.sel .chk { background: var(--accent); color: var(--accent-text); border-radius: 50%; font-weight: 700; }
+
+/* ── S4 右端对勾滑入：时长被对勾替换 ── */
+.sel-4 .row { grid-template-columns: 0 44px 1fr auto; }
+.sel-4 .chk { opacity: 0; border: none; width: 0; overflow: hidden; }
+.sel-4 .row.sel .rd { color: transparent; }
+.sel-4 .row.sel { border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.sel-4 .row.sel::after { content: '✓'; position: absolute; right: 16px; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-text); font-size: 12px; display: flex; align-items: center; justify-content: center;
+  animation: pop 0.3s var(--ease-spring); }
+@keyframes pop { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* ── S5 左侧色条：最克制的标记 ── */
+.sel-5 .row { grid-template-columns: 0 44px 1fr auto; }
+.sel-5 .chk { opacity: 0; width: 0; border: none; overflow: hidden; }
+.sel-5 .row.sel { padding-left: 14px; box-shadow: inset 3px 0 0 var(--accent); border-color: transparent; }
+
+/* ── S6 封面角标：对勾长在封面上 ── */
+.sel-6 .row { grid-template-columns: 0 44px 1fr auto; }
+.sel-6 .chk { opacity: 0; width: 0; border: none; overflow: hidden; }
+.sel-6 .cvr { border-radius: 10px; }
+.sel-6 .cvr::after { content: ''; position: absolute; right: -4px; top: -4px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-text); opacity: 0; transform: scale(0.4);
+  transition: all 0.2s var(--ease-spring); box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+.sel-6 .row.sel .cvr::after { opacity: 1; transform: scale(1); }
+.sel-6 .row.sel { border-color: color-mix(in srgb, var(--accent) 24%, transparent); }
+
+/* ── S7 光晕行：无任何标记，光即选中 ── */
+.sel-7 .row { grid-template-columns: 0 44px 1fr auto; }
+.sel-7 .chk { opacity: 0; width: 0; border: none; overflow: hidden; }
+.sel-7 .row.sel { background: var(--bg-base);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 0 18px color-mix(in srgb, var(--accent) 22%, transparent); }
+.sel-7 .row.sel .rt { color: var(--accent); }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>勾选呈现形式 · 对比</h1>
+    <button class="toggle" onclick="const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'">切换深 / 浅主题</button>
+  </div>
+  <p class="sub">同一份列表，顶部切换 7 种勾选呈现。点击歌曲行体验选中/取消的手感与动效。</p>
+  <div class="seg" id="seg">
+    <button class="on" data-s="1">S1 经典方框（现状）</button>
+    <button data-s="2">S2 圆环形变</button>
+    <button data-s="3">S3 序号徽标</button>
+    <button data-s="4">S4 右端对勾</button>
+    <button data-s="5">S5 左侧色条</button>
+    <button data-s="6">S6 封面角标</button>
+    <button data-s="7">S7 光晕行</button>
+  </div>
+
+  <div class="modal sel-1" id="panel">
+    <div class="mhead">添加歌曲到「罗志祥」</div>
+    <div class="msub">S 方案只影响勾选的呈现，功能与布局不变</div>
+    <div class="mtools">
+      <div class="msearch"><span>⌕</span><input placeholder="搜索标题 / 艺术家 / 专辑" id="filter" /></div>
+      <span class="mcount">已选 <b id="cnt">0</b> 首</span>
+    </div>
+    <div class="rows" id="rows"></div>
+    <div class="mfoot"><span></span><button class="btn">添加</button></div>
+  </div>
+
+<script>
+const SONGS = [
+  { t: '0932', a: '陈小春 · 绝对收藏', d: '4:07', h: 8 },
+  { t: '100种表情', a: '方大同 · 橙月', d: '3:43', h: 32 },
+  { t: '1234567', a: '方大同 · 橙月', d: '3:46', h: 18 },
+  { t: '180度', a: '孙燕姿 · 是时候', d: '5:04', h: 350 },
+  { t: '3-7-20-1', a: '曹格 · SUPERMAN', d: '4:13', h: 200 },
+  { t: '阿郎与阿宝', a: '周杰伦 · 不能说的秘密', d: '2:20', h: 45 },
+  { t: '哎呀', a: '李荣浩 · 作曲家', d: '4:53', h: 320 },
+  { t: '唉!', a: '方大同 · 爱爱爱', d: '3:41', h: 265 },
+  { t: '爱爱爱', a: '方大同 · 爱爱爱', d: '4:05', h: 155 },
+  { t: '安静', a: '周杰伦 · 范特西', d: '4:37', h: 105 },
+]
+const hueCover = (h) => `linear-gradient(135deg, hsl(${h} 62% 62%), hsl(${(h + 40) % 360} 55% 38%))`
+const sel = new Set()
+let q = ''
+const rowsEl = document.getElementById('rows')
+function render() {
+  rowsEl.innerHTML = SONGS.map((s, i) => {
+    if (q && !(s.t + s.a).toLowerCase().includes(q)) return ''
+    return `<div class="row ${sel.has(i) ? 'sel' : ''}" data-i="${i}">
+      <span class="chk">✓</span>
+      <div class="cvr" style="background:${hueCover(s.h)}"></div>
+      <div style="min-width:0"><div class="rt">${s.t}</div><div class="rs">${s.a}</div></div>
+      <span class="rd">${s.d}</span></div>`
+  }).join('')
+  rowsEl.querySelectorAll('.row').forEach((r) => r.addEventListener('click', () => {
+    const i = +r.dataset.i
+    sel.has(i) ? sel.delete(i) : sel.add(i)
+    document.getElementById('cnt').textContent = sel.size
+    render()
+  }))
+}
+document.getElementById('filter').addEventListener('input', (e) => { q = e.target.value.trim().toLowerCase(); render() })
+document.querySelectorAll('#seg button').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('#seg button').forEach((x) => x.classList.remove('on'))
+  b.classList.add('on')
+  document.getElementById('panel').className = 'modal sel-' + b.dataset.s
+}))
+render()
+</script>
+</body>
+</html>

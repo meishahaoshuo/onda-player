@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<title>ONDA·澜 — 添加歌曲 · 交互方案对比</title>
+<style>
+:root, :root[data-theme='dark'] {
+  --bg-base: #0a0a0a; --bg-panel: rgba(28, 28, 30, 0.66); --bg-hover: rgba(255,255,255,0.08);
+  --text-primary: #ffffff; --text-secondary: #a1a1a6; --text-tertiary: #7c7c80;
+  --border-subtle: rgba(255, 255, 255, 0.12); --accent: #5c7ce0; --accent-soft: rgba(92,124,224,0.22);
+  --accent-text: #fff;
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1); --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+:root[data-theme='light'] {
+  --bg-base: #f5f2ee; --bg-panel: rgba(255, 255, 255, 0.75); --bg-hover: rgba(0,0,0,0.05);
+  --text-primary: #000000; --text-secondary: #86868b; --text-tertiary: #aeaeb2;
+  --border-subtle: rgba(0, 0, 0, 0.08); --accent: #172554; --accent-soft: rgba(23,37,84,0.12);
+  --accent-text: #fff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg-base); color: var(--text-primary); font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; padding: 28px 34px 60px; }
+.head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+h1 { font-size: 19px; font-weight: 600; }
+.sub { color: var(--text-tertiary); font-size: 12.5px; margin-bottom: 18px; line-height: 1.6; }
+.toggle { border: 1px solid var(--border-subtle); background: none; color: var(--text-secondary); font-size: 12.5px; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.scheme { margin-bottom: 26px; }
+.scheme h2 { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.scheme > p { font-size: 12px; color: var(--text-tertiary); margin-bottom: 10px; line-height: 1.55; }
+.modal { height: 480px; border-radius: 14px; background: var(--bg-panel); border: 1px solid var(--border-subtle);
+  -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25); }
+.mhead { padding: 16px 20px 0; }
+.mtitle { font-size: 17px; font-weight: 600; }
+.msub { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+.msearch { margin: 12px 20px 0; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px;
+  border-radius: 10px; border: 1px solid var(--border-subtle); background: var(--bg-hover); color: var(--text-tertiary); }
+.msearch input { flex: 1; border: none; outline: none; background: transparent; color: var(--text-primary); font-size: 12.5px; }
+.mbody { flex: 1; min-height: 0; display: flex; }
+.mfoot { padding: 12px 20px; border-top: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; }
+.mcount { font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.mcount b { color: var(--accent); font-weight: 700; }
+.mbtns { display: flex; gap: 10px; }
+.btn { padding: 8px 20px; border-radius: 9px; border: 1px solid var(--border-subtle); background: none; color: var(--text-secondary); font-size: 13px; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: transparent; color: var(--accent-text); font-weight: 500; }
+.btn.primary:disabled { opacity: 0.45; cursor: default; }
+
+/* 列表行（各方案通用） */
+.rows { flex: 1; overflow-y: auto; padding: 6px 10px; }
+.row { display: grid; grid-template-columns: 18px 42px 1fr auto; gap: 12px; align-items: center;
+  height: 52px; padding: 0 10px; border-radius: 10px; cursor: pointer; border: 1px solid transparent;
+  transition: background 0.15s var(--ease-out), border-color 0.15s; }
+.row:hover { background: var(--bg-hover); }
+.row.sel { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
+.row.added { opacity: 0.4; cursor: default; }
+.cvr { width: 42px; height: 42px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+.rt { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rs { font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rd { font-size: 11.5px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.chk { width: 17px; height: 17px; border-radius: 6px; border: 1.5px solid var(--border-subtle); display: flex; align-items: center; justify-content: center;
+  color: transparent; font-size: 11px; transition: all 0.15s var(--ease-out); }
+.row.sel .chk { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.tag { font-size: 10px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border-subtle); color: var(--text-tertiary); white-space: nowrap; }
+
+/* A 穿梭板 */
+.transfer { flex: 1; display: flex; min-width: 0; }
+.tpanel { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.tpanel .tp-head { padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center; }
+.tdiv { width: 44px; display: flex; align-items: center; justify-content: center; }
+.tdiv .arrow { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--border-subtle);
+  display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); font-size: 14px; }
+.staged-row .cvr { width: 34px; height: 34px; border-radius: 6px; }
+.staged-row { grid-template-columns: 34px 1fr auto; height: 46px; }
+.staged-row .rm { color: var(--text-tertiary); font-size: 14px; }
+.staged-row:hover .rm { color: var(--text-primary); }
+
+/* B 封面墙 */
+.wall { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 14px; padding: 14px 18px; align-content: start; }
+.tile { cursor: pointer; position: relative; border-radius: 12px; }
+.tile .cvr { width: 100%; aspect-ratio: 1; border-radius: 10px; transition: transform 0.2s var(--ease-spring), box-shadow 0.2s; }
+.tile:hover .cvr { transform: scale(1.04); }
+.tile.sel .cvr { box-shadow: 0 0 0 2.5px var(--accent), 0 6px 16px rgba(0,0,0,0.3); }
+.tile .mark { position: absolute; right: 6px; top: 6px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-text); font-size: 11px; display: flex; align-items: center; justify-content: center;
+  opacity: 0; transform: scale(0.5); transition: all 0.18s var(--ease-spring); }
+.tile.sel .mark { opacity: 1; transform: scale(1); }
+.tile .tn { font-size: 11.5px; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .ts { font-size: 10.5px; color: var(--text-tertiary); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile.added { opacity: 0.4; cursor: default; }
+
+/* C 暂存托盘 */
+.tray { width: 250px; border-left: 1px solid var(--border-subtle); display: flex; flex-direction: column; padding: 14px 16px; }
+.tray h4 { font-size: 12.5px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+.tray h4 span { font-size: 11px; color: var(--text-tertiary); font-weight: 400; cursor: pointer; }
+.tray h4 span:hover { color: var(--text-primary); }
+.stack { display: flex; margin: 14px 0 10px; height: 52px; align-items: center; }
+.stack .scvr { width: 46px; height: 46px; border-radius: 9px; border: 2px solid var(--bg-panel);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.25); margin-left: -14px; transition: transform 0.2s var(--ease-spring); }
+.stack .scvr:first-child { margin-left: 0; }
+.stack .scvr:hover { transform: translateY(-3px); z-index: 2; }
+.stack .empty-slot { width: 46px; height: 46px; border-radius: 9px; border: 1.5px dashed var(--border-subtle);
+  display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); font-size: 11px; }
+.tray .tstat { font-size: 12px; color: var(--text-secondary); line-height: 1.8; }
+.tray .tstat b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.tray .hint { margin-top: auto; font-size: 11px; color: var(--text-tertiary); line-height: 1.6; }
+
+/* D 实时预览 */
+.preview { width: 250px; border-left: 1px solid var(--border-subtle); padding: 16px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.pv-collage { width: 120px; height: 120px; border-radius: 10px; overflow: hidden; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.3); background: var(--bg-hover); }
+.pv-collage .pcvr { width: 100%; height: 100%; }
+.pv-name { font-size: 15px; font-weight: 600; margin-top: 12px; }
+.pv-stat { font-size: 11.5px; color: var(--text-secondary); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.pv-new { font-size: 11px; color: var(--accent); margin-top: 10px; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>添加歌曲 · 交互方案对比</h1>
+    <button class="toggle" onclick="const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'">切换深 / 浅主题</button>
+  </div>
+  <p class="sub">四个方案交互结构各不相同，<b>全部可真实操作</b>：点歌选/取消、搜索过滤、看计数联动。「已在歌单」的置灰不可选。选定字母告诉我即可。</p>
+
+  <!-- ═══ A 双栏穿梭板 ═══ -->
+  <div class="scheme">
+    <h2>A · 双栏穿梭板</h2>
+    <p>左边是曲库、右边是「将要加入的歌单」。点左边的歌飞到右边、点右边 ⊗ 拿回来——「选了什么」一目了然，选完统一落库。IDE / 邮件客户端的经典交互，心智负担最低。</p>
+    <div class="modal" data-scheme="A">
+      <div class="mhead"><div class="mtitle">添加歌曲</div><div class="msub">添加到「罗志祥」</div></div>
+      <div class="msearch"><span>⌕</span><input placeholder="搜索标题 / 艺术家 / 专辑" data-filter /></div>
+      <div class="mbody">
+        <div class="tpanel">
+          <div class="tp-head"><span>曲库</span><span class="tcount"></span></div>
+          <div class="rows lib"></div>
+        </div>
+        <div class="tdiv"><span class="arrow">→</span></div>
+        <div class="tpanel">
+          <div class="tp-head"><span>将添加到歌单</span><span class="tcount2">0 首</span></div>
+          <div class="rows staged"></div>
+        </div>
+      </div>
+      <div class="mfoot"><span class="mcount">已选 <b class="cnt">0</b> 首</span><div class="mbtns"><button class="btn">取消</button><button class="btn primary" disabled>添加</button></div></div>
+    </div>
+  </div>
+
+  <!-- ═══ B 封面墙 ═══ -->
+  <div class="scheme">
+    <h2>B · 封面墙</h2>
+    <p>以封面为主角的选择方式：歌曲变成一张张封面瓷砖，点选后主题色描边 + 角标对勾。靠「认封面」选歌比读文字快得多，视觉上也最有播放器的味道。</p>
+    <div class="modal" data-scheme="B">
+      <div class="mhead"><div class="mtitle">添加歌曲</div><div class="msub">添加到「罗志祥」 · 点选封面即加入</div></div>
+      <div class="msearch"><span>⌕</span><input placeholder="搜索标题 / 艺术家 / 专辑" data-filter /></div>
+      <div class="wall"></div>
+      <div class="mfoot"><span class="mcount">已选 <b class="cnt">0</b> 首</span><div class="mbtns"><button class="btn">取消</button><button class="btn primary" disabled>添加</button></div></div>
+    </div>
+  </div>
+
+  <!-- ═══ C 暂存托盘 ═══ -->
+  <div class="scheme">
+    <h2>C · 列表 + 暂存托盘</h2>
+    <p>保留你熟悉的列表，右侧加一个「暂存托盘」：选中的封面像照片一样叠在托盘里（悬停可翻看），选错点托盘上方「清空」。列表本身不动大结构，风险最小。</p>
+    <div class="modal" data-scheme="C">
+      <div class="mhead"><div class="mtitle">添加歌曲</div><div class="msub">添加到「罗志祥」</div></div>
+      <div class="msearch"><span>⌕</span><input placeholder="搜索标题 / 艺术家 / 专辑" data-filter /></div>
+      <div class="mbody">
+        <div class="rows lib"></div>
+        <div class="tray">
+          <h4>暂存托盘<span data-clear>清空</span></h4>
+          <div class="stack"><span class="empty-slot">空</span></div>
+          <div class="tstat">已选 <b class="cnt">0</b> 首 · 共 <b class="dur">0:00</b></div>
+          <div class="hint">托盘里的歌不会立刻进歌单，点「添加」统一落库。悬停封面可预览。</div>
+        </div>
+      </div>
+      <div class="mfoot"><span></span><div class="mbtns"><button class="btn">取消</button><button class="btn primary" disabled>添加</button></div></div>
+    </div>
+  </div>
+
+  <!-- ═══ D 实时歌单预览 ═══ -->
+  <div class="scheme">
+    <h2>D · 实时歌单预览</h2>
+    <p>右侧是歌单的「实时名片」：四宫格封面会随着你的勾选**当场长大**，歌曲数与总时长实时重算——先看到歌单变成什么样，再按添加。仪式感最强。</p>
+    <div class="modal" data-scheme="D">
+      <div class="mhead"><div class="mtitle">添加歌曲</div><div class="msub">添加到「罗志祥」</div></div>
+      <div class="msearch"><span>⌕</span><input placeholder="搜索标题 / 艺术家 / 专辑" data-filter /></div>
+      <div class="mbody">
+        <div class="rows lib"></div>
+        <div class="preview">
+          <div class="pv-collage"></div>
+          <div class="pv-name">罗志祥</div>
+          <div class="pv-stat">将共有 <b class="n">25</b> 首 · <b class="d">1 小时 42 分</b></div>
+          <div class="pv-new">本次将新增 <b class="newn">0</b> 首</div>
+        </div>
+      </div>
+      <div class="mfoot"><span class="mcount">已选 <b class="cnt">0</b> 首</span><div class="mbtns"><button class="btn">取消</button><button class="btn primary" disabled>添加</button></div></div>
+    </div>
+  </div>
+
+<script>
+const SONGS = [
+  { t: '0932', a: '陈小春', al: '绝对收藏', d: 247, h: 8 },
+  { t: '100种表情', a: '方大同', al: '橙月', d: 223, h: 32 },
+  { t: '1234567', a: '方大同', al: '橙月', d: 226, h: 18 },
+  { t: '180度', a: '孙燕姿', al: '是时候', d: 304, h: 350 },
+  { t: '3-7-20-1', a: '曹格', al: 'SUPERMAN', d: 253, h: 200 },
+  { t: '阿郎与阿宝', a: '周杰伦', al: '不能说的秘密', d: 140, h: 45 },
+  { t: '哎呀', a: '李荣浩', al: '作曲家', d: 293, h: 320 },
+  { t: '唉!', a: '方大同', al: '爱爱爱', d: 221, h: 265 },
+  { t: '爱爱爱', a: '方大同', al: '爱爱爱', d: 245, h: 155 },
+  { t: '安静', a: '周杰伦', al: '范特西', d: 277, h: 105 },
+  { t: '暗号', a: '周杰伦', al: '八度空间', d: 268, h: 385 },
+  { t: '八度空间', a: '周杰伦', al: '八度空间', d: 251, h: 75 },
+]
+const ADDED = new Set([1, 2]) // 已在歌单
+const hueCover = (h) => `linear-gradient(135deg, hsl(${h} 62% 62%), hsl(${(h + 40) % 360} 55% 38%))`
+
+function fmt(sec) { return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0') }
+function rowHTML(s, sel) {
+  return `<span class="chk">✓</span><div class="cvr" style="background:${hueCover(s.h)}"></div>
+    <div style="min-width:0"><div class="rt">${s.t}</div><div class="rs">${s.a} · ${s.al}</div></div>
+    <span class="rd">${fmt(s.d)}</span>`
+}
+function matches(s, q) { return !q || (s.t + s.a + s.al).toLowerCase().includes(q) }
+
+const schemes = []
+document.querySelectorAll('.modal').forEach((modal) => {
+  const kind = modal.dataset.scheme
+  const S = { modal, kind, sel: new Set(), q: '' }
+  schemes.push(S)
+  const filter = modal.querySelector('[data-filter]')
+  if (filter) filter.addEventListener('input', () => { S.q = filter.value.trim().toLowerCase(); render(S) })
+
+  if (kind === 'A') {
+    S.render = () => {
+      const lib = modal.querySelector('.lib'), stg = modal.querySelector('.staged')
+      lib.innerHTML = SONGS.filter((s) => !ADDED.has(SONGS.indexOf(s)) && matches(s, S.q)).map((s) => {
+        const i = SONGS.indexOf(s)
+        return `<div class="row ${S.sel.has(i) ? 'sel' : ''}" data-i="${i}">${rowHTML(s, S.sel.has(i))}<span style="color:var(--text-tertiary)">＋</span></div>`
+      }).join('') || '<div style="padding:20px;color:var(--text-tertiary);font-size:12px">没有匹配的歌曲</div>'
+      stg.innerHTML = [...S.sel].map((i) => `<div class="row staged-row" data-i="${i}"><div class="cvr" style="background:${hueCover(SONGS[i].h)}"></div><div style="min-width:0"><div class="rt">${SONGS[i].t}</div></div><span class="rm">⊗</span></div>`).join('') || '<div style="padding:20px;color:var(--text-tertiary);font-size:12px">点左侧歌曲加到这里</div>'
+      modal.querySelector('.tcount2').textContent = S.sel.size + ' 首'
+      lib.querySelectorAll('.row').forEach((r) => r.addEventListener('click', () => { S.sel.add(+r.dataset.i); renderAll() }))
+      stg.querySelectorAll('.row').forEach((r) => r.querySelector('.rm').addEventListener('click', (e) => { e.stopPropagation(); S.sel.delete(+r.dataset.i); renderAll() }))
+    }
+  } else if (kind === 'B') {
+    S.render = () => {
+      const wall = modal.querySelector('.wall')
+      wall.innerHTML = SONGS.filter((s) => matches(s, S.q)).map((s) => {
+        const i = SONGS.indexOf(s), added = ADDED.has(i), sel = S.sel.has(i)
+        return `<div class="tile ${sel ? 'sel' : ''} ${added ? 'added' : ''}" data-i="${i}">
+          <div class="cvr" style="background:${hueCover(s.h)}"><span class="mark">✓</span></div>
+          <div class="tn">${s.t}</div><div class="ts">${added ? '已在歌单' : s.a}</div></div>`
+      }).join('')
+      wall.querySelectorAll('.tile').forEach((tl) => {
+        if (tl.classList.contains('added')) return
+        tl.addEventListener('click', () => { const i = +tl.dataset.i; S.sel.has(i) ? S.sel.delete(i) : S.sel.add(i); renderAll() })
+      })
+    }
+  } else {
+    S.render = () => {
+      const lib = modal.querySelector('.lib')
+      if (lib) {
+        lib.innerHTML = SONGS.filter((s) => matches(s, S.q)).map((s) => {
+          const i = SONGS.indexOf(s), added = ADDED.has(i), sel = S.sel.has(i)
+          const chk = kind === 'C' ? '' : `<span class="chk">✓</span>`
+          const tag = added ? `<span class="tag">已在歌单</span>` : `<span class="rd">${fmt(s.d)}</span>`
+          return `<div class="row ${sel ? 'sel' : ''} ${added ? 'added' : ''}" data-i="${i}">${chk}<div class="cvr" style="background:${hueCover(s.h)}"></div><div style="min-width:0"><div class="rt">${s.t}</div><div class="rs">${s.a} · ${s.al}</div></div>${tag}</div>`
+        }).join('') || '<div style="padding:20px;color:var(--text-tertiary);font-size:12px">没有匹配的歌曲</div>'
+        lib.querySelectorAll('.row').forEach((r) => {
+          if (r.classList.contains('added')) return
+          r.addEventListener('click', () => { const i = +r.dataset.i; S.sel.has(i) ? S.sel.delete(i) : S.sel.add(i); renderAll() })
+        })
+      }
+      // C 托盘
+      const stack = modal.querySelector('.stack')
+      if (stack) {
+        stack.innerHTML = S.sel.size === 0 ? '<span class="empty-slot">空</span>'
+          : [...S.sel].slice(-6).map((i) => `<div class="scvr" style="background:${hueCover(SONGS[i].h)}" title="${SONGS[i].t}"></div>`).join('')
+      }
+      // D 预览
+      const collage = modal.querySelector('.pv-collage')
+      if (collage) {
+        const all = [...ADDED, ...S.sel].map((i) => SONGS[i])
+        collage.innerHTML = all.length === 0 ? '' : all.slice(0, 4).map((s) => `<div class="pcvr" style="background:${hueCover(s.h)}"></div>`).join('')
+        if (all.length > 0 && all.length < 4) { /* 少于 4 张时留白格 */ }
+        if (all.length === 1) collage.style.gridTemplateColumns = '1fr'
+        else collage.style.gridTemplateColumns = '1fr 1fr'
+        const dur = all.reduce((a, s) => a + s.d, 0)
+        modal.querySelector('.n').textContent = all.length
+        modal.querySelector('.d').textContent = Math.floor(dur / 60) + ' 分 ' + (dur % 60) + ' 秒'
+        modal.querySelector('.newn').textContent = S.sel.size
+      }
+    }
+  }
+})
+function renderAll() {
+  for (const S of schemes) {
+    S.render()
+    const cnt = S.modal.querySelector('.cnt')
+    if (cnt) cnt.textContent = S.sel.size
+    const btn = S.modal.querySelector('.btn.primary')
+    if (btn) btn.disabled = S.sel.size === 0
+  }
+}
+// 清空（托盘）
+document.querySelectorAll('[data-clear]').forEach((el) => el.addEventListener('click', () => {
+  const S = schemes.find((x) => x.modal.contains(el))
+  if (S) { S.sel.clear(); renderAll() }
+}))
+renderAll()
+</script>
+</body>
+</html>

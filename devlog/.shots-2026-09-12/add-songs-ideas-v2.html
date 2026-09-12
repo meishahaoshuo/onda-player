@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<title>ONDA·澜 — 添加歌曲 · 布局格局方案 v2</title>
+<style>
+:root, :root[data-theme='dark'] {
+  --bg-base: #0a0a0a; --bg-panel: rgba(28, 28, 30, 0.66); --bg-hover: rgba(255,255,255,0.08); --bg-active: rgba(92,124,224,0.18);
+  --text-primary: #ffffff; --text-secondary: #a1a1a6; --text-tertiary: #7c7c80;
+  --border-subtle: rgba(255, 255, 255, 0.12); --accent: #5c7ce0; --accent-soft: rgba(92,124,224,0.22); --accent-text: #fff;
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1); --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+:root[data-theme='light'] {
+  --bg-base: #f5f2ee; --bg-panel: rgba(255, 255, 255, 0.78); --bg-hover: rgba(0,0,0,0.05); --bg-active: rgba(23,37,84,0.1);
+  --text-primary: #000000; --text-secondary: #86868b; --text-tertiary: #aeaeb2;
+  --border-subtle: rgba(0, 0, 0, 0.08); --accent: #172554; --accent-soft: rgba(23,37,84,0.12); --accent-text: #fff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg-base); color: var(--text-primary); font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; padding: 28px 34px 60px; }
+.head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+h1 { font-size: 19px; font-weight: 600; }
+.sub { color: var(--text-tertiary); font-size: 12.5px; margin-bottom: 18px; line-height: 1.6; }
+.toggle { border: 1px solid var(--border-subtle); background: none; color: var(--text-secondary); font-size: 12.5px; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.scheme { margin-bottom: 28px; }
+.scheme h2 { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.scheme > p { font-size: 12px; color: var(--text-tertiary); margin-bottom: 10px; line-height: 1.55; }
+.modal { height: 500px; border-radius: 14px; background: var(--bg-panel); border: 1px solid var(--border-subtle);
+  -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+  display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25); }
+.mhead { padding: 16px 20px 0; }
+.mtitle { font-size: 17px; font-weight: 600; }
+.msub { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+.mtools { margin: 12px 20px 0; display: flex; align-items: center; gap: 12px; }
+.msearch { flex: 1; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px;
+  border-radius: 10px; border: 1px solid var(--border-subtle); background: var(--bg-hover); color: var(--text-tertiary); }
+.msearch input { flex: 1; border: none; outline: none; background: transparent; color: var(--text-primary); font-size: 12.5px; }
+.onlynew { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; cursor: pointer; }
+.sw { width: 32px; height: 18px; border-radius: 999px; background: var(--bg-hover); border: 1px solid var(--border-subtle); position: relative; transition: background 0.15s; }
+.sw::after { content: ''; position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--text-secondary); transition: all 0.15s var(--ease-out); }
+.sw.on { background: var(--accent); border-color: var(--accent); }
+.sw.on::after { left: 16px; background: #fff; }
+.mbody { flex: 1; min-height: 0; display: flex; }
+.mfoot { padding: 12px 20px; border-top: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; }
+.mfoot .left { display: flex; align-items: center; gap: 12px; }
+.mcount { font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.mcount b { color: var(--accent); font-weight: 700; }
+.mbtns { display: flex; gap: 10px; }
+.btn { padding: 8px 20px; border-radius: 9px; border: 1px solid var(--border-subtle); background: none; color: var(--text-secondary); font-size: 13px; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: transparent; color: var(--accent-text); font-weight: 500; }
+.btn.primary:disabled { opacity: 0.45; cursor: default; }
+.undo { font-size: 12px; color: var(--accent); cursor: pointer; display: none; }
+.undo.show { display: inline; }
+
+.rows { flex: 1; overflow-y: auto; padding: 6px 10px; }
+.row { display: grid; grid-template-columns: 18px 42px 1fr auto; gap: 12px; align-items: center;
+  height: 50px; padding: 0 10px; border-radius: 10px; cursor: pointer; border: 1px solid transparent;
+  transition: background 0.15s var(--ease-out), border-color 0.15s; }
+.row:hover { background: var(--bg-hover); }
+.row.sel { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
+.cvr { width: 42px; height: 42px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+.rt { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rs { font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rd { font-size: 11.5px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.chk { width: 17px; height: 17px; border-radius: 6px; border: 1.5px solid var(--border-subtle); display: flex; align-items: center; justify-content: center;
+  color: transparent; font-size: 11px; transition: all 0.15s var(--ease-out); }
+.row.sel .chk { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.tag { font-size: 10px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border-subtle); color: var(--text-tertiary); white-space: nowrap; }
+.mini { font-size: 12px; color: var(--accent); cursor: pointer; padding: 3px 8px; border-radius: 6px; }
+.mini:hover { background: var(--accent-soft); }
+.mini.dis { opacity: 0.4; cursor: default; background: none; }
+
+/* A 分屏 */
+.pane { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.pane .ph { padding: 12px 16px 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center; }
+.pdiv { width: 1px; background: var(--border-subtle); }
+.rowx { grid-template-columns: 42px 1fr auto auto; }
+.rm { color: var(--text-tertiary); cursor: pointer; font-size: 13px; padding: 4px; border-radius: 6px; }
+.rm:hover { color: var(--danger); background: var(--bg-hover); }
+.addbtn { color: var(--accent); font-weight: 700; font-size: 15px; opacity: 0; transition: opacity 0.15s; padding: 4px 8px; border-radius: 6px; }
+.row:hover .addbtn { opacity: 1; }
+.addbtn:hover { background: var(--accent-soft); }
+
+/* B 货架 */
+.shelf { padding: 10px 16px 4px; }
+.shelf .sh-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.shelf .sh-cvr { width: 34px; height: 34px; border-radius: 7px; }
+.shelf .sh-name { font-size: 12.5px; font-weight: 600; }
+.shelf .sh-cnt { font-size: 11px; color: var(--text-tertiary); }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.schip { display: flex; align-items: center; gap: 8px; padding: 5px 10px 5px 5px; border-radius: 999px; border: 1px solid var(--border-subtle);
+  cursor: pointer; transition: all 0.15s var(--ease-out); background: var(--bg-hover); }
+.schip:hover { border-color: var(--accent); }
+.schip.sel { background: var(--accent-soft); border-color: var(--accent); }
+.schip .scvr { width: 26px; height: 26px; border-radius: 50%; }
+.schip .st { font-size: 12px; white-space: nowrap; }
+.schip .schk { width: 14px; height: 14px; border-radius: 50%; border: 1.2px solid var(--border-subtle); color: transparent; font-size: 9px; display: flex; align-items: center; justify-content: center; }
+.schip.sel .schk { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.strip { display: flex; align-items: center; gap: 6px; padding: 0 6px; }
+.strip .cvr { width: 34px; height: 34px; border-radius: 7px; }
+.strip .cvr.dim { opacity: 0.45; }
+
+/* D 双模式 */
+.seg { display: flex; gap: 4px; padding: 3px; border-radius: 9px; background: var(--bg-hover); }
+.seg button { border: none; background: none; color: var(--text-secondary); font-size: 12px; padding: 5px 13px; border-radius: 7px; cursor: pointer; }
+.seg button.on { background: var(--bg-panel); color: var(--text-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+.band { display: flex; align-items: center; gap: 7px; padding: 10px 20px; border-top: 1px solid var(--border-subtle); overflow-x: auto; }
+.band .btag { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; margin-right: 4px; }
+.band .cvr { width: 36px; height: 36px; border-radius: 7px; flex: none; }
+.band .cvr.staged { box-shadow: 0 0 0 2px var(--accent); }
+.wall2 { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 14px; padding: 14px 18px; align-content: start; }
+.tile { cursor: pointer; position: relative; }
+.tile .cvr2 { width: 100%; aspect-ratio: 1; border-radius: 10px; transition: transform 0.2s var(--ease-spring), box-shadow 0.2s; }
+.tile:hover .cvr2 { transform: scale(1.04); }
+.tile.sel .cvr2 { box-shadow: 0 0 0 2.5px var(--accent), 0 6px 16px rgba(0,0,0,0.3); }
+.tile .mark { position: absolute; right: 6px; top: 6px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--accent-text);
+  font-size: 11px; display: flex; align-items: center; justify-content: center; opacity: 0; transform: scale(0.5); transition: all 0.18s var(--ease-spring); }
+.tile.sel .mark { opacity: 1; transform: scale(1); }
+.tile .tn { font-size: 11.5px; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .ts { font-size: 10.5px; color: var(--text-tertiary); margin-top: 1px; }
+.tile.added { opacity: 0.4; cursor: default; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>添加歌曲 · 布局格局方案 v2</h1>
+    <button class="toggle" onclick="const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'">切换深 / 浅主题</button>
+  </div>
+  <p class="sub">原有功能全部保留（搜索 / 仅看未添加 / 多选 / 全选反选清除 / 已在歌单标记 / 计数 / 添加取消），变的是<b>格局与模式</b>。全部可真实操作。</p>
+
+  <!-- A 分屏对照 -->
+  <div class="scheme">
+    <h2>A · 分屏对照——左边就是歌单本尊</h2>
+    <p>左栏实时展示歌单现有歌曲（可 ⊗ 移除），右栏是带完整筛选/多选的曲库。勾选后点「添加」批量落入左栏，底部出现「撤销」——先看到歌单长什么样再确认。新增了原来没有的「从弹层移除歌曲」能力。</p>
+    <div class="modal" data-scheme="A">
+      <div class="mhead"><div class="mtitle">编辑「罗志祥」</div><div class="msub">左侧是歌单实时内容，右侧勾选后批量添加</div></div>
+      <div class="mtools">
+        <div class="msearch"><span>⌕</span><input placeholder="搜索标题 / 艺术家 / 专辑" data-filter /></div>
+        <span class="onlynew"><span class="sw" data-onlynew></span>仅看未添加</span>
+      </div>
+      <div class="mbody">
+        <div class="pane"><div class="ph"><span>歌单内容</span><span class="pcount">3 首</span></div><div class="rows plist"></div></div>
+        <div class="pdiv"></div>
+        <div class="pane">
+          <div class="ph"><span>曲库</span><span><span class="mini" data-selall>全选</span> <span class="mini" data-invert>反选</span> <span class="mini dis" data-clear>清除</span></span></div>
+          <div class="rows lib"></div>
+        </div>
+      </div>
+      <div class="mfoot">
+        <div class="left"><span class="mcount">已选 <b class="cnt">0</b> 首</span><span class="undo" data-undo>↩ 撤销移除</span></div>
+        <div class="mbtns"><button class="btn">关闭</button><button class="btn primary" disabled data-add>添加到歌单</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- B 专辑货架 -->
+  <div class="scheme">
+    <h2>B · 专辑货架——按唱片浏览选歌</h2>
+    <p>曲库按专辑摆上货架：每个专辑一枚小封面 + 一排歌曲药丸芯片，点芯片即选中。比平铺列表更有「翻唱片架」的乐趣，按专辑找歌效率极高。底部条带实时显示已选。</p>
+    <div class="modal" data-scheme="B">
+      <div class="mhead"><div class="mtitle">添加歌曲</div><div class="msub">添加到「罗志祥」</div></div>
+      <div class="mtools">
+        <div class="msearch"><span>⌕</span><input placeholder="搜索专辑 / 歌曲" data-filter /></div>
+        <span class="mini" data-selall>全选可见</span>
+        <span class="mini" data-invert>反选</span>
+        <span class="mini dis" data-clear>清除</span>
+      </div>
+      <div class="mbody"><div class="rows" style="padding:10px 16px" data-shelves></div></div>
+      <div class="mfoot">
+        <div class="strip" data-strip><span class="btag">已选</span></div>
+        <div class="mbtns"><button class="btn">取消</button><button class="btn primary" disabled data-add>添加 <span class="cnt">0</span> 首</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- D 双模式 + 歌单带 -->
+  <div class="scheme">
+    <h2>D · 列表/封面墙双模式 + 底部歌单带</h2>
+    <p>右上角一键在「列表」与「封面墙」两种浏览模式间切换（列表精细、封面墙高效）；底部常驻一条<b>歌单带</b>：整张歌单的封面按顺序排开，勾选的歌会以主题色描边实时亮起——随时看到新歌将落在歌单的哪个位置。</p>
+    <div class="modal" data-scheme="D">
+      <div class="mhead"><div class="mtitle">添加歌曲</div><div class="msub">添加到「罗志祥」</div></div>
+      <div class="mtools">
+        <div class="msearch"><span>⌕</span><input placeholder="搜索标题 / 艺术家 / 专辑" data-filter /></div>
+        <div class="seg"><button class="on" data-mode="list">列表</button><button data-mode="wall">封面墙</button></div>
+      </div>
+      <div class="mtools" style="margin-top:0">
+        <span class="mini" data-selall>全选</span>
+        <span class="mini" data-invert>反选</span>
+        <span class="mini dis" data-clear>清除</span>
+        <span class="onlynew" style="margin-left:auto"><span class="sw" data-onlynew></span>仅看未添加</span>
+      </div>
+      <div class="mbody"><div class="rows lib2"></div></div>
+      <div class="band" data-band><span class="btag">歌单带</span></div>
+      <div class="mfoot">
+        <div class="left"><span class="mcount">已选 <b class="cnt">0</b> 首</span></div>
+        <div class="mbtns"><button class="btn">取消</button><button class="btn primary" disabled data-add>添加</button></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const SONGS = [
+  { t: '0932', a: '陈小春', al: '绝对收藏', d: 247, h: 8 },
+  { t: '100种表情', a: '方大同', al: '橙月', d: 223, h: 32 },
+  { t: '1234567', a: '方大同', al: '橙月', d: 226, h: 18 },
+  { t: '180度', a: '孙燕姿', al: '是时候', d: 304, h: 350 },
+  { t: '3-7-20-1', a: '曹格', al: 'SUPERMAN', d: 253, h: 200 },
+  { t: '阿郎与阿宝', a: '周杰伦', al: '不能说的秘密', d: 140, h: 45 },
+  { t: '哎呀', a: '李荣浩', al: '作曲家', d: 293, h: 320 },
+  { t: '唉!', a: '方大同', al: '爱爱爱', d: 221, h: 265 },
+  { t: '爱爱爱', a: '方大同', al: '爱爱爱', d: 245, h: 155 },
+  { t: '安静', a: '周杰伦', al: '范特西', d: 277, h: 105 },
+  { t: '暗号', a: '周杰伦', al: '八度空间', d: 268, h: 385 },
+  { t: '爱在西元前', a: '周杰伦', al: '范特西', d: 259, h: 75 },
+]
+const hueCover = (h) => `linear-gradient(135deg, hsl(${h} 62% 62%), hsl(${(h + 40) % 360} 55% 38%))`
+const fmt = (sec) => Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0')
+const matches = (s, q) => !q || (s.t + s.a + s.al).toLowerCase().includes(q)
+function rowHTML(s, sel, chk) {
+  return `${chk ? `<span class="chk">✓</span>` : `<span class="chk" style="border:none;background:none"></span>`}<div class="cvr" style="background:${hueCover(s.h)}"></div>
+    <div style="min-width:0"><div class="rt">${s.t}</div><div class="rs">${s.a} · ${s.al}</div></div><span class="rd">${fmt(s.d)}</span>`
+}
+
+/* ─── A 分屏对照 ─── */
+const A = { pl: new Set([1, 2, 5]), sel: new Set(), q: '', onlyNew: false, undoBuf: null }
+const Amodal = document.querySelector('[data-scheme="A"]')
+A.render = () => {
+  const plist = Amodal.querySelector('.plist')
+  const inPl = SONGS.filter((s) => A.pl.has(SONGS.indexOf(s)))
+  plist.innerHTML = inPl.map((s) => {
+    const i = SONGS.indexOf(s)
+    return `<div class="row rowx"><div class="cvr" style="background:${hueCover(s.h)}"></div><div style="min-width:0"><div class="rt">${s.t}</div><div class="rs">${s.a} · ${s.al}</div></div><span class="tag">已在歌单</span><span class="rm" title="移出歌单">⊗</span></div>`
+  }).join('') || '<div style="padding:20px;color:var(--text-tertiary);font-size:12px">歌单是空的</div>'
+  plist.querySelectorAll('.rm').forEach((rm) => rm.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const idx = [...plist.querySelectorAll('.rm')].indexOf(rm)
+    const i = [...A.pl][idx]
+    A.undoBuf = new Set(A.pl)
+    A.pl.delete(i)
+    A.render()
+    const u = Amodal.querySelector('[data-undo]')
+    u.classList.add('show')
+    clearTimeout(u._t)
+    u._t = setTimeout(() => u.classList.remove('show'), 4000)
+    u.onclick = () => { A.pl = new Set(A.undoBuf); u.classList.remove('show'); A.render() }
+  }))
+  Amodal.querySelector('.pcount').textContent = A.pl.size + ' 首'
+  const lib = Amodal.querySelector('.lib')
+  lib.innerHTML = SONGS.filter((s) => matches(s, A.q) && (!A.onlyNew || !A.pl.has(SONGS.indexOf(s)))).map((s) => {
+    const i = SONGS.indexOf(s), sel = A.sel.has(i)
+    return `<div class="row ${sel ? 'sel' : ''}" data-i="${i}">${rowHTML(s, sel, true)}<span class="addbtn">＋</span></div>`
+  }).join('') || '<div style="padding:20px;color:var(--text-tertiary);font-size:12px">没有匹配的歌曲</div>'
+  lib.querySelectorAll('.row').forEach((r) => r.addEventListener('click', () => {
+    const i = +r.dataset.i
+    A.sel.has(i) ? A.sel.delete(i) : A.sel.add(i)
+    A.render()
+  }))
+  const cnt = Amodal.querySelector('.cnt')
+  cnt.textContent = A.sel.size
+  Amodal.querySelector('[data-add]').disabled = A.sel.size === 0
+  Amodal.querySelector('[data-add]').textContent = A.sel.size ? `添加 ${A.sel.size} 首` : '添加到歌单'
+}
+Amodal.querySelector('[data-add]').addEventListener('click', () => {
+  for (const i of A.sel) A.pl.add(i)
+  A.sel.clear()
+  A.render()
+})
+Amodal.querySelector('[data-selall]').addEventListener('click', () => {
+  SONGS.forEach((s) => { if (matches(s, A.q) && (!A.onlyNew || !A.pl.has(SONGS.indexOf(s)))) A.sel.add(SONGS.indexOf(s)) })
+  A.render()
+})
+Amodal.querySelector('[data-invert]').addEventListener('click', () => {
+  SONGS.forEach((s, i) => { if (matches(s, A.q) && (!A.onlyNew || !A.pl.has(i))) A.sel.has(i) ? A.sel.delete(i) : A.sel.add(i) })
+  A.render()
+})
+Amodal.querySelector('[data-clear]').addEventListener('click', () => { A.sel.clear(); A.render() })
+A.render()
+
+/* ─── B 专辑货架 ─── */
+const B = { sel: new Set(), q: '', onlyNew: false }
+const Bmodal = document.querySelector('[data-scheme="B"]')
+B.render = () => {
+  const shelves = Bmodal.querySelector('[data-shelves]')
+  const albums = [...new Set(SONGS.map((s) => s.al))].filter((al) => SONGS.some((s) => s.al === al && matches(s, B.q)))
+  shelves.innerHTML = albums.map((al) => {
+    const songs = SONGS.filter((s) => s.al === al && matches(s, B.q))
+    const cover = hueCover(songs[0].h)
+    return `<div class="shelf"><div class="sh-head"><div class="sh-cvr" style="background:${cover}"></div><div><div class="sh-name">${al}</div><div class="sh-cnt">${songs.length} 首</div></div></div>
+      <div class="chips">${songs.map((s) => {
+        const i = SONGS.indexOf(s), added = ADDED.has(i), sel = B.sel.has(i)
+        return `<span class="schip ${sel ? 'sel' : ''} ${added ? 'dis' : ''}" data-i="${i}" style="${added ? 'opacity:0.4;cursor:default' : ''}"><span class="scvr" style="background:${hueCover(s.h)}"></span><span class="st">${s.t}</span><span class="schk">✓</span></span>`
+      }).join('')}</div></div>`
+  }).join('') || '<div style="padding:20px;color:var(--text-tertiary);font-size:12px">没有匹配的专辑</div>'
+  shelves.querySelectorAll('.schip').forEach((chip) => {
+    if (chip.classList.contains('dis')) return
+    chip.addEventListener('click', () => { const i = +chip.dataset.i; B.sel.has(i) ? B.sel.delete(i) : B.sel.add(i); B.render() })
+  })
+  const strip = Bmodal.querySelector('[data-strip]')
+  strip.querySelectorAll('.cvr').forEach((e) => e.remove())
+  for (const i of B.sel) {
+    const d = document.createElement('div')
+    d.className = 'cvr'
+    d.style.background = hueCover(SONGS[i].h)
+    strip.appendChild(d)
+  }
+  if (B.sel.size === 0) { const e = document.createElement('span'); e.className = 'btag'; e.textContent = '尚无已选'; strip.appendChild(e) }
+}
+Bmodal.querySelector('[data-filter]').addEventListener('input', (e) => { B.q = e.target.value.trim().toLowerCase(); B.render() })
+Bmodal.querySelector('[data-selall]').addEventListener('click', () => { SONGS.forEach((s, i) => { if (matches(s, B.q) && !ADDED.has(i)) B.sel.add(i) }); B.render() })
+Bmodal.querySelector('[data-invert]').addEventListener('click', () => { SONGS.forEach((s, i) => { if (matches(s, B.q) && !ADDED.has(i)) B.sel.has(i) ? B.sel.delete(i) : B.sel.add(i) }); B.render() })
+Bmodal.querySelector('[data-clear]').addEventListener('click', () => { B.sel.clear(); B.render() })
+B.render()
+
+/* ─── D 双模式 + 歌单带 ─── */
+const D = { sel: new Set(), q: '', onlyNew: false, mode: 'list' }
+const Dmodal = document.querySelector('[data-scheme="D"]')
+D.render = () => {
+  const body = Dmodal.querySelector('.mbody .rows, .mbody .wall2') || Dmodal.querySelector('.lib2, .wall2')
+  const host = Dmodal.querySelector(D.mode === 'list' ? '.lib2' : '.wall2') || Dmodal.querySelector('.mbody')
+  const list = SONGS.filter((s) => matches(s, D.q) && (!D.onlyNew || !ADDED.has(SONGS.indexOf(s))))
+  if (D.mode === 'list') {
+    host.className = 'rows lib2'
+    host.innerHTML = list.map((s) => {
+      const i = SONGS.indexOf(s), added = ADDED.has(i), sel = D.sel.has(i)
+      return `<div class="row ${sel ? 'sel' : ''} ${added ? 'added' : ''}" data-i="${i}">${rowHTML(s, sel, true)}${added ? '<span class="tag">已在歌单</span>' : `<span class="rd">${fmt(s.d)}</span>`}</div>`
+    }).join('') || '<div style="padding:20px;color:var(--text-tertiary);font-size:12px">没有匹配的歌曲</div>'
+  } else {
+    host.className = 'wall2'
+    host.innerHTML = list.map((s) => {
+      const i = SONGS.indexOf(s), added = ADDED.has(i), sel = D.sel.has(i)
+      return `<div class="tile ${sel ? 'sel' : ''} ${added ? 'added' : ''}" data-i="${i}"><div class="cvr2" style="background:${hueCover(s.h)}"><span class="mark">✓</span></div><div class="tn">${s.t}</div><div class="ts">${added ? '已在歌单' : s.a}</div></div>`
+    }).join('') || '<div style="padding:20px;color:var(--text-tertiary);font-size:12px">没有匹配的歌曲</div>'
+  }
+  host.querySelectorAll('[data-i]').forEach((r) => {
+    if (r.classList.contains('added')) return
+    r.addEventListener('click', () => { const i = +r.dataset.i; D.sel.has(i) ? D.sel.delete(i) : D.sel.add(i); D.render() })
+  })
+  // 歌单带：已有歌 + 勾选中的高亮
+  const band = Dmodal.querySelector('[data-band]')
+  band.innerHTML = '<span class="btag">歌单带</span>'
+  const order = [...SONGS.keys()].filter((i) => ADDED.has(i) || D.sel.has(i))
+  for (const i of order) {
+    const d = document.createElement('div')
+    d.className = 'cvr' + (D.sel.has(i) ? ' staged' : '')
+    d.style.background = hueCover(SONGS[i].h)
+    d.title = SONGS[i].t
+    band.appendChild(d)
+  }
+  if (order.length === 0) { const e = document.createElement('span'); e.className = 'btag'; e.textContent = '歌单是空的'; band.appendChild(e) }
+  const cnt = Dmodal.querySelector('.cnt')
+  cnt.textContent = D.sel.size
+  Dmodal.querySelector('[data-add]').disabled = D.sel.size === 0
+}
+Dmodal.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => {
+  Dmodal.querySelectorAll('[data-mode]').forEach((x) => x.classList.remove('on'))
+  b.classList.add('on')
+  D.mode = b.dataset.mode
+  D.render()
+}))
+Dmodal.querySelector('[data-filter]').addEventListener('input', (e) => { D.q = e.target.value.trim().toLowerCase(); D.render() })
+Dmodal.querySelectorAll('[data-onlynew]').forEach((sw) => sw.addEventListener('click', () => {
+  D.onlyNew = !D.onlyNew
+  sw.classList.toggle('on', D.onlyNew)
+  D.render()
+}))
+Dmodal.querySelector('[data-selall]').addEventListener('click', () => { SONGS.forEach((s, i) => { if (matches(s, D.q) && (!D.onlyNew || !ADDED.has(i))) D.sel.add(i) }); D.render() })
+Dmodal.querySelector('[data-invert]').addEventListener('click', () => { SONGS.forEach((s, i) => { if (matches(s, D.q) && (!D.onlyNew || !ADDED.has(i))) D.sel.has(i) ? D.sel.delete(i) : D.sel.add(i) }); D.render() })
+Dmodal.querySelector('[data-clear]').addEventListener('click', () => { D.sel.clear(); D.render() })
+D.render()
+</script>
+</body>
+</html>
