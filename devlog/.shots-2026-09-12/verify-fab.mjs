@@ -54,7 +54,7 @@ report.afterScroll = await evaluate(`(() => {
 })()`)
 await send('Page.enable')
 const fabShot = await send('Page.captureScreenshot', { format: 'png' })
-fs.writeFileSync('D:/项目/音乐播放器/devlog/.shots-2026-09-12/fab-ripple-visible.png', Buffer.from(fabShot.data, 'base64'))
+fs.writeFileSync('D:/项目/音乐播放器/devlog/.shots-2026-09-12/fab-20px.png', Buffer.from(fabShot.data, 'base64'))
 
 // 点击 → 平滑滚动回第 0 行附近 → 球自动隐藏
 await evaluate(`document.querySelector('.locate-fab')?.click()`)
