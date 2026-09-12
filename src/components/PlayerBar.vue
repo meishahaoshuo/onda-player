@@ -3,7 +3,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import CoverImage from './CoverImage.vue'
 import ProgressSlider from './ProgressSlider.vue'
-import QualityBadge from './QualityBadge.vue'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { useFavoritesStore } from '@/stores/favorites'
@@ -511,17 +510,6 @@ function onRingPointerUp() {
         :duration="player.duration || player.current?.durationSec || 0"
         @seek="player.seek"
       />
-      <div class="ps-times">
-        <span class="ps-cur">{{ formatDuration(player.currentTime) }}</span>
-        <QualityBadge
-          v-if="player.current"
-          :container="player.current.container"
-          :sample-rate-hz="player.current.sampleRateHz"
-          :bits-per-sample="player.current.bitsPerSample"
-          :bitrate-kbps="player.current.bitrateKbps"
-        />
-        <span class="ps-dur">{{ formatDuration(player.duration || player.current?.durationSec || 0) }}</span>
-      </div>
       <div class="buttons">
         <button class="icon-btn" :title="modeMeta.label" @click="cycleMode">
           <AppIcon :name="modeMeta.icon" />
@@ -656,7 +644,7 @@ function onRingPointerUp() {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(320px, 2fr) minmax(180px, 1fr);
   align-items: center;
-  height: 96px;
+  height: 80px;
   padding: 0 20px;
   gap: 20px;
   /* 材质切换（液态玻璃 ⇄ 普通磨砂）由 material-liquid / material-frosted 提供；
@@ -1022,6 +1010,11 @@ function onRingPointerUp() {
   gap: 4px;
 }
 
+.capsule .play-btn {
+  width: 40px;
+  height: 40px;
+}
+
 .capsule .icon-btn {
   transform: scale(0.92);
 }
@@ -1088,22 +1081,7 @@ function onRingPointerUp() {
 .controls {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-/* 时间/音质行（仅标准条）：已播时间 · 音质徽标 · 总时长 三列铺满 */
-.ps-times {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.capsule .ps-times {
-  display: none;
+  gap: 4px;
 }
 
 .buttons {
@@ -1113,31 +1091,18 @@ function onRingPointerUp() {
   gap: 10px;
 }
 
-/* 标准条：控制行铺满整行（模式在左端、队列在右端，大播放键居中）——Apple Music 式排布 */
-.player-bar:not(.capsule) .buttons {
-  justify-content: space-between;
-}
-
 .play-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: var(--text-primary);
-  color: var(--bg-base);
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
   box-shadow: var(--shadow-1);
   transition: transform var(--dur-fast) var(--ease-spring), background var(--dur-fast) var(--ease-out);
 }
 
-/* 胶囊形态恢复圆形主色键（方块白键只属于标准条） */
-.capsule .play-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-text);
-}
-
 .play-btn:hover {
+  background: var(--accent-strong);
   transform: scale(1.06);
 }
 

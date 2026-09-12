@@ -141,8 +141,8 @@ const interactive = computed(() => dragging.value || settling.value)
   position: relative;
   width: 100%;
   height: 4px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--text-tertiary) 30%, transparent);
+  border-radius: 3px;
+  background: var(--bg-hover);
   transition: height var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
   overflow: visible;
 }
@@ -157,16 +157,16 @@ const interactive = computed(() => dragging.value || settling.value)
 
 .ps-fill {
   height: 100%;
-  border-radius: 999px;
-  background: var(--text-primary);
+  border-radius: 3px;
+  background: var(--accent);
   transition: width 120ms linear, background var(--dur-fast) var(--ease-out);
 }
 
-/* 拖拽中零宽度延迟跟手；settling 保持同色，交接时不闪 */
+/* 拖拽中零宽度延迟跟手；settling 保持拖拽色，交接时不闪 */
 .pslider.dragging .ps-fill,
 .pslider.settling .ps-fill {
   transition: background var(--dur-fast) var(--ease-out);
-  background: var(--text-primary);
+  background: var(--accent-strong);
 }
 
 .ps-thumb {

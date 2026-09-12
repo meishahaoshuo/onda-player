@@ -431,8 +431,6 @@ watch(
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  /* 首屏内容从悬浮顶栏下缘开始（顶栏已回退为普通文档流，此 padding 仅保留呼吸空间）；
-     底部为悬浮播放条的安全空间：标准条 96px 高 + 呼吸间距 */
-  padding: 0 24px 112px;
+  padding: 0 24px 96px;
 }
 </style>
