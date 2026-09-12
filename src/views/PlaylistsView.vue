@@ -1298,7 +1298,8 @@ const totalPlaysOfSongs = computed(() =>
 
 .pl-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  /* 与专辑页同规格：卡片最小 210px，封面随卡片宽度等比放大 */
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 20px;
 }
 
@@ -1321,6 +1322,15 @@ const totalPlaysOfSongs = computed(() =>
 .pl-card :deep(.card-cover.cover-fallback) {
   border-radius: 8px;
   box-shadow: var(--shadow-1);
+}
+
+/* 封面填满卡片宽度（正方形等比）：覆盖 CollageCover/CoverImage 的行内固定尺寸 */
+.pl-card :deep(.collage),
+.pl-card :deep(.card-cover.cover-img),
+.pl-card :deep(.card-cover.cover-fallback) {
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 1;
 }
 
 .pl-card-name {
