@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<title>ONDA·澜 — 定位悬浮球样式对比稿</title>
+<style>
+/* ===== 播放器真实设计令牌（摘自 main.css，两主题完整） ===== */
+:root, :root[data-theme='dark'] {
+  --bg-base: #0a0a0a;
+  --bg-hover: rgba(255, 255, 255, 0.08);
+  --bg-active: rgba(92, 124, 224, 0.18);
+  --accent: #5c7ce0;
+  --accent-text: #ffffff;
+  --text-primary: #ffffff;
+  --text-secondary: #a1a1a6;
+  --text-tertiary: #7c7c80;
+  --border-subtle: rgba(255, 255, 255, 0.12);
+  --glass-bg: linear-gradient(120deg, rgba(28, 28, 30, 0.72), rgba(36, 36, 38, 0.6) 55%, rgba(28, 28, 30, 0.66));
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  --glass-blur: blur(32px) saturate(1.4);
+  --shadow-1: 0 2px 10px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 16px 48px rgba(0, 0, 0, 0.55);
+  --dust-color: rgba(255, 255, 255, 0.55);
+  --row-line: rgba(255, 255, 255, 0.05);
+  --card: rgba(255, 255, 255, 0.03);
+}
+:root[data-theme='light'] {
+  --bg-base: #ffffff;
+  --bg-hover: rgba(0, 0, 0, 0.05);
+  --bg-active: rgba(23, 37, 84, 0.1);
+  --accent: #172554;
+  --accent-text: #ffffff;
+  --text-primary: #000000;
+  --text-secondary: #86868b;
+  --text-tertiary: #aeaeb2;
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --glass-bg: linear-gradient(120deg, rgba(255, 255, 255, 0.72), rgba(250, 250, 252, 0.6) 55%, rgba(255, 255, 255, 0.66));
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 0, 0, 0.03);
+  --glass-blur: blur(32px) saturate(1.4);
+  --shadow-1: 0 2px 10px rgba(0, 0, 0, 0.08);
+  --shadow-2: 0 16px 48px rgba(0, 0, 0, 0.12);
+  --dust-color: rgba(23, 37, 84, 0.35);
+  --row-line: rgba(0, 0, 0, 0.04);
+  --card: rgba(0, 0, 0, 0.025);
+}
+:root {
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* 演示用封面色（琥珀，来自测试封面的真实取色） */
+  --cover: #d9a158;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  padding: 28px 34px 60px;
+  transition: background 0.3s, color 0.3s;
+}
+.head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+h1 { font-size: 19px; font-weight: 600; }
+.sub { color: var(--text-tertiary); font-size: 12.5px; margin-bottom: 22px; }
+.toggle {
+  border: 1px solid var(--border-subtle); background: none; color: var(--text-secondary);
+  font-size: 12.5px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+}
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; max-width: 1060px; }
+.card {
+  border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden;
+  background: var(--card);
+}
+.card h2 { font-size: 13.5px; padding: 12px 16px 2px; font-weight: 600; }
+.card p { font-size: 12px; color: var(--text-tertiary); padding: 4px 16px 12px; line-height: 1.5; }
+/* 卡片内的迷你歌曲列表情景（模拟真实页面右下角） */
+.mock {
+  position: relative; height: 190px; overflow: hidden;
+  border-top: 1px solid var(--border-subtle);
+  padding: 10px 14px;
+}
+.mrow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--row-line); }
+.mcover { width: 26px; height: 26px; border-radius: 6px; background: linear-gradient(135deg, #3a3f52, #23263a); flex: none; }
+.mrow.lit .mcover { background: linear-gradient(135deg, #d9a158, #8a5a2c); }
+.mline { height: 8px; border-radius: 4px; background: var(--bg-hover); }
+.mline.t { width: 34%; } .mline.a { width: 18%; } .mdot { flex: 1; } .mline.d { width: 26px; }
+.mrow.playing .mline.t { background: var(--accent); opacity: 0.75; }
+/* 悬浮球通用底座：26~30px 小尺寸 + 玻璃 */
+.fab {
+  position: absolute; right: 16px; bottom: 14px;
+  border-radius: 50%;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-1), var(--glass-highlight);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: transform 0.25s var(--ease-spring), border-color 0.2s;
+}
+.fab:hover { transform: scale(1.1); border-color: color-mix(in srgb, var(--cover) 45%, var(--glass-border)); }
+
+/* ── A 澜·涟漪：封面色小珠，向外的水波涟漪（呼应品牌「澜」） ── */
+.fab-a { width: 28px; height: 28px; }
+.fab-a .core { width: 6px; height: 6px; border-radius: 50%; background: var(--cover); box-shadow: 0 0 6px color-mix(in srgb, var(--cover) 60%, transparent); }
+.fab-a .ripple { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid var(--cover); opacity: 0; animation: rip 2.6s var(--ease-out) infinite; }
+.fab-a .ripple.r2 { animation-delay: 1.3s; }
+@keyframes rip {
+  0% { transform: scale(0.55); opacity: 0.55; }
+  70% { opacity: 0.12; }
+  100% { transform: scale(2.1); opacity: 0; }
+}
+
+/* ── B 声核：球内三根微型均衡器条（「活着」= 关于正在播放） ── */
+.fab-b { width: 28px; height: 28px; gap: 2.5px; }
+.fab-b i { width: 2.5px; border-radius: 1.5px; background: var(--cover); animation: eq 0.9s ease-in-out infinite alternate; }
+.fab-b i:nth-child(1) { height: 9px; animation-delay: -0.2s; }
+.fab-b i:nth-child(2) { height: 13px; animation-delay: -0.55s; }
+.fab-b i:nth-child(3) { height: 7px; animation-delay: -0.8s; }
+@keyframes eq { from { transform: scaleY(0.35); } to { transform: scaleY(1); } }
+
+/* ── C 光尘珠：极小 22px，球内几粒光尘慢漂（播放条光尘同语言），悬停浮出准星 ── */
+.fab-c { width: 22px; height: 22px; }
+.fab-c .dust { position: absolute; left: 50%; top: 50%; width: 1px; height: 1px; border-radius: 50%; }
+.fab-c .d1 { box-shadow: 0 0 1.2px 0.6px var(--dust-color); animation: dr1 4.5s ease-in-out infinite alternate; }
+.fab-c .d2 { box-shadow: 0 0 1.2px 0.6px var(--dust-color); animation: dr2 5.5s ease-in-out infinite alternate; }
+.fab-c .d3 { box-shadow: 0 0 1.2px 0.6px var(--dust-color); animation: dr3 5s ease-in-out infinite alternate; }
+@keyframes dr1 { from { transform: translate(-5px, -3px); } to { transform: translate(4px, 3px); } }
+@keyframes dr2 { from { transform: translate(4px, 4px); } to { transform: translate(-4px, -2px); } }
+@keyframes dr3 { from { transform: translate(0, -5px); } to { transform: translate(-2px, 4px); } }
+.fab-c .glyph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; color: var(--text-secondary); }
+.fab-c:hover .glyph { opacity: 1; }
+.fab-c:hover .dust { opacity: 0; }
+.fab-c svg { width: 12px; height: 12px; }
+
+/* ── D 进度环：球缘一圈封面色进度弧（双职责：它同时是迷你进度指示） ── */
+.fab-d { width: 30px; height: 30px; }
+.fab-d svg.ring { position: absolute; inset: -4px; width: 38px; height: 38px; transform: rotate(-90deg); }
+.fab-d .track { fill: none; stroke: var(--border-subtle); stroke-width: 2; }
+.fab-d .arc { fill: none; stroke: var(--cover); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 71 119; }
+.fab-d .glyph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); transition: opacity 0.2s, transform 0.2s; }
+.fab-d svg.core { width: 12px; height: 12px; }
+.fab-d:hover .glyph { color: var(--cover); transform: scale(1.15); }
+.fab-d:hover .arc { stroke-dasharray: 119 0; transition: stroke-dasharray 0.45s var(--ease-out); }
+
+/* 放大镜区：2x 看细节 */
+.zoom { display: flex; align-items: center; gap: 14px; padding: 10px 16px 16px; }
+.zoom .stage { position: relative; width: 84px; height: 84px; border-radius: 50%; background: var(--bg-hover); display: flex; align-items: center; justify-content: center; }
+.zoom .fab { position: static; }
+.zoom .stage .fab { transform: scale(2.4); }
+.zoom .stage .fab:hover { transform: scale(2.55); }
+.zoom span { font-size: 11.5px; color: var(--text-tertiary); line-height: 1.6; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>定位悬浮球 · 样式对比稿</h1>
+    <button class="toggle" onclick="const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'">切换深 / 浅主题</button>
+  </div>
+  <p class="sub">全部为缩小后的小尺寸（22–30px），玻璃/令牌取自播放器真实体系；悬停每颗球看交互，2× 放大区看细节。回我字母（如「A」）即可，也支持混搭（如「C 的尺寸 + D 的进度环」）。</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>A · 澜·涟漪</h2>
+      <p>封面色小珠悬在球心，一圈圈水波从珠心向外漾开——直接呼应品牌「澜」。不需要图标，动效本身就在说「这里有个正在响的东西」。静水深流，最有辨识度。</p>
+      <div class="mock">
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow playing lit"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <button class="fab fab-a"><span class="ripple"></span><span class="ripple r2"></span><span class="core"></span></button>
+      </div>
+      <div class="zoom">
+        <div class="stage"><button class="fab fab-a"><span class="ripple"></span><span class="ripple r2"></span><span class="core"></span></button></div>
+        <span>28px · 珠心 6px 封面色光点<br>两道涟漪 2.6s 交错外扩</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>B · 声核</h2>
+      <p>球内三根微型均衡器条随播放跳动——「活着」本身就说明它关于正在播放的歌，不需要任何文字与图标。信息最含蓄，动效最克制，和播放条标题旁的均衡器是同一套语言。</p>
+      <div class="mock">
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow playing lit"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <button class="fab fab-b"><i></i><i></i><i></i></button>
+      </div>
+      <div class="zoom">
+        <div class="stage"><button class="fab fab-b"><i></i><i></i><i></i></button></div>
+        <span>28px · 三条 2.5px 均衡器<br>0.9s 交错缩放（暂停时静止）</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>C · 光尘珠</h2>
+      <p>22px 的极小玻璃珠，里面只有三四粒光尘在慢慢漂——和你播放条拖拽时的光尘是同一种物质。悬停时光尘退下、准星浮现。最无感、最精致，属于「发现了会心一笑」的那类细节。</p>
+      <div class="mock">
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow playing lit"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <button class="fab fab-c"><span class="dust d1"></span><span class="dust d2"></span><span class="dust d3"></span><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></span></button>
+      </div>
+      <div class="zoom">
+        <div class="stage"><button class="fab fab-c"><span class="dust d1"></span><span class="dust d2"></span><span class="dust d3"></span><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></span></button></div>
+        <span>22px · 三粒光尘 4.5–5.5s 慢漂<br>悬停：光尘退场 → 准星浮现</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>D · 进度环</h2>
+      <p>球缘一圈封面色细弧 = 当前歌的播放进度（双职责：它同时是一枚迷你进度环）。悬停时弧线展开成整环、中心准星点亮。功能密度最高的一颗，装饰即信息。</p>
+      <div class="mock">
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow playing lit"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <div class="mrow"><div class="mcover"></div><div class="mline t"></div><div class="mdot"></div><div class="mline a"></div><div class="mline d"></div></div>
+        <button class="fab fab-d">
+          <svg class="ring" viewBox="0 0 38 38"><circle class="track" cx="19" cy="19" r="19"/><circle class="arc" cx="19" cy="19" r="19"/></svg>
+          <span class="glyph"><svg class="core" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></span>
+        </button>
+      </div>
+      <div class="zoom">
+        <div class="stage"><button class="fab fab-d">
+          <svg class="ring" viewBox="0 0 38 38"><circle class="track" cx="19" cy="19" r="19"/><circle class="arc" cx="19" cy="19" r="19"/></svg>
+          <span class="glyph"><svg class="core" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></span>
+        </button></div>
+        <span>30px · 进度弧 60%（随播放实时走）<br>悬停：弧线展开成整环 + 准星点亮</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

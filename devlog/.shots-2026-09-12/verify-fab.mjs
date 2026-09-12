@@ -41,8 +41,20 @@ await evaluate(`document.querySelector('.scroll-host').scrollTop = 900`)
 await sleep(400)
 report.afterScroll = await evaluate(`(() => {
   const fab = document.querySelector('.locate-fab')
-  return { fab: !!fab, halo: fab ? getComputedStyle(fab, '::after').boxShadow.slice(0, 60) : null, scroll: document.querySelector('.scroll-host').scrollTop }
+  const core = fab?.querySelector('.lf-core')
+  const ripple = fab?.querySelector('.lf-ripple')
+  return {
+    fab: !!fab,
+    size: fab ? fab.getBoundingClientRect().width : null,
+    coreColor: core ? getComputedStyle(core).backgroundColor : null,
+    rippleAnim: ripple ? getComputedStyle(ripple).animationName : null,
+    dustCount: fab ? fab.querySelectorAll('.lf-dust').length : 0,
+    scroll: document.querySelector('.scroll-host').scrollTop,
+  }
 })()`)
+await send('Page.enable')
+const fabShot = await send('Page.captureScreenshot', { format: 'png' })
+fs.writeFileSync('D:/项目/音乐播放器/devlog/.shots-2026-09-12/fab-ripple-visible.png', Buffer.from(fabShot.data, 'base64'))
 
 // 点击 → 平滑滚动回第 0 行附近 → 球自动隐藏
 await evaluate(`document.querySelector('.locate-fab')?.click()`)
