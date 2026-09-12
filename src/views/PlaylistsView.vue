@@ -34,6 +34,15 @@ const ui = useUiStore()
 onMounted(() => {
   if (!playlistStore.loaded) playlistStore.load()
   consumeCreateRequest()
+  // 右键菜单在别的页面置位的请求标记：挂载时补消费（否则切换视图时 watcher
+  // 尚未注册、变更被错过，标记永远卡住）
+  if (ui.playlistAddSongs && current.value?.id === ui.playlistAddSongs) {
+    ui.playlistAddSongs = null
+    openAdd()
+  } else if (ui.playlistEditCover && current.value?.id === ui.playlistEditCover) {
+    ui.playlistEditCover = null
+    showCoverPicker.value = true
+  }
   // 数据早已就绪时 watcher 不会触发，挂载时补一次登记
   plReveal.refresh()
 })

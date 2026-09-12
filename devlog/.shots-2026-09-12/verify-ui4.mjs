@@ -63,6 +63,8 @@ report.addModal = await evaluate(`(() => {
     checkedStyled: cb ? getComputedStyle(cb).appearance === 'none' || cb.classList.contains('add-check') : false,
     checkedRow: rows[1]?.classList.contains('checked') ?? null,
     chips: modal.querySelectorAll('.add-state').length,
+    bodyOpen: document.body.classList.contains('modal-open'),
+    blobPaused: (() => { const b = document.querySelector('.blob'); return b ? getComputedStyle(b).animationPlayState : null })(),
   }
 })()`)
 shot = await send('Page.captureScreenshot', { format: 'png' })

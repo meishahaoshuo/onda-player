@@ -288,6 +288,14 @@ select {
   height: 18px;
 }
 
+/* 弹层打开时暂停其后方的呼吸光斑/氛围光斑：
+   毛玻璃 backdrop-filter 会对动画背景逐帧重模糊，是弹层卡顿的主因（!important
+   用于压过组件内 scoped 的 animation 简写） */
+body.modal-open .blob,
+body.modal-open .ambient-blob {
+  animation-play-state: paused !important;
+}
+
 /* ---------- 均衡器动画（播放中指示，全局共用） ---------- */
 
 .eq {
