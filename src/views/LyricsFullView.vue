@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import AppSwitch from '@/components/AppSwitch.vue'
 import CoverImage from '@/components/CoverImage.vue'
+import QualityBadge from '@/components/QualityBadge.vue'
 import { readLrcFile } from '@/services/fs'
 import { parseLrc, type LyricGroup } from '@/services/lyrics'
 import { buildCoverField, deriveLyricVars } from '@/services/palette'
@@ -1160,6 +1161,13 @@ onMounted(() => {
             </div>
             <div class="progress-times">
               <span class="cur">{{ formatDuration(player.currentTime) }}</span>
+              <QualityBadge
+                v-if="player.current"
+                :container="player.current.container"
+                :sample-rate-hz="player.current.sampleRateHz"
+                :bits-per-sample="player.current.bitsPerSample"
+                :bitrate-kbps="player.current.bitrateKbps"
+              />
               <span class="dur">{{ formatDuration(progressDuration) }}</span>
             </div>
           </div>
@@ -1540,12 +1548,12 @@ onMounted(() => {
   font-weight: 600;
 }
 
-/* ---------- 大号三键控制（播放键实心圆底，更稳重；模式/音量分列左右） ---------- */
+/* ---------- 大号控制行：Apple Music 式铺满——模式在左端、播放键居中、音量在右端 ---------- */
 .controls {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 14px;
+  justify-content: space-between;
+  gap: 8px;
   margin-top: 22px;
 }
 
@@ -1580,17 +1588,17 @@ onMounted(() => {
   transform: scale(0.92);
 }
 
+/* 播放键：Apple Music 式白色圆角方块（封面色场上足够醒目），深色图标 */
 .ctrl-btn.play {
-  width: 60px;
-  height: 60px;
-  background: var(--lyric-text-active);
-  color: var(--lyric-bg);
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: #fff;
+  color: #1d1d1f;
   box-shadow: 0 10px 26px rgba(29, 29, 31, 0.28);
 }
 
 .ctrl-btn.play:hover {
-  background: #000;
-  color: #fff;
   transform: scale(1.05);
 }
 
