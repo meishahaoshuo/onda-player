@@ -240,7 +240,7 @@ function openPlaylist(p: { id: string }, e: MouseEvent) {
     coverId: cardCoverOverride.value.get(p.id) ?? null,
     gridSel: '.pl-grid',
     cardSel: '.pl-card',
-    waveInfo: '.pl-info',
+    waveInfo: '.pl-info, .pl-sideinfo',
     waveRows: '.drag-row',
   })
 }
