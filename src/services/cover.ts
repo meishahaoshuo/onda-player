@@ -1,5 +1,5 @@
-import { parseBlob } from 'music-metadata'
-import { resolveSongFile } from './fs'
+import { parseBlob, parseBuffer } from 'music-metadata'
+import { readHeadBytes, resolveSongFile, isDesktop } from './fs'
 import type { SongRecord } from '@/types'
 
 /**
@@ -12,10 +12,17 @@ const HI_RES_MAX_EDGE = 1024
 /** 只解析头部元数据（跳过时长扫描与尾部标签），避免整文件读取 */
 export async function extractHiResCover(song: SongRecord): Promise<Blob | null> {
   const relativePath = song.path.slice(song.rootId.length + 1)
-  const file = await resolveSongFile(song.rootId, relativePath)
-  if (!file) return null
   try {
-    const meta = await parseBlob(file, { duration: false, skipPostHeaders: true })
+    const meta = isDesktop
+      ? await parseBuffer(
+          (await readHeadBytes(song.rootId, relativePath)) ?? new Uint8Array(0),
+          undefined,
+          { duration: false, skipPostHeaders: true },
+        )
+      : await parseBlob((await resolveSongFile(song.rootId, relativePath)) ?? new File([], 'x'), {
+          duration: false,
+          skipPostHeaders: true,
+        })
     const pic = meta.common.picture?.[0]
     if (!pic?.data?.length) return null
     const raw = new Blob([pic.data], { type: pic.format || 'image/jpeg' })

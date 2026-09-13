@@ -9,6 +9,11 @@ export default defineConfig({
     // 固定端口，避免与其他项目冲突（见 AGENTS.md §5）
     port: 5180,
     strictPort: true,
+    watch: {
+      // 桌面壳（第 9 阶段）的 cargo 编译产物不在热更新范围内；
+      // 监视它会导致 chokidar 在 DLL 被替换时 EBUSY 崩溃退出
+      ignored: ['**/src-tauri/target/**'],
+    },
   },
   resolve: {
     alias: {

@@ -47,6 +47,13 @@ export interface FolderRoot {
   addedAt: number
 }
 
+/**
+ * 根目录引用（平台分支，见 docs/02「桌面端重要说明」）：
+ *  - web：FSA 句柄 FileSystemDirectoryHandle（需权限确认）
+ *  - desktop：绝对路径字符串包装（无权限机制，路径持久化在 handles 库）
+ */
+export type RootRef = FileSystemDirectoryHandle | { desktopPath: string }
+
 export interface PlaylistRecord {
   id: string
   name: string

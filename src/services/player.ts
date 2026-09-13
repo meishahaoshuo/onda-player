@@ -16,11 +16,19 @@ export function getAudio(): HTMLAudioElement {
   return audio
 }
 
-export function loadSource(file: File) {
+/** 载入播放源：web=File（objectURL 管理）；desktop=media:// URL（Rust 流式，无需 revoke） */
+export function loadSource(source: File | string) {
   const a = getAudio()
-  if (currentUrl) URL.revokeObjectURL(currentUrl)
-  currentUrl = URL.createObjectURL(file)
-  a.src = currentUrl
+  if (currentUrl) {
+    URL.revokeObjectURL(currentUrl)
+    currentUrl = null
+  }
+  if (typeof source === 'string') {
+    a.src = source
+  } else {
+    currentUrl = URL.createObjectURL(source)
+    a.src = currentUrl
+  }
 }
 
 export function stopSource() {

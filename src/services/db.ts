@@ -1,5 +1,5 @@
 import { openDB, type IDBPDatabase } from 'idb'
-import type { FolderRoot, PlaylistRecord, SongRecord } from '@/types'
+import type { FolderRoot, PlaylistRecord, RootRef, SongRecord } from '@/types'
 
 /**
  * IndexedDB 封装（库 music-player，模型见 docs/02-技术方案.md §3）。
@@ -36,14 +36,14 @@ function getDB(): Promise<MusicPlayerDB> {
 
 /* ---------- handles / 文件夹 ---------- */
 
-export async function putRootHandle(id: string, handle: FileSystemDirectoryHandle) {
+export async function putRootHandle(id: string, ref: RootRef) {
   const db = await getDB()
-  await db.put('handles', handle, `root:${id}`)
+  await db.put('handles', ref, `root:${id}`)
 }
 
-export async function getRootHandle(id: string): Promise<FileSystemDirectoryHandle | undefined> {
+export async function getRootHandle(id: string): Promise<RootRef | undefined> {
   const db = await getDB()
-  return db.get('handles', `root:${id}`)
+  return db.get('handles', `root:${id}`) as Promise<RootRef | undefined>
 }
 
 export async function deleteRootHandle(id: string) {

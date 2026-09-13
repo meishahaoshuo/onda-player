@@ -1,11 +1,13 @@
-import { parseBlob } from 'music-metadata'
+import { parseBlob, parseBuffer } from 'music-metadata'
 import * as db from './db'
-import { enumerateAudioFiles } from './fs'
-import type { FolderRoot, ScanProgress, SongRecord } from '@/types'
+import { enumerateAudioFiles, readHeadBytes } from './fs'
+import type { FolderRoot, RootRef, ScanProgress, SongRecord } from '@/types'
 
 /**
  * 音乐库扫描：增量（path+size+mtime 未变则跳过）、分批让出主线程、可取消。
  * 进度通过 onProgress 回调上报（通常接到 library store）。
+ * web 用 parseBlob(File)；desktop 读头部字节 parseBuffer（时长依赖头部的
+ * 格式均可得；moov 在尾部的个别 M4A 时长可能为 0，播放时由 durationchange 兜底）。
  */
 
 export interface ScanTask {
@@ -52,7 +54,7 @@ const SCANNER_VERSION = 2
 
 export async function scanRoot(
   root: FolderRoot,
-  handle: FileSystemDirectoryHandle,
+  ref: RootRef,
   onProgress: (p: ScanProgress) => void,
   task: ScanTask,
   onBatch?: (batch: SongRecord[]) => void,
@@ -87,20 +89,17 @@ export async function scanRoot(
 
   let sinceYield = 0
   try {
-    for await (const entry of enumerateAudioFiles(handle, task)) {
+    for await (const entry of enumerateAudioFiles(ref, task)) {
       if (task.cancelled) break
       progress.total++
       progress.currentFile = entry.path
       seenPaths.add(`${root.id}/${entry.path}`)
 
+      const size = entry.file ? entry.file.size : (entry.size ?? 0)
+      const mtime = entry.file ? entry.file.lastModified : (entry.mtimeMs ?? 0)
       const fullPath = `${root.id}/${entry.path}`
       const prev = existing.get(fullPath)
-      if (
-        !forceAll &&
-        prev &&
-        prev.fileSize === entry.file.size &&
-        prev.mtimeMs === entry.file.lastModified
-      ) {
+      if (!forceAll && prev && prev.fileSize === size && prev.mtimeMs === mtime) {
         progress.skipped++
         if (++sinceYield >= BATCH_YIELD_EVERY) {
           sinceYield = 0
@@ -112,7 +111,11 @@ export async function scanRoot(
 
       progress.phase = 'parsing'
       try {
-        const meta = await parseBlob(entry.file)
+        const meta = entry.file
+          ? await parseBlob(entry.file)
+          : await parseBuffer((await readHeadBytes(root.id, entry.path)) ?? new Uint8Array(0), { size }, {
+              duration: true,
+            })
         const common = meta.common
         const format = meta.format
         const title = common.title ?? entry.path.split('/').pop() ?? entry.path
@@ -158,8 +161,8 @@ export async function scanRoot(
           sampleRateHz: format.sampleRate ?? null,
           bitsPerSample: format.bitsPerSample ?? null,
           container: format.container?.toLowerCase() ?? entry.path.split('.').pop() ?? '',
-          fileSize: entry.file.size,
-          mtimeMs: entry.file.lastModified,
+          fileSize: size,
+          mtimeMs: mtime,
           hasCover: coverId !== null,
           coverId,
           embeddedLyrics,

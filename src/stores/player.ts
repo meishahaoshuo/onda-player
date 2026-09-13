@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import * as db from '@/services/db'
-import { resolveSongFile } from '@/services/fs'
+import { resolveSongFile, songMediaUrl, isDesktop } from '@/services/fs'
 import {
   clearMediaSession,
   getAudio,
@@ -74,9 +74,12 @@ export const usePlayerStore = defineStore('player', () => {
     const song = queue.value[i]
     if (!song) return
     const seq = ++loadSeq
-    const file = await resolveSongFile(song.rootId, song.path.slice(song.rootId.length + 1))
+    const rel = song.path.slice(song.rootId.length + 1)
+    const source: File | string | null = isDesktop
+      ? await songMediaUrl(song.rootId, rel)
+      : await resolveSongFile(song.rootId, rel)
     if (seq !== loadSeq) return
-    if (!file) {
+    if (!source) {
       // 文件已不存在：跳到下一首（防死循环：队列仅剩当前则停止）
       if (queue.value.length <= 1) {
         stop()
@@ -90,7 +93,7 @@ export const usePlayerStore = defineStore('player', () => {
       await load(Math.min(i, queue.value.length - 1))
       return
     }
-    loadSource(file)
+    loadSource(source)
     const a = getAudio()
     a.volume = volume.value / 100
     // 恢复场景：待 metadata 加载完成后再跳到上次进度（过早设置会被加载重置）

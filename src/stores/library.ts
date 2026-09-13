@@ -1,10 +1,17 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as db from '@/services/db'
-import { pickFolder, queryPermission, removeFolder, requestPermission, type PermissionState } from '@/services/fs'
+import {
+  pickFolder,
+  queryPermission,
+  refName,
+  removeFolder,
+  requestPermission,
+  type PermissionState,
+} from '@/services/fs'
 import { extractHiResCover } from '@/services/cover'
 import { scanRoot, type ScanTask } from '@/services/scanner'
-import type { AlbumSummary, FolderRoot, ScanProgress, SongRecord } from '@/types'
+import type { AlbumSummary, FolderRoot, RootRef, ScanProgress, SongRecord } from '@/types'
 
 /**
  * 音乐库：根文件夹、歌曲数据、扫描进度、封面 URL 缓存
@@ -148,28 +155,28 @@ export const useLibraryStore = defineStore('library', () => {
 
   async function addFolder(): Promise<boolean> {
     lastError.value = null
-    let handle: FileSystemDirectoryHandle | null
+    let ref: RootRef | null
     try {
-      handle = await pickFolder()
+      ref = await pickFolder()
     } catch (e) {
       lastError.value =
-        e instanceof Error && /abort/i.test(e.message)
+        e instanceof Error && /abort|cancel/i.test(e.message)
           ? null // 用户取消了选择器，不算错误
-          : `无法打开文件夹选择器：${e instanceof Error ? e.message : String(e)}（请使用最新版 Chrome/Edge）`
+          : `无法打开文件夹选择器：${e instanceof Error ? e.message : String(e)}`
       return false
     }
-    if (!handle) return false
-    const root = await registerRoot(handle)
+    if (!ref) return false
+    const root = await registerRoot(ref)
     // 只扫新添加的文件夹：既更快，也让导入动画的封面只来自这个文件夹
     await rescan(root.id)
     return true
   }
 
-  /** 注册一个已授权的根目录句柄（pickFolder 与测试桥共用） */
-  async function registerRoot(handle: FileSystemDirectoryHandle): Promise<FolderRoot> {
+  /** 注册一个已授权的根目录（pickFolder 与测试桥共用） */
+  async function registerRoot(ref: RootRef): Promise<FolderRoot> {
     const id = `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-    const root: FolderRoot = { id, name: handle.name, addedAt: Date.now() }
-    await db.putRootHandle(id, handle)
+    const root: FolderRoot = { id, name: refName(ref), addedAt: Date.now() }
+    await db.putRootHandle(id, ref)
     await db.putRoot(root)
     const order = (await db.getRootOrder()) ?? []
     await db.setRootOrder([...order, id])
