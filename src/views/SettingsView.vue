@@ -14,6 +14,7 @@ import {
 } from '@/services/hotkeys'
 import type { ThemeMode } from '@/types'
 import AppIcon from '@/components/AppIcon.vue'
+import { canInstall, isStandalone, promptInstall, installState } from '@/services/pwa'
 
 /**
  * 设置页：左侧分类导航 + 右侧内容面板。
@@ -82,6 +83,18 @@ const accentCurrentName = computed(() => {
 
 /* ---------- 数据：清空播放统计 ---------- */
 const confirmClearStats = ref(false)
+
+/* ---------- 桌面应用：安装入口 ---------- */
+const installDesc = computed(() => {
+  if (isStandalone.value) return '正在以独立窗口运行，可从桌面 / 开始菜单启动'
+  if (canInstall.value) return '安装后从桌面 / 开始菜单启动，以独立窗口运行（无地址栏）'
+  if (installState.value === 'done') return '已安装，重启浏览器或稍候即可以独立窗口运行'
+  return '当前环境不支持安装：需要 Chrome / Edge，并通过 localhost 或 https 访问'
+})
+
+async function doInstall() {
+  await promptInstall()
+}
 
 async function doClearStats() {
   confirmClearStats.value = false
@@ -395,6 +408,22 @@ function onRecordKeydown(e: KeyboardEvent) {
               <span class="about-brand-name">Onda Player</span>
               <span class="about-brand-ver">v0.1.0 · 对标 Salt Player 的本地播放器</span>
             </div>
+          </div>
+          <!-- 桌面应用：安装到桌面 / 独立窗口状态 -->
+          <div class="opt-row install-row">
+            <div class="opt-text">
+              <span class="opt-name">桌面应用</span>
+              <span class="opt-desc">{{ installDesc }}</span>
+            </div>
+            <button
+              v-if="canInstall && !isStandalone"
+              class="mini-btn install-btn"
+              :disabled="installState === 'installing'"
+              @click="doInstall"
+            >
+              <AppIcon name="download" :size="14" />
+              {{ installState === 'installing' ? '安装中…' : '安装到桌面' }}
+            </button>
           </div>
           <ul class="about-list">
             <li>所有数据仅保存在本机浏览器中，零网络请求</li>
@@ -904,6 +933,30 @@ function onRecordKeydown(e: KeyboardEvent) {
 .about-brand-ver {
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+/* 桌面应用安装入口 */
+.install-row {
+  margin: 6px 0 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-item);
+  background: var(--bg-hover);
+}
+
+.install-btn {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.install-btn:hover {
+  color: var(--accent-text);
+  background: var(--accent);
+}
+
+.install-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .about-list {
