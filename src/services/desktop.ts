@@ -35,16 +35,26 @@ export async function initDesktop(): Promise<void> {
   ])
   const win = getCurrentWindow()
 
-  /* ---------- 窗口状态记忆：位置/尺寸跨启动恢复（最大化只记状态不覆盖常规尺寸） ---------- */
+  /* ---------- 窗口状态记忆：位置/尺寸跨启动恢复（最大化只记状态不覆盖常规尺寸） ----------
+     保存与恢复都做健康检查：最小化时读到的是屏幕外坐标（-32000, -32000, 276×45），
+     一旦存进去，之后每次启动窗口都会被"恢复"到屏幕外——恢复前校验，脏数据直接居中兜底 */
   try {
     const saved = JSON.parse(localStorage.getItem(WIN_STATE_KEY) ?? 'null') as WinState | null
-    if (saved) {
-      if (saved.max) {
-        await win.maximize()
-      } else if (saved.w > 0 && saved.h > 0) {
-        await win.setPosition(new PhysicalPosition(saved.x, saved.y)).catch(() => {})
-        await win.setSize(new PhysicalSize(saved.w, saved.h)).catch(() => {})
-      }
+    const sane =
+      saved &&
+      saved.w >= 600 &&
+      saved.h >= 400 &&
+      saved.x > -100 &&
+      saved.y > -100 &&
+      saved.x < 20000 &&
+      saved.y < 20000
+    if (saved?.max) {
+      await win.maximize()
+    } else if (sane) {
+      await win.setPosition(new PhysicalPosition(saved!.x, saved!.y)).catch(() => {})
+      await win.setSize(new PhysicalSize(saved!.w, saved!.h)).catch(() => {})
+    } else {
+      await win.center().catch(() => {})
     }
   } catch {
     /* 脏数据忽略，用默认窗口 */
@@ -55,7 +65,8 @@ export async function initDesktop(): Promise<void> {
     saveTimer = window.setTimeout(async () => {
       try {
         const max = await win.isMaximized()
-        if (max) return // 最大化状态不覆盖记忆的常规尺寸
+        const min = await win.isMinimized()
+        if (max || min) return // 最大化/最小化状态不覆盖记忆的常规位置尺寸
         const pos = await win.outerPosition()
         const size = await win.innerSize()
         localStorage.setItem(
