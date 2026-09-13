@@ -61,9 +61,11 @@ function loadAutoResume(): boolean {
 /* ---------- 自定义主题色 ----------
    accentColor 为空字符串表示使用 CSS 默认（海军蓝）；非空则运行时写 override 变量。 */
 const ACCENT_KEY = 'settings.accentColor'
+/** 自定义主题色：'' = 默认海军蓝（也是出厂默认——9.3 修正版；
+    注意不能用「无效值→出厂」的写法，否则用户显式选海军蓝（存 ''）重启会被兜底成别的颜色） */
 function loadAccent(): string {
-  const raw = localStorage.getItem(ACCENT_KEY) ?? '#EC4141'
-  return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#EC4141'
+  const raw = localStorage.getItem(ACCENT_KEY) ?? ''
+  return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : ''
 }
 
 /** 由十六进制色计算相对亮度（0 暗 ~ 1 亮），决定文字用黑还是白 */
@@ -138,7 +140,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const locateFabStyle = ref<LocateFabStyle>(loadLocateFabStyle())
   const autoRestoreQueue = ref(loadAutoRestore())
   const autoResume = ref(loadAutoResume())
-  /** 自定义主题色：出厂默认 #EC4141；'' = 恢复海军蓝（设置页「默认海军蓝」色板） */
+  /** 自定义主题色：出厂默认海军蓝；'' = 默认海军蓝（设置页「默认海军蓝」色板）；非空 hex 为自定义色 */
   const accentColor = ref(loadAccent())
 
   // 实际生效的主题（system 模式下随系统实时变化）
