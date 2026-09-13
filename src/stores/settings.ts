@@ -12,6 +12,10 @@ const MORPH_KEY = 'settings.barMorph'
 const BAR_MATERIAL_KEY = 'settings.barMaterial'
 const media = window.matchMedia('(prefers-color-scheme: dark)')
 
+/* ---------- 出厂默认值 ----------
+   2026-09-13 从作者浏览器配置快照烘焙（第 9 阶段 9.3），新用户/桌面端
+   首次启动即呈现与作者一致的观感。localStorage 已有值时仍然以用户为准。 */
+
 function loadMode(): ThemeMode {
   const raw = localStorage.getItem(STORAGE_KEY)
   return raw === 'dark' || raw === 'light' ? raw : 'system'
@@ -22,19 +26,19 @@ function loadMode(): ThemeMode {
 /** 歌词主行字号（px，无级），翻译行按比例派生 */
 function loadLyricPx(): number {
   const raw = Number(localStorage.getItem(LYRIC_FS_KEY))
-  return Number.isFinite(raw) && raw >= 14 && raw <= 44 ? raw : 22
+  return Number.isFinite(raw) && raw >= 14 && raw <= 44 ? raw : 41
 }
 
 /** 歌词字重（300-800，无级，50 步进） */
 function loadLyricWeight(): number {
   const raw = Number(localStorage.getItem(LYRIC_FW_KEY))
-  return Number.isFinite(raw) && raw >= 300 && raw <= 800 ? Math.round(raw / 50) * 50 : 500
+  return Number.isFinite(raw) && raw >= 300 && raw <= 800 ? Math.round(raw / 50) * 50 : 800
 }
 
 export type LyricAlign = 'center' | 'left'
 
 function loadLyricAlign(): LyricAlign {
-  return localStorage.getItem(LYRIC_ALIGN_KEY) === 'left' ? 'left' : 'center'
+  return localStorage.getItem(LYRIC_ALIGN_KEY) === 'center' ? 'center' : 'left'
 }
 
 /** 歌词景深模糊：非当前行按距离轻微模糊（Apple Music 式层次） */
@@ -58,8 +62,8 @@ function loadAutoResume(): boolean {
    accentColor 为空字符串表示使用 CSS 默认（海军蓝）；非空则运行时写 override 变量。 */
 const ACCENT_KEY = 'settings.accentColor'
 function loadAccent(): string {
-  const raw = localStorage.getItem(ACCENT_KEY) ?? ''
-  return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : ''
+  const raw = localStorage.getItem(ACCENT_KEY) ?? '#EC4141'
+  return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#EC4141'
 }
 
 /** 由十六进制色计算相对亮度（0 暗 ~ 1 亮），决定文字用黑还是白 */
@@ -91,7 +95,7 @@ localStorage.removeItem('settings.lyricViz')
 /** 播放条样式：standard = 底部通栏；capsule = Liquid Glass 浮动胶囊（悬浮于内容上方） */
 export type PlayerStyle = 'standard' | 'capsule'
 function loadPlayerStyle(): PlayerStyle {
-  return localStorage.getItem(PLAYER_STYLE_KEY) === 'capsule' ? 'capsule' : 'standard'
+  return localStorage.getItem(PLAYER_STYLE_KEY) === 'standard' ? 'standard' : 'capsule'
 }
 
 /** 标准⇄胶囊切换动效：gather = 聚散（中心收缩/绽放）；slide = 交叉滑移 */
@@ -134,7 +138,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const locateFabStyle = ref<LocateFabStyle>(loadLocateFabStyle())
   const autoRestoreQueue = ref(loadAutoRestore())
   const autoResume = ref(loadAutoResume())
-  /** 自定义主题色：'' = 默认海军蓝 */
+  /** 自定义主题色：出厂默认 #EC4141；'' = 恢复海军蓝（设置页「默认海军蓝」色板） */
   const accentColor = ref(loadAccent())
 
   // 实际生效的主题（system 模式下随系统实时变化）
