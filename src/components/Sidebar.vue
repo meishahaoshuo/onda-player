@@ -120,7 +120,7 @@ function plClick(id: string) {
 <template>
   <aside class="sidebar">
     <PlaylistContextMenu />
-    <div class="brand">
+    <div class="brand" data-tauri-drag-region>
       <img :src="brandLogo" alt="Onda Player" class="brand-logo" :class="{ 'no-shadow': settings.resolvedTheme === 'dark' }" />
       <div class="brand-text">
         <span class="brand-name">Onda Player</span>

@@ -26,7 +26,6 @@ onUnmounted(() => unlisten?.())
 
 <template>
   <div class="titlebar" data-tauri-drag-region>
-    <div class="tb-spacer" data-tauri-drag-region />
     <div class="tb-controls">
       <button class="tb-btn" title="最小化" @click="appWindow.minimize()">
         <svg viewBox="0 0 12 12" width="12" height="12"><path d="M1 6h10" stroke="currentColor" stroke-width="1.2" /></svg>
@@ -46,24 +45,32 @@ onUnmounted(() => unlisten?.())
 </template>
 
 <style scoped>
+/* 固定悬浮于窗口右上角、脱离文档流：不占布局高度，
+   与 view-header 的搜索框同行（center 38px = header 20px padding + 36px 控件半高）。
+   拖拽靠 .view-header / 侧栏品牌区上的 data-tauri-drag-region，本容器只兜按钮间缝隙。 */
 .titlebar {
-  height: 36px;
-  flex: none;
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 76px;
+  padding-top: 20px;
   display: flex;
-  align-items: stretch;
-  justify-content: space-between;
+  align-items: center;
+  z-index: 60;
   user-select: none;
 }
 
 .tb-controls {
   display: flex;
-  align-items: stretch;
+  align-items: center;
 }
 
 .tb-btn {
-  width: 46px;
+  width: 44px;
+  height: 36px;
   display: grid;
   place-items: center;
+  border-radius: var(--radius-item);
   color: var(--text-secondary);
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }

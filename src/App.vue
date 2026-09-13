@@ -186,7 +186,7 @@ watch(
             <div v-if="c" class="ambient-blob" :class="`ab-${i}`" :style="{ '--fc': c }" />
           </Transition>
         </div>
-        <header class="view-header">
+        <header class="view-header" data-tauri-drag-region>
           <h1>{{ title }}</h1>
           <div class="search-box">
             <AppIcon name="search" :size="15" />
@@ -374,6 +374,12 @@ watch(
   justify-content: space-between;
   gap: 16px;
   padding: 20px 24px 12px;
+}
+
+/* 桌面端：右上角悬浮窗口控制钮（约 132px），搜索框左移让位；
+   header 空白区兼作窗口拖拽区（data-tauri-drag-region，浏览器端属性无副作用） */
+html.desktop-glass .view-header {
+  padding-right: 172px;
 }
 
 .view-header h1 {
