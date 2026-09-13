@@ -2,6 +2,7 @@ use serde::Serialize;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
+use tauri::{Manager, Emitter};
 
 /**
  * 原生文件接入（桌面端，docs/02「桌面端重要说明」）：
@@ -11,6 +12,10 @@ use std::time::UNIX_EPOCH;
  *  - read_head：读文件头部若干字节（标签解析用），经 tauri::ipc::Response 走
  *    二进制通道（JSON 数组通道对 MB 级字节太慢）
  *  - read_text_file：读 .lrc 等文本
+ *
+ * 桌面特性（9.5）：无边框窗口 + Acrylic 磨砂（set_window_effect 随主题调 tint）、
+ * 托盘（左键唤窗，菜单控制播放；事件 emit 给前端转发到 player store）、
+ * 关闭即隐藏到托盘（退出走托盘菜单）、单实例锁（二次启动唤起已有窗口）。
  */
 
 const AUDIO_EXTS: &[&str] = &["mp3", "flac", "ogg", "oga", "opus", "wav", "m4a", "aac", "webm", "wma"];
@@ -95,6 +100,32 @@ fn read_text_file(path: String) -> Result<String, String> {
   std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
+/// 窗口磨砂：按主题 tint 的 Acrylic（深色深灰、浅色浅灰）。
+/// 切主题时前端会重调；失败（不支持的系统）静默降级为不透明背景。
+#[tauri::command]
+fn set_window_effect(window: tauri::WebviewWindow, dark: bool) -> Result<(), String> {
+  #[cfg(target_os = "windows")]
+  {
+    let _ = window_vibrancy::clear_acrylic(&window);
+    let _ = window_vibrancy::clear_mica(&window);
+    let tint = if dark { (14, 14, 18, 125) } else { (242, 243, 245, 150) };
+    window_vibrancy::apply_acrylic(&window, Some(tint)).map_err(|e| e.to_string())
+  }
+  #[cfg(not(target_os = "windows"))]
+  {
+    let _ = (window, dark);
+    Ok(())
+  }
+}
+
+fn show_main_window(app: &tauri::AppHandle) {
+  if let Some(w) = app.get_webview_window("main") {
+    let _ = w.unminimize();
+    let _ = w.show();
+    let _ = w.set_focus();
+  }
+}
+
 fn ext_mime(path: &str) -> &'static str {
   let ext = Path::new(path)
     .extension()
@@ -154,6 +185,10 @@ fn media_response(status: u16, headers: Vec<(&str, String)>, body: Vec<u8>) -> t
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    // 单实例锁必须最先挂：二次启动时唤起已有窗口并置前
+    .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+      show_main_window(app);
+    }))
     .plugin(tauri_plugin_dialog::init())
     .setup(|app| {
       if cfg!(debug_assertions) {
@@ -163,7 +198,51 @@ pub fn run() {
             .build(),
         )?;
       }
+
+      // 托盘：左键唤起主窗口；菜单提供显示/播放控制/退出
+      use tauri::menu::{Menu, MenuItem};
+      use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+      let show = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
+      let playpause = MenuItem::with_id(app, "playpause", "播放 / 暂停", true, None::<&str>)?;
+      let prev = MenuItem::with_id(app, "prev", "上一曲", true, None::<&str>)?;
+      let next = MenuItem::with_id(app, "next", "下一曲", true, None::<&str>)?;
+      let quit = MenuItem::with_id(app, "quit", "退出 Onda Player", true, None::<&str>)?;
+      let menu = Menu::with_items(app, &[&show, &playpause, &prev, &next, &quit])?;
+      TrayIconBuilder::with_id("main-tray")
+        .icon(app.default_window_icon().unwrap().clone())
+        .tooltip("Onda Player")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_tray_icon_event(|tray, event| {
+          if let TrayIconEvent::Click {
+            button: MouseButton::Left,
+            button_state: MouseButtonState::Up,
+            ..
+          } = event
+          {
+            show_main_window(tray.app_handle());
+          }
+        })
+        .on_menu_event(|app, event| {
+          match event.id().as_ref() {
+            "show" => show_main_window(app),
+            "quit" => app.exit(0),
+            // 播放控制转发给前端（webview 隐藏时仍在运行）
+            id => {
+              let _ = app.emit(&format!("tray://{}", id), ());
+            }
+          }
+        })
+        .build(app)?;
+
       Ok(())
+    })
+    .on_window_event(|window, event| {
+      // 关闭 = 最小化到托盘；真正退出只能走托盘菜单「退出」
+      if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+        api.prevent_close();
+        let _ = window.hide();
+      }
     })
     .register_uri_scheme_protocol("media", |_ctx, request| {
       let Some(query) = request.uri().query() else {
@@ -219,7 +298,12 @@ pub fn run() {
         buf,
       )
     })
-    .invoke_handler(tauri::generate_handler![list_audio_files, read_head, read_text_file])
+    .invoke_handler(tauri::generate_handler![
+      list_audio_files,
+      read_head,
+      read_text_file,
+      set_window_effect
+    ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

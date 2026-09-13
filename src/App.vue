@@ -32,6 +32,8 @@ import { installTrackSwapWatcher } from '@/services/coverFlight'
 import { installHotkeys } from '@/services/hotkeys'
 import { installAbsorbFlight } from '@/services/absorbFlight'
 import { extractBrightColors } from '@/services/palette'
+import { initDesktop, isDesktop } from '@/services/desktop'
+import TitleBar from '@/components/TitleBar.vue'
 import type { ViewId } from '@/types'
 
 const ui = useUiStore()
@@ -120,6 +122,13 @@ onMounted(async () => {
   installTrackSwapWatcher()
   installAbsorbFlight()
   installHotkeys()
+  // 桌面端（Tauri）：磨砂窗口、窗口状态记忆、托盘播放控制（浏览器形态零开销）
+  if (isDesktop) {
+    void initDesktop()
+    window.addEventListener('onda:tray-playpause', () => player.togglePlay())
+    window.addEventListener('onda:tray-prev', () => player.prev())
+    window.addEventListener('onda:tray-next', () => player.next())
+  }
 })
 
 /** 切换视图时清理过渡残留（网格可能已被卸载，动画引用会指向已销毁的 DOM） */
@@ -167,6 +176,7 @@ watch(
 
 <template>
   <div class="app-shell">
+    <TitleBar v-if="isDesktop" />
         <div class="body-row">
       <Sidebar />
       <main class="content">

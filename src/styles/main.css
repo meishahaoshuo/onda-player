@@ -360,3 +360,10 @@ body.modal-open .ambient-blob {
   opacity: 0;
   transform: scale(0.96);
 }
+
+/* ---------- 桌面端磨砂（第 9 阶段 9.5，仅 Tauri 环境由 desktop.ts 加 .desktop-glass） ----------
+   窗口 transparent + Rust 侧 Acrylic 按主题 tint 提供真材质，
+   页面基底降为半透明让桌面透出；玻璃面板（--glass-bg）叠在其上即为磨砂。 */
+html.desktop-glass body {
+  background: color-mix(in srgb, var(--bg-base) 76%, transparent);
+}

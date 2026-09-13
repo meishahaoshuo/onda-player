@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Onda Player",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.ondaplayer.app",
   "build": {
     "beforeBuildCommand": "npm run build",
@@ -18,7 +18,8 @@
         "minHeight": 600,
         "resizable": true,
         "fullscreen": false,
-        "backgroundColor": "#0A0A0A"
+        "decorations": false,
+        "transparent": true
       }
     ],
     "security": {
