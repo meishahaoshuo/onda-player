@@ -6,12 +6,29 @@
 
 :root,
 :root[data-theme='dark'] {
+  /* 布局：侧栏固定宽度；顶栏内容行几何（左侧栏品牌 / 板块标题 / 搜索框 /
+     右侧窗口控制钮四者共用同一水平基准 —— 改这两个值，四处一起动） */
+  --sidebar-w: 232px;
+  --head-pad-top: 20px;
+  --head-row-h: 36px;
+  /* 顶栏整条占位高度 = 上留白 + 行高 + 下留白（.view-header 的 padding）。
+     详情覆盖层用它做 top，好让顶栏在详情页也保留可见（原先详情层盖满内容区，
+     顶栏整条被埋掉，详情自己的返回钮只能挤到窗口控制钮所在的右上角）。 */
+  --head-band-h: calc(var(--head-pad-top) + var(--head-row-h) + 6px);
+  /* 顶栏右上角「窗口控制钮保留带」宽度 = 按钮组 3×40 + 右栅格 24。
+     页面级任何想放在右上角的控件都必须避开这一带，否则会被窗口按钮盖住、点击被吞。
+     （改用顶栏左侧的返回钮后已无控件占用它，保留作约束记录） */
+  --win-safe-r: 144px;
+
   /* 基底：Apple 近黑 */
   --bg-base: #0a0a0a;
   --bg-sidebar: rgba(28, 28, 30, 0.6);
   --bg-panel: rgba(28, 28, 30, 0.66);
   --bg-playerbar: rgba(28, 28, 30, 0.72);
   --bg-hover: rgba(255, 255, 255, 0.08);
+  /* 顶栏窗口控制钮：悬停"水位注入"的两层水色（前后浪叠加出层次） */
+  --win-water: rgba(92, 124, 224, 0.22);
+  --win-water-back: rgba(92, 124, 224, 0.13);
   --bg-active: rgba(92, 124, 224, 0.18);
 
   /* 强调：ONDA 海军蓝（亮调，保证在近黑底上仍可读） */
@@ -54,6 +71,14 @@
 
   /* 队列面板 */
   --queue-bg: linear-gradient(120deg, rgba(28, 28, 30, 0.9), rgba(22, 22, 24, 0.88));
+  /* 二级弹层（弹窗 / 下拉菜单 / 队列面板）统一**纯色底**：纯色不依赖背后内容，文字对比恒定。
+     2026-09-14 用户要求「二级界面不要半透明磨砂，改纯色」——队列面板当时单独纯色化，
+     这里统一成一组令牌，全站二级层共用 */
+  --panel-solid-bg: #1c1c1e;
+  --panel-solid-border: rgba(255, 255, 255, 0.1);
+  /* 队列面板沿用同一纯色（历史令牌名保留，避免大范围改引用） */
+  --queue-solid-bg: var(--panel-solid-bg);
+  --queue-solid-border: var(--panel-solid-border);
 
   /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
   --ambient-fallback: rgba(92, 124, 224, 0.18);
@@ -78,6 +103,9 @@
   --bg-playerbar: rgba(255, 255, 255, 0.7);
   --bg-hover: rgba(0, 0, 0, 0.05);
   --bg-active: rgba(23, 37, 84, 0.1);
+  /* 顶栏窗口控制钮：悬停"水位注入"的两层水色（前后浪叠加出层次） */
+  --win-water: rgba(23, 37, 84, 0.15);
+  --win-water-back: rgba(23, 37, 84, 0.08);
 
   --accent: #172554;
   --accent-strong: #0f1b40;
@@ -111,6 +139,11 @@
   --scrollbar-hover: rgba(0, 0, 0, 0.28);
 
   --queue-bg: linear-gradient(120deg, rgba(255, 255, 255, 0.94), rgba(248, 248, 250, 0.92));
+  /* 二级弹层纯色底（浅色主题）：见深色块处说明 */
+  --panel-solid-bg: #ffffff;
+  --panel-solid-border: rgba(0, 0, 0, 0.08);
+  --queue-solid-bg: var(--panel-solid-bg);
+  --queue-solid-border: var(--panel-solid-border);
 
   /* 页面过渡（引力坍缩）：取色未命中时的兜底色 */
   --ambient-fallback: rgba(23, 37, 84, 0.1);
@@ -256,6 +289,15 @@ select {
   box-shadow: var(--shadow-panel), var(--glass-highlight);
 }
 
+/* 二级弹层材质：纯色底 + 细描边 + 顶部内高光。
+   用途 = 弹窗 / 下拉菜单 / 二级面板（凡浮在页面之上的临时层），
+   与代表「沉浸玻璃」的 .glass 区分开：页面级常驻面板仍可用 .glass */
+.panel-solid {
+  background: var(--panel-solid-bg);
+  border: 1px solid var(--panel-solid-border);
+  box-shadow: var(--shadow-2), var(--glass-highlight);
+}
+
 /* ---------- 通用工具类 ---------- */
 
 .icon-btn {
@@ -361,9 +403,50 @@ body.modal-open .ambient-blob {
   transform: scale(0.96);
 }
 
+/* 二级浮层「弹出」：锚在触发元素上的菜单/下拉/二级面板（`<Transition name="menu">`，全局一份）。
+   起点更小 + 朝触发元素那侧偏 6px，用 spring 收回——读起来是「弹出来」而不是「淡出来」。
+   锚点方向由各面板自己的 `transform-origin` 决定（右上角下拉 → top right，点击处 → top left） */
+.menu-enter-active {
+  transition: opacity var(--dur-med) var(--ease-out), transform var(--dur-med) var(--ease-spring);
+}
+
+.menu-leave-active {
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.menu-enter-from {
+  opacity: 0;
+  transform: scale(0.9) translateY(-6px);
+}
+
+.menu-leave-to {
+  opacity: 0;
+  transform: scale(0.96) translateY(-2px);
+}
+
+/* 动效降级：关掉浮层的进出场（元素直接显示/消失） */
+@media (prefers-reduced-motion: reduce) {
+  .pop-enter-active,
+  .pop-leave-active,
+  .menu-enter-active,
+  .menu-leave-active {
+    transition: none;
+  }
+}
+
 /* ---------- 桌面端磨砂（第 9 阶段 9.5，仅 Tauri 环境由 desktop.ts 加 .desktop-glass） ----------
    窗口 transparent + Rust 侧 Acrylic 按主题 tint 提供真材质，
    页面基底降为半透明让桌面透出；玻璃面板（--glass-bg）叠在其上即为磨砂。 */
 html.desktop-glass body {
   background: color-mix(in srgb, var(--bg-base) 76%, transparent);
+}
+
+/* ---------- 启动过场期间：先藏起侧边栏的真实品牌区 ----------
+   过场结束时 BootSplash 移除 html.is-booting，品牌由自身 200ms 过渡淡入，
+   与过场 logo 的淡出同步（交叉淡化）。
+   用**全局样式表规则**而不是组件内 JS 设内联 opacity：内联方案要等侧边栏挂载后
+   才能查到元素，元素会先以 opacity:1 渲染一帧再被改成 0，反而闪一下；
+   这里让元素一出生它的 computed opacity 就是 0，不存在闪烁窗口。 */
+html.is-booting .sidebar .brand {
+  opacity: 0;
 }

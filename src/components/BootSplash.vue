@@ -41,6 +41,21 @@ const prefersReduced =
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 const visible = ref(!prefersReduced)
+
+/**
+ * `is-booting` 必须在 **setup 阶段**就挂上（同步执行），不能留到 onMounted：
+ * 主应用是「先 mount 过场、再 mount 主应用」，而 onMounted 是微任务——主应用
+ * （含侧边栏品牌）会抢在它之前挂载并渲染，品牌就会先露一帧再被隐藏（闪一下）。
+ * 挂上后由 main.css 的 `html.is-booting .sidebar .brand` 从元素出生起就压成 opacity:0，
+ * 过场结束移除本类时再由品牌自身的 200ms 过渡淡入，与过场 logo 淡出交叉完成交接。
+ */
+if (visible.value) {
+  document.documentElement.classList.add('is-booting')
+} else {
+  // 无过场（系统开了「减少动态效果」）：立刻放行主应用挂载
+  window.dispatchEvent(new CustomEvent('onda:splash-grown'))
+}
+
 const splashEl = ref<HTMLElement | null>(null)
 const backdropEl = ref<HTMLElement | null>(null)
 const svgEl = ref<SVGSVGElement | null>(null)
@@ -61,19 +76,6 @@ function kill(a: Animation) {
   } catch {
     /* 已结束，忽略 */
   }
-}
-
-/**
- * 启动期间先藏起侧边栏的真实品牌区，等飞到位再由它接棒。
- * 这里直接改元素样式而不是靠 `html.is-booting` 的 scoped 选择器——
- * 实测 `:global(html.is-booting) .brand` 在 scoped 块里没有命中（brandOpacity 一直是 1），
- * 而这块交互对时点很敏感，用内联 style 最可控。
- */
-function setBrandHidden(hidden: boolean) {
-  const el = document.querySelector<HTMLElement>('.sidebar .brand')
-  if (!el) return
-  if (hidden) el.style.opacity = '0'
-  else el.style.removeProperty('opacity')
 }
 
 /**
@@ -110,9 +112,6 @@ onMounted(async () => {
   if (!svg || !splash || !nameNode || !backdrop) return
 
   try {
-    // 启动期间先藏起侧边栏的真实品牌区，等飞到位再由它接棒，否则会同时看到两个 logo
-    document.documentElement.classList.add('is-booting')
-    setBrandHidden(true)
 
     // —— 1. 三条波浪依次生长成形 ——
     // pathLength="1" 把整条路径归一化，stroke-dashoffset 由 1 走到 0 就是「笔尖从左端扫到右端」。
@@ -135,6 +134,13 @@ onMounted(async () => {
       }
       anims.push(a)
     })
+
+    // 三条波浪全部成形（最后一条 delay 220 + 生长 620 = 840ms）后，才放行主应用挂载。
+    // 提前挂载的话，那个约 100ms 的挂载长任务会正好落在波浪生长期间，把这段
+    // 最受注视的动画卡断；挪到生长收笔之后，生长全程无阻塞，剩下一拍是拼合抖动，
+    // 抖动期间掉帧的观感损耗远小于平滑生长期间。
+    await later(T.growDur + 220)
+    window.dispatchEvent(new CustomEvent('onda:splash-grown'))
 
     // —— 2. 拼合完成后整体抖动几下 ——
     anims.push(
@@ -169,7 +175,6 @@ onMounted(async () => {
     )
 
     await later(T.bgOutAt)
-
     // —— 4. 遮罩（独立背景层）先淡出，露出真实界面 ——
     // 只淡背景层，绝不淡容器：logo 与名字是容器的子元素，
     // 一旦容器整体透明，它们会被一起带走，飞行过程就完全看不见了
@@ -207,7 +212,6 @@ onMounted(async () => {
     // —— 6. 交接：侧边栏真实品牌淡入，同时 splash 的 logo 与名字淡出 ——
     // 两者此刻位置完全重合（FLIP 实测偏移 0），所以这一步是无缝的
     document.documentElement.classList.remove('is-booting')
-    setBrandHidden(false)
     anims.push(
       svg.animate([{ opacity: 1 }, { opacity: 0 }], {
         duration: 200,
@@ -228,7 +232,6 @@ onMounted(async () => {
     visible.value = false
   } finally {
     document.documentElement.classList.remove('is-booting')
-    setBrandHidden(false)
   }
 })
 
@@ -236,7 +239,6 @@ onBeforeUnmount(() => {
   timers.forEach((t) => window.clearTimeout(t))
   anims.forEach(kill)
   document.documentElement.classList.remove('is-booting')
-  setBrandHidden(false)
 })
 </script>
 

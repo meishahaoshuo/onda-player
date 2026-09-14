@@ -124,9 +124,11 @@ function removeFromLibrary() {
 
 <template>
   <Teleport to="body">
-    <Transition name="menu">
-      <div v-if="song" class="menu-layer" @click.self="sa.closeSongMenu()" @contextmenu.prevent="sa.closeSongMenu()">
-        <div ref="menuEl" class="song-menu glass" :style="{ left: `${pos.x}px`, top: `${pos.y}px` }">
+    <div v-if="song" class="menu-layer" @click.self="sa.closeSongMenu()" @contextmenu.prevent="sa.closeSongMenu()">
+      <!-- 弹出动画只加在菜单本体上：layer 是全屏（全透明）遮罩，给它做缩放会让菜单跟着位移。
+           两者同时挂载，故用 appear 让菜单本体在首次渲染时就跑进出场 -->
+      <Transition name="menu" appear>
+        <div v-if="song" ref="menuEl" class="song-menu panel-solid" :style="{ left: `${pos.x}px`, top: `${pos.y}px` }">
           <button class="menu-item" @click="play"><AppIcon name="play" :size="15" /> 播放</button>
           <button class="menu-item" @click="playNext"><AppIcon name="next" :size="15" /> 下一首播放</button>
           <button class="menu-item" @click="toggleFav">
@@ -139,7 +141,8 @@ function removeFromLibrary() {
               <AppIcon name="playlistAdd" :size="15" /> 添加到歌单
               <AppIcon name="next" :size="12" class="sub-arrow" />
             </button>
-            <div v-if="submenuOpen" class="submenu">
+            <Transition name="menu">
+              <div v-if="submenuOpen" class="submenu">
               <button
                 v-for="p in playlistStore.playlists"
                 :key="p.id"
@@ -155,7 +158,8 @@ function removeFromLibrary() {
               <div v-if="playlistStore.playlists.length === 0" class="submenu-empty">
                 还没有歌单，试试「新建歌单并加入」
               </div>
-            </div>
+              </div>
+            </Transition>
           </div>
           <div class="menu-sep" />
           <button class="menu-item" @click="viewAlbum"><AppIcon name="disc" :size="15" /> 查看专辑</button>
@@ -171,8 +175,8 @@ function removeFromLibrary() {
             <AppIcon name="trash" :size="15" /> 从资料库移除
           </button>
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </div>
   </Teleport>
 </template>
 
@@ -188,6 +192,8 @@ function removeFromLibrary() {
   min-width: 180px;
   padding: 5px;
   border-radius: 12px;
+  /* 弹出自点击处左上角（坐标为点击点） */
+  transform-origin: top left;
   box-shadow: var(--shadow-2), var(--glass-highlight);
 }
 
@@ -259,11 +265,12 @@ function removeFromLibrary() {
   overflow-y: auto;
   padding: 5px;
   border-radius: 12px;
-  background: var(--queue-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
+  /* 二级面板：与父菜单同为纯色（否则磨砂子面板叠在纯色父菜单上会脏） */
+  background: var(--panel-solid-bg);
+  border: 1px solid var(--panel-solid-border);
   box-shadow: var(--shadow-2), var(--glass-highlight);
+  /* 从父菜单项右侧弹出 */
+  transform-origin: top left;
 }
 
 .sub-item .sub-label {
@@ -283,23 +290,4 @@ function removeFromLibrary() {
   color: var(--text-tertiary);
 }
 
-.menu-enter-active {
-  transition: opacity 0.12s var(--ease-out), transform 0.12s var(--ease-out);
-}
-
-.menu-leave-active {
-  transition: opacity 0.08s var(--ease-out);
-}
-
-.menu-enter-from {
-  opacity: 0;
-}
-
-.menu-enter-from .song-menu {
-  transform: scale(0.96) translateY(-2px);
-}
-
-.menu-leave-to {
-  opacity: 0;
-}
 </style>

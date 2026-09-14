@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useLibraryStore } from '@/stores/library'
 import { useSettingsStore, type LocateFabStyle } from '@/stores/settings'
 import { useStatsStore } from '@/stores/stats'
@@ -15,6 +15,7 @@ import {
 import type { ThemeMode } from '@/types'
 import AppIcon from '@/components/AppIcon.vue'
 import { canInstall, isStandalone, promptInstall, installState } from '@/services/pwa'
+import { isDesktop } from '@/services/fs'
 
 /**
  * 设置页：左侧分类导航 + 右侧内容面板。
@@ -74,18 +75,32 @@ const ACCENT_PRESETS: { c: string; name: string }[] = [
   { c: '#64748B', name: '石墨' },
 ]
 
-/** 当前选中预设的名称（供标题旁显示） */
-const accentCurrentName = computed(() => {
-  if (!settings.accentColor) return 'ONDA 蓝'
-  const hit = ACCENT_PRESETS.find((p) => p.c.toLowerCase() === settings.accentColor.toLowerCase())
-  return hit ? hit.name : '自定义'
+/** 当前选中的是「预设之外」的颜色 → 高亮「自定义」按键 */
+const isCustomAccent = computed(() => {
+  const c = settings.accentColor
+  if (!c) return false
+  return !ACCENT_PRESETS.some((p) => p.c.toLowerCase() === c.toLowerCase())
 })
 
 /* ---------- 数据：清空播放统计 ---------- */
 const confirmClearStats = ref(false)
 
-/* ---------- 桌面应用：安装入口 ---------- */
+/* ---------- 桌面应用：运行形态与安装入口 ---------- */
+/** 版本号：网页版取构建时注入的 package.json 版本；
+    桌面端启动后再用 Tauri 的 getVersion() 覆盖为**实际安装的版本**（可能与仓库版本不同） */
+const appVersion = ref(__APP_VERSION__)
+onMounted(async () => {
+  if (!isDesktop) return
+  try {
+    const { getVersion } = await import('@tauri-apps/api/app')
+    appVersion.value = await getVersion()
+  } catch {
+    /* 取不到就沿用构建版本 */
+  }
+})
+
 const installDesc = computed(() => {
+  if (isDesktop) return '桌面版以独立系统窗口运行，音乐文件夹与数据都保存在本机'
   if (isStandalone.value) return '正在以独立窗口运行，可从桌面 / 开始菜单启动'
   if (canInstall.value) return '安装后从桌面 / 开始菜单启动，以独立窗口运行（无地址栏）'
   if (installState.value === 'done') return '已安装，重启浏览器或稍候即可以独立窗口运行'
@@ -178,35 +193,42 @@ function onRecordKeydown(e: KeyboardEvent) {
             </button>
           </div>
 
-          <!-- 主题色 -->
-          <p class="panel-sub accent-heading">主题色<span class="accent-current">{{ accentCurrentName }}</span></p>
-          <div class="accent-row">
+          <!-- 主题色：按键式选择（每键 = 色点 + 名称），末尾保留「自定义」取色器。
+               与「样式 / 材质」的分段选择同一形态；标题旁不再重复显示当前名称，
+               因为按键本身已带名称、选中态也由按键表达。 -->
+          <p class="panel-sub accent-heading">主题色</p>
+          <div class="accent-keys">
             <button
-              class="accent-swatch default"
-              :class="{ active: settings.accentColor === '' }"
+              class="accent-key"
+              :class="{ on: settings.accentColor === '' }"
               title="ONDA 蓝（默认）"
               @click="settings.setAccentColor('')"
             >
-              <AppIcon v-if="settings.accentColor === ''" name="check" :size="15" />
+              <span class="accent-key-dot default" />
+              ONDA 蓝
             </button>
             <button
               v-for="p in ACCENT_PRESETS"
               :key="p.c"
-              class="accent-swatch"
-              :class="{ active: settings.accentColor === p.c }"
-              :style="{ background: p.c }"
-              :title="p.name"
+              class="accent-key"
+              :class="{ on: settings.accentColor.toLowerCase() === p.c.toLowerCase() }"
               @click="settings.setAccentColor(p.c)"
             >
-              <AppIcon v-if="settings.accentColor === p.c" name="check" :size="15" />
+              <span class="accent-key-dot" :style="{ background: p.c }" />
+              {{ p.name }}
             </button>
-            <label class="accent-custom" title="自定义颜色">
+            <label
+              class="accent-key accent-key-custom"
+              :class="{ on: isCustomAccent }"
+              title="自定义颜色"
+            >
+              <span class="accent-key-dot custom" />
+              自定义
               <input
                 type="color"
                 :value="settings.accentColor || '#172554'"
                 @input="settings.setAccentColor(($event.target as HTMLInputElement).value)"
               />
-              <AppIcon name="plus" :size="14" />
             </label>
           </div>
 
@@ -396,7 +418,7 @@ function onRecordKeydown(e: KeyboardEvent) {
         <!-- 关于 -->
         <section v-else key="about" class="panel-section">
           <h2 class="panel-title">关于</h2>
-          <p class="panel-sub">Onda Player — 网页版本地音乐播放器</p>
+          <p class="panel-sub">Onda Player — 本地音乐播放器</p>
           <div class="about-brand">
             <img
               :src="brandLogo"
@@ -406,17 +428,17 @@ function onRecordKeydown(e: KeyboardEvent) {
             />
             <div class="about-brand-text">
               <span class="about-brand-name">Onda Player</span>
-              <span class="about-brand-ver">v0.1.0 · 对标 Salt Player 的本地播放器</span>
+              <span class="about-brand-ver">v{{ appVersion }} · {{ isDesktop ? '桌面版' : '网页版' }}</span>
             </div>
           </div>
-          <!-- 桌面应用：安装到桌面 / 独立窗口状态 -->
+          <!-- 运行形态：桌面端只读；网页端可安装为独立窗口 -->
           <div class="opt-row install-row">
             <div class="opt-text">
-              <span class="opt-name">桌面应用</span>
+              <span class="opt-name">{{ isDesktop ? '桌面应用' : '网页应用' }}</span>
               <span class="opt-desc">{{ installDesc }}</span>
             </div>
             <button
-              v-if="canInstall && !isStandalone"
+              v-if="!isDesktop && canInstall && !isStandalone"
               class="mini-btn install-btn"
               :disabled="installState === 'installing'"
               @click="doInstall"
@@ -426,10 +448,11 @@ function onRecordKeydown(e: KeyboardEvent) {
             </button>
           </div>
           <ul class="about-list">
-            <li>所有数据仅保存在本机浏览器中，零网络请求</li>
-            <li>支持格式：MP3 / FLAC / OGG / OPUS / WAV / M4A（APE 等浏览器不支持的格式会被跳过）</li>
-            <li>需要 Chrome / Edge 浏览器；刷新或重开后需点击一次「恢复权限」重新授权文件夹</li>
-            <li>歌词：读取音频内嵌歌词与同目录同名 .lrc，支持双语逐行与逐字卡拉OK</li>
+            <li>所有数据（曲库索引、歌单、播放统计、设置）只保存在本机，全程零网络请求</li>
+            <li>支持格式：MP3 / FLAC / OGG / OPUS / WAV / M4A；APE 等平台不支持的格式会自动跳过</li>
+            <li v-if="isDesktop">桌面版以系统窗口运行，音乐文件夹授权一次后长期有效，无需重复授权</li>
+            <li v-else>网页版需要 Chrome / Edge；刷新或重开后需点一次「恢复权限」重新授权音乐文件夹</li>
+            <li>歌词：读取音频内嵌歌词与同目录同名 .lrc，支持双语逐行与逐字卡拉 OK</li>
           </ul>
         </section>
       </Transition>
@@ -1006,6 +1029,9 @@ function onRecordKeydown(e: KeyboardEvent) {
 .hotkey-list {
   display: flex;
   flex-direction: column;
+  /* 与 .theme-row 用同一个「副标题 → 首个内容」的间距；
+     原来为 0，长副标题会直接贴住第一行快捷键 */
+  margin-top: 16px;
 }
 
 .hotkey-row {
@@ -1078,73 +1104,68 @@ function onRecordKeydown(e: KeyboardEvent) {
 }
 
 /* 当前预设名：标题旁的小字提示 */
-.accent-current {
-  margin-left: 10px;
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--text-tertiary);
-}
-
-.accent-row {
+/* 主题色按键组：形态与「样式 / 材质」的分段选择一致（按键，不是色圆点），
+   每键 = 色点 + 名称，末尾是「自定义」取色器（label 包 input，整键可点） */
+.accent-keys {
   display: flex;
-  align-items: center;
-  gap: 10px;
   flex-wrap: wrap;
+  gap: 6px;
   margin-top: 12px;
 }
 
-.accent-swatch {
+.accent-key {
   position: relative;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
+  gap: 6px;
+  padding: 6px 12px 6px 8px;
+  border-radius: 9px;
+  border: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.accent-key:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.accent-key.on {
+  color: var(--text-primary);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.accent-key-dot {
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  border: 2px solid transparent;
-  color: #fff;
-  transition: transform var(--dur-fast) var(--ease-spring), border-color var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out);
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
 }
 
-.accent-swatch:hover {
-  transform: scale(1.1);
-}
-
-.accent-swatch.active {
-  border-color: var(--text-primary);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 35%, transparent);
-}
-
-.accent-swatch.default {
+.accent-key-dot.default {
   background: linear-gradient(135deg, #172554, #5c7ce0);
 }
 
-.accent-custom {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px dashed var(--border-subtle);
-  color: var(--text-tertiary);
+/* 自定义：色轮小点作为标识（点击后由系统取色器决定具体颜色） */
+.accent-key-dot.custom {
+  background: conic-gradient(#ec4141, #d97706, #31c27c, #0a84ff, #5b4bd5, #e64980, #ec4141);
+}
+
+.accent-key-custom {
   cursor: pointer;
-  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 
-.accent-custom:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.accent-custom input {
+.accent-key-custom input[type='color'] {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   opacity: 0;
   cursor: pointer;
 }
-
 
 </style>

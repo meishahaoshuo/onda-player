@@ -394,6 +394,14 @@ function isBlankArea(t: EventTarget | null): boolean {
 }
 
 function onBarPointerDown(e: PointerEvent) {
+  /* 「播放队列」按钮自己负责开关，这里必须先让开：
+     否则一次点击会被拆成两步 —— pointerdown 先执行下面的 queueOpen = false 收掉面板，
+     紧随其后的 click 又把它 ! 回 true，表现为「点第二次关不掉、反而重新出现一次」。
+     面板内部同理（面板里的行有自己的点击语义）。 */
+  const el = e.target as HTMLElement | null
+  if (el && typeof el.closest === 'function') {
+    if (el.closest('[data-queue-toggle]') || el.closest('.queue-panel')) return
+  }
   // 队列面板开着时，点播放条空白处只收起面板，不触发 seek
   if (queueOpen.value) {
     queueOpen.value = false
@@ -603,25 +611,7 @@ function onRingPointerUp() {
             <CoverImage :cover-id="song.coverId" :size="32" />
             <span class="queue-title">{{ song.title }}</span>
             <span class="queue-artist">{{ song.artist }}</span>
-            <span class="queue-duration">
-              <span class="row-actions" @click.stop>
-                <button
-                  class="row-act"
-                  :class="{ active: favorites.has(song.path) }"
-                  :title="favorites.has(song.path) ? '取消收藏' : '收藏'"
-                  @click="favorites.toggle(song.path)"
-                >
-                  <AppIcon name="heart" :size="14" :class="{ filled: favorites.has(song.path) }" />
-                </button>
-                <button class="row-act" title="更多操作" @click="onRowMenu($event, song, i)">
-                  <AppIcon name="more" :size="14" />
-                </button>
-                <button class="row-act" title="从队列移除" @click="player.removeAt(i)">
-                  <AppIcon name="close" :size="14" />
-                </button>
-              </span>
-              {{ formatDuration(song.durationSec) }}
-            </span>
+            <span class="queue-duration">{{ formatDuration(song.durationSec) }}</span>
           </div>
           <div v-if="player.queue.length === 0" class="queue-empty">队列是空的</div>
         </div>
@@ -1209,12 +1199,25 @@ function onRingPointerUp() {
   border-radius: var(--radius-panel);
   overflow: hidden;
   z-index: 30;
-  /* 比 .glass 更实一些的底，保证列表文字可读 */
-  background: var(--queue-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-2), var(--glass-highlight);
+  /* 纯色底（用户要求去掉磨砂材质）：不再 backdrop-filter，
+     面板背后是歌曲列表/封面，磨砂会让列表文字从底下透出来、可读性不稳；
+     纯色后对比度恒定，也不吃 GPU（全屏实时 blur 是本项目的铁律禁区，少一处是一处）。
+     边框改用不透明的 hairline，阴影只留投影、不再叠加玻璃内高光 */
+  background: var(--queue-solid-bg);
+  border: 1px solid var(--queue-solid-border);
+  box-shadow: var(--shadow-2);
+}
+
+/* 胶囊态：播放条不再是满宽（`width: min(760px, 100vw - 24px)` 居中），
+   若沿用上面的 `right: 16px`，面板会跟着条子一起缩到屏幕中部 ——
+   实测面板右缘距窗口右 **179px**，与标准态的 16px **差 163px**，切样式时面板会横向跳一下。
+   这里把定位基准从「条子右缘」改回「窗口右缘」：
+   条子水平中心 = 窗口中心（`left: 50%` + `translateX(-50%)`），其半宽正好是 `50%`
+   （绝对定位子元素的百分比基准 = 条子的 padding box），
+   故 `16px - 50vw + 50%` 恰好落在窗口右缘内 16px —— 两种样式下面板位置完全一致。
+   窄窗口下 `min()` 取 `100vw - 24px`，结果约 4px（仍落在条内），不会向右溢出。 */
+.player-bar.capsule .queue-panel {
+  right: calc(16px - 50vw + 50%);
 }
 
 .queue-head {
@@ -1329,7 +1332,6 @@ function onRingPointerUp() {
 }
 
 .queue-duration {
-  position: relative;
   font-size: 12px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
@@ -1342,47 +1344,4 @@ function onRingPointerUp() {
   font-size: 13px;
 }
 
-/* 队列行悬停快捷操作（收藏/更多/移除）：悬浮在时长左侧，透明底与行背景融为一体 */
-.row-actions {
-  position: absolute;
-  right: calc(100% + 4px);
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  opacity: 0;
-  transform: translateX(6px);
-  pointer-events: none;
-  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
-}
-
-.queue-row:hover .row-actions,
-.queue-row:focus-within .row-actions {
-  opacity: 1;
-  transform: translateX(0);
-  pointer-events: auto;
-}
-
-.row-act {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  color: var(--text-secondary);
-  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
-}
-
-.row-act:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.row-act.active {
-  color: var(--accent);
-}
-
-.row-act :deep(svg.filled) {
-  fill: currentColor;
-}
 </style>

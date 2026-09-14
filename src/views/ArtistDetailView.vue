@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import CoverImage from '@/components/CoverImage.vue'
 import SongList from '@/components/SongList.vue'
@@ -35,6 +35,14 @@ watch(
   { immediate: true, flush: 'post' },
 )
 
+/* 顶栏返回钮（App.vue）派发的事件：关闭要走「引力坍缩」反向过渡，
+   那套收尾只有本组件知道怎么跑，故由这里接住并调用自己的 close() */
+function onDetailBack() {
+  void close()
+}
+onMounted(() => window.addEventListener('onda:detail-back', onDetailBack))
+onBeforeUnmount(() => window.removeEventListener('onda:detail-back', onDetailBack))
+
 async function close() {
   if (ui.dolly !== 'idle') return
   ui.beginDollyExit()
@@ -52,10 +60,6 @@ function onPlay(song: SongRecord) {
 <template>
   <div v-if="artist" ref="rootEl" class="artist-detail" :class="{ revealed }">
     <header class="artist-header">
-      <!-- 返回艺术家列表：头部右上角的隐藏式关闭钮，悬停浮现 -->
-      <button class="header-close" title="返回艺术家列表" aria-label="返回艺术家列表" @click="close">
-        <AppIcon name="close" :size="15" />
-      </button>
       <div class="header-cover">
         <CoverImage :cover-id="artist.coverId" :size="120" />
       </div>
@@ -109,37 +113,6 @@ function onPlay(song: SongRecord) {
   margin-top: 20px;
 }
 
-/* 返回艺术家列表：头部右上角的隐藏式关闭钮，悬停/聚焦时浮现 */
-.header-close {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  color: var(--text-secondary);
-  background: var(--bg-hover);
-  border: 1px solid var(--border-subtle);
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
-}
-
-.artist-header:hover .header-close,
-.header-close:focus-visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.header-close:hover {
-  color: var(--text-primary);
-  background: var(--bg-active);
-}
 
 /* 艺术家封面圆形（与网格卡片一致），也是封面飞行的落点。
    注意 .header-cover 是包一层 div——CoverImage 根上直接挂类的话 :deep 选择器打不到 img。 */
@@ -181,11 +154,6 @@ function onPlay(song: SongRecord) {
 @media (prefers-reduced-motion: reduce) {
   .artist-detail .header-info {
     opacity: 1;
-  }
-
-  /* 关闭钮保持默认隐藏（可发现性设计而非动效），只是浮现不做位移过渡 */
-  .artist-header .header-close {
-    transform: none;
   }
 }
 </style>

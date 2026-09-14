@@ -13,6 +13,7 @@ import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
 import { usePlaylistStore, playlistManualCoverId } from '@/stores/playlist'
 import { useStatsStore } from '@/stores/stats'
+import { useFavoritesStore } from '@/stores/favorites'
 import { usePlaylistMenu } from '@/composables/usePlaylistMenu'
 import { useStaggerReveal } from '@/composables/useStaggerReveal'
 import { imageToCoverThumb } from '@/services/cover'
@@ -28,6 +29,7 @@ const library = useLibraryStore()
 const player = usePlayerStore()
 const playlistStore = usePlaylistStore()
 const stats = useStatsStore()
+const favorites = useFavoritesStore()
 const { open: openPlaylistMenu } = usePlaylistMenu()
 const ui = useUiStore()
 
@@ -218,6 +220,14 @@ watch(
   { immediate: true, flush: 'post' },
 )
 
+/* 顶栏返回钮（App.vue）派发的事件：关闭要走「引力坍缩」反向过渡，
+   那套收尾只有本组件知道怎么跑，故由这里接住并调用自己的 closePlaylist() */
+function onDetailBack() {
+  void closePlaylist()
+}
+onMounted(() => window.addEventListener('onda:detail-back', onDetailBack))
+onBeforeUnmount(() => window.removeEventListener('onda:detail-back', onDetailBack))
+
 async function closePlaylist() {
   if (!current.value || ui.dolly !== 'idle' || closing.value) return
   // 编排器负责收尾（clearTransitionState / closeDetail / endDolly）；
@@ -336,6 +346,136 @@ function confirmAddSelected() {
 function onPlaySong(song: SongRecord) {
   void player.playSong(song, displaySongs.value)
 }
+
+/** 播放全部：固定切到列表循环，按当前显示顺序从第 1 首播（与专辑页按钮行为一致） */
+function playAll() {
+  const songs = displaySongs.value
+  if (songs.length === 0) return
+  player.setPlayMode('loop')
+  void player.playSong(songs[0], songs)
+}
+
+/* ---------- 头部「更多操作」下拉（添加歌曲 / 批量操作） ---------- */
+
+const moreOpen = ref(false)
+/** 头部卡片 overflow:hidden，下拉 teleport 到 body，按按钮矩形算 fixed 定位 */
+const morePos = ref({ top: 0, right: 0 })
+
+async function toggleMore(e: MouseEvent) {
+  if (moreOpen.value) {
+    moreOpen.value = false
+    return
+  }
+  const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  morePos.value = { top: Math.round(r.bottom + 6), right: Math.round(window.innerWidth - r.right) }
+  await nextTick()
+  moreOpen.value = true
+}
+
+function onMoreAction(action: 'add' | 'batch') {
+  moreOpen.value = false
+  if (action === 'add') openAdd()
+  else toggleSelecting()
+}
+
+/* ---------- 批量操作（多选）----------
+   从「更多操作 → 批量操作」进入：SongList 行首封面换成勾选框、点击行切换勾选，
+   列表上方出现工具条（已选 N 首 / 全选 / 反选 / 取消 + 收藏 / 添加到歌单 / 从歌单移除）。 */
+const selecting = ref(false)
+const selected = ref<Set<string>>(new Set())
+/** 工具条「添加到歌单」的二级面板 */
+const batchAddOpen = ref(false)
+
+const selectedPaths = computed(() =>
+  displaySongs.value.filter((s) => selected.value.has(s.path)).map((s) => s.path),
+)
+
+/** 选中的歌已全部收藏时，收藏按钮变为「取消收藏」（与右键菜单同款语义） */
+const allSelectedFavorited = computed(() => {
+  const paths = selectedPaths.value
+  return paths.length > 0 && paths.every((p) => favorites.has(p))
+})
+
+function exitSelecting() {
+  selecting.value = false
+  batchAddOpen.value = false
+  selected.value = new Set()
+}
+
+function toggleSelecting() {
+  if (selecting.value) exitSelecting()
+  else {
+    selected.value = new Set()
+    selecting.value = true
+  }
+}
+
+function onPick(song: SongRecord) {
+  const next = new Set(selected.value)
+  if (next.has(song.path)) next.delete(song.path)
+  else next.add(song.path)
+  selected.value = next
+}
+
+function selectAll() {
+  selected.value = new Set(displaySongs.value.map((s) => s.path))
+}
+
+/** 反选：显示列表内取反 */
+function invertSelection() {
+  const next = new Set<string>()
+  for (const s of displaySongs.value) if (!selected.value.has(s.path)) next.add(s.path)
+  selected.value = next
+}
+
+function batchFavorite() {
+  const paths = selectedPaths.value
+  if (paths.length === 0) return
+  const remove = allSelectedFavorited.value
+  // 全已收藏 → 批量取消收藏；否则只补收未收藏的（不误伤已收藏的）
+  for (const p of paths) {
+    const has = favorites.has(p)
+    if (remove ? has : !has) favorites.toggle(p)
+  }
+}
+
+function batchAddToPlaylist(id: string) {
+  const paths = selectedPaths.value
+  if (paths.length === 0) return
+  playlistStore.addSongs(id, paths)
+  exitSelecting()
+}
+
+function createPlaylistWithSelected() {
+  const paths = selectedPaths.value
+  if (paths.length === 0) return
+  batchAddOpen.value = false
+  ui.requestPlaylistCreate(paths)
+}
+
+function batchRemoveFromPlaylist() {
+  const id = current.value?.id
+  const paths = selectedPaths.value
+  if (!id || paths.length === 0) return
+  for (const p of paths) playlistStore.removeSong(id, p)
+  exitSelecting()
+}
+
+/* Esc 退出选择态（二级面板打开时先收面板）；歌词全屏页在最上层，不抢它的 Esc */
+function onSelectKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Escape' || ui.lyricsOpen) return
+  if (batchAddOpen.value) batchAddOpen.value = false
+  else if (moreOpen.value) moreOpen.value = false
+  else if (selecting.value) exitSelecting()
+}
+onMounted(() => window.addEventListener('keydown', onSelectKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onSelectKeydown))
+
+/* 换歌单即退出选择态（选中集属于某个歌单） */
+watch(
+  () => current.value?.id,
+  () => exitSelecting(),
+)
 
 /* ---------- 自定义排序：显示顺序与播放队列分离，排序选择持久化到 kv ---------- */
 
@@ -461,10 +601,6 @@ const totalPlaysOfSongs = computed(() =>
     <Transition name="view" mode="out-in">
       <div :key="current.id" class="detail-inner">
     <header class="pl-header">
-      <!-- 返回歌单列表：悬停头部浮现 -->
-      <button class="header-close" title="返回歌单列表" aria-label="返回歌单列表" @click="closePlaylist">
-        <AppIcon name="close" :size="15" />
-      </button>
       <!-- 流光呼吸光斑（对齐专辑详情页头部） -->
       <div
         v-for="(c, i) in flowColors.slice(0, 2)"
@@ -474,8 +610,8 @@ const totalPlaysOfSongs = computed(() =>
         :style="{ '--fc': c }"
       />
       <div class="header-cover">
-        <CoverImage v-if="currentCoverId" :cover-id="currentCoverId" :size="176" />
-        <CollageCover v-else :cover-ids="currentCoverIds" :size="176" />
+        <CoverImage v-if="currentCoverId" :cover-id="currentCoverId" :size="192" />
+        <CollageCover v-else :cover-ids="currentCoverIds" :size="192" />
         <button
           class="cover-edit"
           :disabled="currentSongs.length === 0"
@@ -487,9 +623,43 @@ const totalPlaysOfSongs = computed(() =>
       </div>
       <div class="pl-info">
         <h1 class="pl-name">{{ current.name }}</h1>
-        <button class="action-btn add-songs-btn" @click="openAdd">
-          <AppIcon name="plus" :size="14" /> 添加歌曲
-        </button>
+        <div class="pl-actions">
+          <button
+            class="action-btn primary"
+            :disabled="currentSongs.length === 0"
+            @click="playAll"
+          >
+            <AppIcon name="play" :size="14" /> 播放全部
+          </button>
+          <div class="more-drop">
+            <button class="action-btn" :class="{ on: selecting }" @click="toggleMore">
+              <AppIcon name="more" :size="15" /> 更多操作
+            </button>
+            <!-- 头部卡片是 overflow:hidden（裁光斑），下拉必须 teleport 到 body 并用
+                 fixed 定位到按钮下方（right 对齐按钮右缘） -->
+            <Teleport to="body">
+              <div v-if="moreOpen" class="pop-mask top-mask" @click="moreOpen = false" />
+              <Transition name="menu">
+                <div
+                  v-if="moreOpen"
+                  class="more-menu panel-solid"
+                  :style="{ top: `${morePos.top}px`, right: `${morePos.right}px` }"
+                >
+                  <button class="more-item" @click="onMoreAction('add')">
+                    <AppIcon name="plus" :size="14" /> 添加歌曲
+                  </button>
+                  <button
+                    class="more-item"
+                    :disabled="currentSongs.length === 0"
+                    @click="onMoreAction('batch')"
+                  >
+                    <AppIcon name="check" :size="14" /> {{ selecting ? '退出批量操作' : '批量操作' }}
+                  </button>
+                </div>
+              </Transition>
+            </Teleport>
+          </div>
+        </div>
       </div>
 
       <!-- 头部右侧信息卡：创建于 / 最近播放 / 累计播放（方案 D，填平右侧留白） -->
@@ -500,38 +670,95 @@ const totalPlaysOfSongs = computed(() =>
       </div>
     </header>
 
-    <div v-if="currentSongs.length === 0" class="empty-hint">歌单还是空的，点上方「添加歌曲」或右键歌单菜单添加吧</div>
+    <div v-if="currentSongs.length === 0" class="empty-hint">歌单还是空的，点上方「更多操作 → 添加歌曲」或右键歌单菜单添加吧</div>
     <template v-else>
       <!-- 列表工具栏：排序方式（持久化，全局生效） -->
       <div class="list-toolbar">
         <span class="list-count">{{ currentSongs.length }} 首</span>
         <div class="sort-drop">
           <button class="sort-btn" @click="sortOpen = !sortOpen">
-            <AppIcon name="order" :size="14" /> {{ sortLabel }}
+            <AppIcon name="sort" :size="14" /> {{ sortLabel }}
             <AppIcon name="expand" :size="11" class="sort-caret" />
           </button>
-          <div v-if="sortOpen" class="sort-menu glass">
-            <button
-              v-for="o in SORT_OPTIONS"
-              :key="o.id"
-              class="sort-item"
-              :class="{ active: sortId === o.id }"
-              @click="setSort(o.id)"
-            >
-              <span class="sort-check"><AppIcon v-if="sortId === o.id" name="check" :size="13" /></span>
-              {{ o.label }}
-            </button>
-          </div>
+          <Transition name="menu">
+            <div v-if="sortOpen" class="sort-menu panel-solid">
+              <button
+                v-for="o in SORT_OPTIONS"
+                :key="o.id"
+                class="sort-item"
+                :class="{ active: sortId === o.id }"
+                @click="setSort(o.id)"
+              >
+                <span class="sort-check"><AppIcon v-if="sortId === o.id" name="check" :size="13" /></span>
+                {{ o.label }}
+              </button>
+            </div>
+          </Transition>
         </div>
       </div>
       <div v-if="sortOpen" class="sort-mask" @click="sortOpen = false" />
+
+      <!-- 批量操作工具条：贴着列表上方（头部卡片几何不受影响），退出选择态即收起 -->
+      <div v-if="selecting" class="batch-bar">
+        <span class="batch-count">已选 {{ selected.size }} 首</span>
+        <div class="batch-links">
+          <button class="mini-link" @click="selectAll">全选</button>
+          <button class="mini-link" @click="invertSelection">反选</button>
+          <button class="mini-link" @click="exitSelecting">取消</button>
+        </div>
+        <div class="batch-actions">
+          <button class="action-btn" :disabled="selected.size === 0" @click="batchFavorite">
+            <AppIcon name="heart" :size="14" :class="{ filled: allSelectedFavorited }" />
+            {{ allSelectedFavorited ? '取消收藏' : '收藏' }}
+          </button>
+          <div class="batch-add">
+            <button
+              class="action-btn"
+              :disabled="selected.size === 0"
+              @click="batchAddOpen = !batchAddOpen"
+            >
+              <AppIcon name="playlistAdd" :size="14" /> 添加到歌单
+            </button>
+            <Transition name="menu">
+              <div v-if="batchAddOpen" class="batch-add-menu panel-solid">
+                <button
+                  v-for="p in playlistStore.playlists"
+                  :key="p.id"
+                  class="more-item"
+                  :title="p.name"
+                  @click="batchAddToPlaylist(p.id)"
+                >
+                  <AppIcon name="playlist" :size="14" /><span class="more-label">{{ p.name }}</span>
+                </button>
+                <button class="more-item accent" @click="createPlaylistWithSelected">
+                  <AppIcon name="plus" :size="14" /> 新建歌单并加入
+                </button>
+                <div v-if="playlistStore.playlists.length === 0" class="more-empty">
+                  还没有歌单，试试「新建歌单并加入」
+                </div>
+              </div>
+            </Transition>
+          </div>
+          <button
+            class="action-btn"
+            :disabled="selected.size === 0"
+            @click="batchRemoveFromPlaylist"
+          >
+            <AppIcon name="close" :size="14" /> 从歌单移除
+          </button>
+        </div>
+      </div>
+      <div v-if="batchAddOpen" class="pop-mask" @click="batchAddOpen = false" />
 
       <!-- 与其他页面统一的 SongList：虚拟列表 + 悬浮操作 + 来源专辑 + 时长 + 定位悬浮球 -->
       <SongList
         :songs="displaySongs"
         :current-path="player.currentPath"
         :playlist-id="current.id"
+        :selecting="selecting"
+        :selected-paths="selected"
         @play="onPlaySong"
+        @pick="onPick"
       />
     </template>
       </div>
@@ -759,44 +986,15 @@ const totalPlaysOfSongs = computed(() =>
   gap: 16px;
 }
 
-/* 返回歌单列表：头部卡片右上角的隐藏式关闭钮，悬停/聚焦时浮现 */
-.header-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  color: var(--text-secondary);
-  background: var(--bg-hover);
-  border: 1px solid var(--border-subtle);
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
-}
-
-.pl-header:hover .header-close,
-.header-close:focus-visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.header-close:hover {
-  color: var(--text-primary);
-  background: var(--bg-active);
-}
 
 .pl-header {
   position: relative;
   display: flex;
   gap: 24px;
   align-items: flex-end;
-  padding: 28px 24px;
+  /* 上下内边距从 28 收到 20：封面由 176 放大到 192 后，卡片外框高度保持不变
+     （28+176+28 = 20+192+20 = 232），头部整体不会变高 */
+  padding: 20px 24px;
   border-radius: var(--radius-panel);
   overflow: hidden;
   /* 头部背景：中性渐变（主题自适应），光斑与噪点提供质感（对齐专辑详情页） */
@@ -853,8 +1051,9 @@ const totalPlaysOfSongs = computed(() =>
 .header-cover {
   position: relative;
   z-index: 2;
-  width: 176px;
-  height: 176px;
+  /* 与专辑详情页头部封面同尺寸（192）；外框高度靠收内边距保持不变 */
+  width: 192px;
+  height: 192px;
   flex-shrink: 0;
   border-radius: 8px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
@@ -984,9 +1183,144 @@ const totalPlaysOfSongs = computed(() =>
   line-height: 1.15;
 }
 
-/* 名字下方贴底的添加歌曲按钮：靠左不拉伸 */
-.add-songs-btn {
+/* 名字下方贴底的按钮组：靠左不拉伸 */
+.pl-actions {
   align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 下拉（更多操作 / 添加到歌单）：与右键菜单同款材质，本组件自带一份 menu 过渡 */
+.more-drop {
+  position: relative;
+}
+
+.pop-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+}
+
+/* teleport 到 body 的遮罩要在所有页面内容之上 */
+.pop-mask.top-mask {
+  z-index: 98;
+}
+
+.more-menu {
+  position: fixed;
+  z-index: 99;
+  min-width: 160px;
+  padding: 5px;
+  border-radius: 12px;
+  transform-origin: top right;
+  box-shadow: var(--shadow-2), var(--glass-highlight);
+}
+
+.batch-add-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+  min-width: 180px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 5px;
+  border-radius: 12px;
+  transform-origin: top right;
+  box-shadow: var(--shadow-2), var(--glass-highlight);
+}
+
+.more-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.more-item:hover {
+  background: var(--bg-hover);
+}
+
+.more-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.more-item:disabled:hover {
+  background: none;
+}
+
+.more-item svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.more-item.accent {
+  color: var(--accent);
+}
+
+.more-item.accent svg {
+  color: var(--accent);
+}
+
+.more-label {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.more-empty {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* ---------- 批量操作工具条 ---------- */
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px;
+}
+
+.batch-count {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.batch-links {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.batch-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 「添加到歌单」二级面板的定位基准 */
+.batch-add {
+  position: relative;
+}
+
+/* 选择态下「更多操作」按钮高亮，表示模式已开 */
+.action-btn.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 /* 头部右侧信息卡：竖分隔线 + 三行小信息（创建于/最近播放/累计播放），填平右侧留白 */
@@ -1041,6 +1375,8 @@ const totalPlaysOfSongs = computed(() =>
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   font-size: 13px;
+  /* CJK 文字默认可在任意字间断行，被挤窄时会变成两行文字——禁止换行 */
+  white-space: nowrap;
   transition: background 0.15s, color 0.15s;
 }
 
@@ -1122,6 +1458,8 @@ const totalPlaysOfSongs = computed(() =>
   border-radius: 10px;
   display: flex;
   flex-direction: column;
+  /* 弹出自按钮右下角 */
+  transform-origin: top right;
   box-shadow: var(--shadow-1);
 }
 
@@ -1377,7 +1715,9 @@ const totalPlaysOfSongs = computed(() =>
   padding: 0 14px;
   border-radius: 10px;
   border: 1px solid transparent;
-  background: var(--bg-panel);
+  /* 面板已改纯色底（--panel-solid-bg）：输入框不能再铺 --bg-panel（浅色主题是白透底，
+     在白面板上等于没有底色），改用与 .text-input 同款的 --bg-hover 内凹底 */
+  background: var(--bg-hover);
   color: var(--text-tertiary);
   transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }

@@ -1,0 +1,256 @@
+{
+  "setup": {
+    "coverId": "demo-cover-album-header",
+    "albumKey": "album:橙月",
+    "songs": 11
+  },
+  "album": {
+    "detailKey": "album:橙月"
+  },
+  "albumProbe": {
+    "card": {
+      "l": 256,
+      "t": 82,
+      "w": 992,
+      "h": 232,
+      "b": 314
+    },
+    "cover": {
+      "l": 280,
+      "t": 102,
+      "w": 192,
+      "h": 192,
+      "b": 294
+    },
+    "title": {
+      "l": 496,
+      "t": 102,
+      "w": 554,
+      "h": 28,
+      "b": 130
+    },
+    "titleText": "橙月",
+    "titleMinusCoverTop": 0,
+    "actions": {
+      "l": 496,
+      "t": 259,
+      "w": 554,
+      "h": 35,
+      "b": 294
+    },
+    "actionsVsCoverBottom": 0,
+    "side": {
+      "l": 1074,
+      "t": 105,
+      "w": 150,
+      "h": 186,
+      "b": 291
+    },
+    "sideVsCoverTop": 3,
+    "rows": [
+      {
+        "k": "发行年份",
+        "v": "2008",
+        "rect": {
+          "l": 1101,
+          "t": 105,
+          "w": 123,
+          "h": 45,
+          "b": 150
+        }
+      },
+      {
+        "k": "歌手",
+        "v": "方大同",
+        "rect": {
+          "l": 1101,
+          "t": 150,
+          "w": 123,
+          "h": 47,
+          "b": 197
+        }
+      },
+      {
+        "k": "歌曲",
+        "v": "11 首",
+        "rect": {
+          "l": 1101,
+          "t": 197,
+          "w": 123,
+          "h": 47,
+          "b": 244
+        }
+      },
+      {
+        "k": "时长",
+        "v": "33 分钟",
+        "rect": {
+          "l": 1101,
+          "t": 244,
+          "w": 123,
+          "h": 47,
+          "b": 291
+        }
+      }
+    ],
+    "sideStyle": {
+      "borderLeft": "1px solid rgba(0, 0, 0, 0.08)",
+      "paddingLeft": "26px",
+      "alignSelf": "center"
+    },
+    "oldArtistLine": false,
+    "oldStatsLine": false,
+    "oldMetaPanel": false
+  },
+  "albumHeaderRect": {
+    "x": 0,
+    "y": 72,
+    "width": 1280,
+    "height": 252
+  },
+  "narrowProbe": {
+    "card": {
+      "l": 256,
+      "t": 82,
+      "w": 612,
+      "h": 442,
+      "b": 524
+    },
+    "cover": {
+      "l": 280,
+      "t": 102,
+      "w": 192,
+      "h": 192,
+      "b": 294
+    },
+    "title": {
+      "l": 496,
+      "t": 102,
+      "w": 348,
+      "h": 28,
+      "b": 130
+    },
+    "titleText": "橙月",
+    "titleMinusCoverTop": 0,
+    "actions": {
+      "l": 496,
+      "t": 259,
+      "w": 348,
+      "h": 35,
+      "b": 294
+    },
+    "actionsVsCoverBottom": 0,
+    "side": {
+      "l": 280,
+      "t": 318,
+      "w": 150,
+      "h": 186,
+      "b": 504
+    },
+    "sideVsCoverTop": 216,
+    "rows": [
+      {
+        "k": "发行年份",
+        "v": "2008",
+        "rect": {
+          "l": 280,
+          "t": 318,
+          "w": 150,
+          "h": 45,
+          "b": 363
+        }
+      },
+      {
+        "k": "歌手",
+        "v": "方大同",
+        "rect": {
+          "l": 280,
+          "t": 363,
+          "w": 150,
+          "h": 47,
+          "b": 410
+        }
+      },
+      {
+        "k": "歌曲",
+        "v": "11 首",
+        "rect": {
+          "l": 280,
+          "t": 410,
+          "w": 150,
+          "h": 47,
+          "b": 457
+        }
+      },
+      {
+        "k": "时长",
+        "v": "33 分钟",
+        "rect": {
+          "l": 280,
+          "t": 457,
+          "w": 150,
+          "h": 47,
+          "b": 504
+        }
+      }
+    ],
+    "sideStyle": {
+      "borderLeft": "0px none rgb(0, 0, 0)",
+      "paddingLeft": "0px",
+      "alignSelf": "flex-start"
+    },
+    "oldArtistLine": false,
+    "oldStatsLine": false,
+    "oldMetaPanel": false
+  },
+  "albumDark": {
+    "theme": "dark"
+  },
+  "darkHeaderRect": {
+    "x": 0,
+    "y": 72,
+    "width": 1280,
+    "height": 252
+  },
+  "playlist": {
+    "id": "pmu1b5o3k33x4"
+  },
+  "playlistProbe": {
+    "card": {
+      "l": 256,
+      "t": 62,
+      "w": 992,
+      "h": 232,
+      "b": 294
+    },
+    "cover": {
+      "l": 280,
+      "t": 82,
+      "w": 192,
+      "h": 192,
+      "b": 274
+    },
+    "name": {
+      "l": 496,
+      "t": 82,
+      "w": 102,
+      "h": 28,
+      "b": 110
+    },
+    "nameText": "周杰伦",
+    "side": {
+      "l": 1074,
+      "t": 97,
+      "w": 150,
+      "h": 162,
+      "b": 259
+    }
+  },
+  "playlistHeaderRect": {
+    "x": 0,
+    "y": 52,
+    "width": 1280,
+    "height": 252
+  },
+  "errors": []
+}

@@ -108,6 +108,19 @@ watch(
 
 function navClick(view: ViewId) {
   if (navDrag.isClickSuppressed()) return
+  /* 已经在某个推入式详情里、又点同一个板块 = 等价于「返回上一级」：
+     必须走详情自己的退场编排（引力坍缩反向：封面飞回卡片 + 网格恢复）。
+     若直接 ui.navigate()，它会把 detailKey 置空，而详情层的 v-if 立刻卸载，
+     那套退场动画就整段丢失（用户反馈的正是这个）。
+     仅在 `dolly === 'idle'` 时交给详情：非 idle 说明过渡正忙，详情会拒绝关闭
+     （close() 的首行守卫），此时退回直接换页，避免点了没反应。
+     只处理「同一个板块」——点别的板块是换页，换页后原网格已卸载，
+     反向过渡没有落点可飞，仍按原逻辑处理。 */
+  const isDetailView = view === 'albums' || view === 'artists' || view === 'playlists'
+  if (isDetailView && view === ui.activeView && ui.detailKey && ui.dolly === 'idle') {
+    window.dispatchEvent(new CustomEvent('onda:detail-back'))
+    return
+  }
   ui.navigate(view)
 }
 
@@ -192,7 +205,7 @@ function plClick(id: string) {
 .sidebar {
   display: flex;
   flex-direction: column;
-  width: 232px;
+  width: var(--sidebar-w);
   flex-shrink: 0;
   height: 100%;
   background: var(--glass-bg);

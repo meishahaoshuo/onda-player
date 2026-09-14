@@ -12,8 +12,17 @@ import { useFavoritesStore } from '@/stores/favorites'
 import { flyToPlayerFromRow } from '@/services/coverFlight'
 import type { SongRecord } from '@/types'
 
-const props = defineProps<{ songs: SongRecord[]; currentPath?: string | null; persistKey?: string; hideRowActions?: boolean; playlistId?: string }>()
-const emit = defineEmits<{ play: [song: SongRecord] }>()
+const props = defineProps<{
+  songs: SongRecord[]
+  currentPath?: string | null
+  persistKey?: string
+  hideRowActions?: boolean
+  playlistId?: string
+  /** 选择态（批量操作）：行首封面换成勾选框、行点击改为切换勾选，选中集由父组件持有 */
+  selecting?: boolean
+  selectedPaths?: Set<string>
+}>()
+const emit = defineEmits<{ play: [song: SongRecord]; pick: [song: SongRecord] }>()
 
 const ROW_HEIGHT = 56
 
@@ -38,6 +47,11 @@ if (claimListReveal()) {
 onBeforeUnmount(() => window.clearTimeout(bootTimer))
 
 function onRowClick(song: SongRecord, e: MouseEvent) {
+  // 选择态：整行是勾选开关，不做封面飞行与播放
+  if (props.selecting) {
+    emit('pick', song)
+    return
+  }
   flyToPlayerFromRow(e)
   emit('play', song)
 }
@@ -71,6 +85,8 @@ function onRowHover(e: MouseEvent) {
             class="song-row"
             :class="{
               playing: item.path === props.currentPath,
+              selecting: props.selecting,
+              picked: props.selecting && props.selectedPaths?.has(item.path),
               'stagger-row': booting && index < MAX_REVEAL_ROWS,
             }"
             :style="{ height: `${ROW_HEIGHT}px`, '--reveal-i': index }"
@@ -79,7 +95,14 @@ function onRowHover(e: MouseEvent) {
             @contextmenu.prevent="onRowMenu(item, $event)"
           >
             <span class="col-cover" data-flight-cover>
-              <CoverImage :cover-id="item.coverId" :size="40" />
+              <span
+                v-if="props.selecting"
+                class="row-check"
+                :class="{ on: props.selectedPaths?.has(item.path) }"
+              >
+                <AppIcon v-if="props.selectedPaths?.has(item.path)" name="check" :size="12" />
+              </span>
+              <CoverImage v-else :cover-id="item.coverId" :size="40" />
             </span>
             <span class="col-title">
               <span class="title-line">
@@ -159,6 +182,39 @@ function onRowHover(e: MouseEvent) {
 
 .song-row.playing .title-text {
   color: var(--accent);
+}
+
+/* 选择态（批量操作）：整行可点、已选行用强调色底（写在 :hover 之后，
+   同特异性下后者胜出，悬停不会把已选色冲掉） */
+.song-row.selecting {
+  cursor: pointer;
+}
+
+.song-row.picked {
+  background: var(--accent-soft);
+}
+
+.song-row.selecting .col-cover {
+  justify-content: center;
+}
+
+/* 勾选框：替掉行首封面（列宽 56 不变，行几何不动） */
+.row-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1.5px solid var(--text-tertiary);
+  color: var(--accent-text);
+  transition: background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.row-check.on {
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .song-row:hover :deep(.cover-img),
@@ -248,6 +304,14 @@ function onRowHover(e: MouseEvent) {
   opacity: 1;
   transform: translate(-50%, -50%) translateX(0);
   pointer-events: auto;
+}
+
+/* 选择态下不收行内快捷操作（批量动作统一在工具条上）。
+   特异性 (0,4,0) 高于上面的悬停规则，位置无关 */
+.song-row.selecting:hover .row-actions,
+.song-row.selecting:focus-within .row-actions {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .row-act {

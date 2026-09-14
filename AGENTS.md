@@ -29,10 +29,14 @@
 ## 4. 常用命令
 
 ```bash
-npm run dev      # 开发服务器 http://localhost:5173
-npm run build    # 类型检查 + 生产构建
-npm run preview  # 预览 build 产物
+npm run dev            # 开发服务器 http://localhost:5180（strictPort）
+npm run build          # 类型检查 + 生产构建（产出 dist/）
+npm run preview        # 预览 build 产物
+npm run desktop        # 桌面端开发：tauri dev 连 5180，前端改动热更新，不打包
+npm run desktop:build  # 桌面端打包：tauri build 产出 NSIS 安装包（慢，仅分发时用）
 ```
+
+桌面端日常开发：先确保 `npm run dev` 在跑，再双击根目录 `开发桌面端.bat`（自动检测 5180 + 检查单实例锁 + 启动 tauri dev）。详见 `docs/02` 「桌面端开发工作流」。**开发前务必退出已安装的 Onda Player**，否则它与开发实例抢单实例锁，dev 窗口会静默秒退。
 
 ## 5. 运行环境
 

@@ -115,11 +115,15 @@ watch(
 <template>
   <Teleport to="body">
     <div v-if="visible" class="menu-layer" @click.self="close" @contextmenu.prevent="close">
-      <div
-        ref="menuEl"
-        class="playlist-menu glass"
-        :style="{ left: `${pos.x}px`, top: `${pos.y}px` }"
-      >
+      <!-- 弹出动画只加在菜单本体上：layer 是全屏（全透明）遮罩，给它做缩放会让菜单跟着位移。
+           两者同时挂载，故用 appear 让菜单本体在首次渲染时就跑进出场 -->
+      <Transition name="menu" appear>
+        <div
+          v-if="visible"
+          ref="menuEl"
+          class="playlist-menu panel-solid"
+          :style="{ left: `${pos.x}px`, top: `${pos.y}px` }"
+        >
         <template v-if="renaming">
           <input
             v-model="renameText"
@@ -152,7 +156,8 @@ watch(
             <AppIcon name="trash" :size="14" /> 删除歌单
           </button>
         </template>
-      </div>
+        </div>
+      </Transition>
     </div>
   </Teleport>
 </template>
@@ -170,6 +175,8 @@ watch(
   padding: 6px;
   border-radius: 10px;
   z-index: 100;
+  /* 弹出自点击点右上角长出（坐标就是点击处的左上角） */
+  transform-origin: top left;
 }
 
 .menu-item {
@@ -241,14 +248,4 @@ watch(
   line-height: 1.5;
 }
 
-.menu-enter-active,
-.menu-leave-active {
-  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
-}
-
-.menu-enter-from,
-.menu-leave-to {
-  opacity: 0;
-  transform: scale(0.96) translateY(-4px);
-}
 </style>

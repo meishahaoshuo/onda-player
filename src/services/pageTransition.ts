@@ -17,7 +17,7 @@ import { paletteCache } from './paletteCache'
  *    返回时层只做几何折叠；折叠期间不得再改变层的布局矩形，否则封面克隆的起飞矩形会失真。
  */
 
-/* ---------- 时序常量（毫秒；lite 档整体 ×0.7） ---------- */
+/* ---------- 时序常量（毫秒；lite 档整体 ×0.7，再乘全局 SPEED） ---------- */
 const WAVE_SPEED = 2.2 // px/ms：波速，延迟 = 到点击点距离 / 波速
 const MAX_WAVE_DELAY = 240 // 波前延迟上限
 const REVEAL_DUR = 260 // 详情内容单元素浮现时长
@@ -27,6 +27,18 @@ const FOLD_DUR = 420 // 返回时详情层折叠回卡片时长
 const COVER_ENTER = 540 // 封面飞入时长
 const COVER_EXIT = 320 // 封面飞回时长
 const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
+
+/**
+ * 全局时间缩放：原始参数偏快，用户要求「优雅丝滑」，整体放慢到 1.35×
+ * （实测进入 547ms → 约 740ms，返回 495ms → 约 670ms）。
+ *
+ * 只改 `dur()` 一处即可让**所有**时长等比缩放 —— 上面这些常量、内联的
+ * `dur(160)` / `dur(200)` / `dur(233)`，以及经 `dur()` 包装的波前延迟
+ * （`WAVE_SPEED` / `MAX_WAVE_DELAY` / `BASE_DELAY` 的产物）全部覆盖，
+ * 因此相位关系不会被打乱。**后续再调速度只动这一个数**，
+ * 不要去逐个改上面的常量（会破坏彼此的相对节奏）。
+ */
+const SPEED = 1.35
 
 /* ---------- 规模上限（大歌库性能护栏） ---------- */
 const MAX_COLLAPSE_CARDS = 24 // 只动视口内卡片
@@ -112,12 +124,58 @@ function reduced(): boolean {
 }
 
 function dur(ms: number): number {
-  return lite ? ms * 0.7 : ms
+  return lite ? ms * 0.7 * SPEED : ms * SPEED
 }
 
 function box(el: HTMLElement): Box {
   const r = el.getBoundingClientRect()
   return { left: r.left, top: r.top, width: r.width, height: r.height }
+}
+
+/**
+ * 过渡不得越过的**顶部裁切线** = 网格所在滚动宿主的顶边（即顶栏带下缘，62px）。
+ *
+ * 为什么需要：卡片被滚出视口一部分时（`.view-body` 把它裁掉半截），
+ * 它的 `getBoundingClientRect().top` 会跑到顶栏底下（实测 −48px）。
+ * 折叠层是「按卡片矩形 translate + scale」，飞行克隆是 `position: fixed`
+ * 挂在 body 上 —— 两者都会照着这个越界的矩形飞到**顶栏之上**把它盖住
+ * （实测折叠层顶边最低 −29.7px、58 帧压住顶栏，且是不透明的）。
+ */
+function topClipLine(): number {
+  const host = document.querySelector<HTMLElement>('.view-body')
+  const t = host?.getBoundingClientRect().top ?? 0
+  return t > 0 ? t : 0
+}
+
+/**
+ * 飞行克隆的宿主：铺满视口、但在顶栏下缘用 `clip-path` 裁一刀。
+ *
+ * **关键取舍**：上一版是"把目标矩形夹紧"来避免越界，结果落点被抬高，
+ * 收尾时真实卡片一出现就"弹回原位"（用户反馈）。正确做法是**裁掉越界的部分**，
+ * 落点仍照真实卡片矩形算 —— 这样克隆被裁的位置与网格被裁的位置完全一致，收尾零跳变。
+ * 折叠层同理由 App.vue 的 `.detail-clip` 容器裁（那里用 overflow:hidden）。
+ *
+ * 容器必须铺满视口（inset:0）：`clip-path` 可能让它成为 fixed 子元素的包含块，
+ * 届时克隆的视口坐标要相对它算；它从 0 起，坐标才不会整体偏移。
+ */
+function flightHost(): HTMLElement {
+  let host = document.querySelector<HTMLElement>('.page-flight-clip')
+  if (!host) {
+    host = document.createElement('div')
+    host.className = 'page-flight-clip'
+    Object.assign(host.style, {
+      position: 'fixed',
+      left: '0',
+      top: '0',
+      right: '0',
+      bottom: '0',
+      zIndex: '70',
+      pointerEvents: 'none',
+    } as CSSStyleDeclaration)
+    document.body.appendChild(host)
+  }
+  host.style.clipPath = `inset(${Math.max(0, topClipLine())}px 0 0 0)`
+  return host
 }
 
 function distance(b: Box, p: { x: number; y: number }): number {
@@ -346,7 +404,7 @@ function flyCover(o: Origin, target: HTMLElement, t: Box): Promise<void> {
 
   document.querySelectorAll('.page-flight').forEach((n) => n.remove())
   target.style.opacity = '0'
-  document.body.appendChild(flying)
+  flightHost().appendChild(flying)
 
   return new Promise((resolve) => {
     let done = false
@@ -370,7 +428,7 @@ function flyCover(o: Origin, target: HTMLElement, t: Box): Promise<void> {
       }),
     )
     anim.onfinish = finish
-    window.setTimeout(finish, dur(COVER_ENTER) + 260)
+    window.setTimeout(finish, dur(COVER_ENTER + 260))
   })
 }
 
@@ -526,7 +584,7 @@ function flyCoverBack(o: Origin, target: HTMLElement, from: Box, to: Box): Promi
 
   document.querySelectorAll('.page-flight').forEach((n) => n.remove())
   target.style.opacity = '0'
-  document.body.appendChild(flying)
+  flightHost().appendChild(flying)
 
   return new Promise((resolve) => {
     let done = false
@@ -546,7 +604,7 @@ function flyCoverBack(o: Origin, target: HTMLElement, from: Box, to: Box): Promi
       }),
     )
     anim.onfinish = finish
-    window.setTimeout(finish, dur(COVER_EXIT) + 260)
+    window.setTimeout(finish, dur(COVER_EXIT + 260))
   })
 }
 
