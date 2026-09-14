@@ -1,11 +1,15 @@
 import { invoke } from '@tauri-apps/api/core'
+import type { Window } from '@tauri-apps/api/window'
 import { isDesktop } from './fs'
 
 export { isDesktop }
 
 /**
- * 桌面端初始化（9.5）：磨砂窗口效果、窗口状态记忆、托盘事件转发。
- * 仅在 Tauri 环境由 App.vue onMounted 调用；浏览器形态零开销。
+ * 桌面端初始化（9.5）：窗口定位与显示、磨砂窗口效果、窗口状态记忆、托盘事件转发。
+ * 浏览器形态零开销。
+ *
+ * 窗口显示时机见 primeWindow —— 窗口以 visible:false 创建，由它在最早时机
+ * 定位后 show，避免"先在默认位置露脸、过一会儿才跳到记忆位置"。
  *
  * 磨砂：html 加 .desktop-glass 后基底变半透明，材质由 Rust 侧 Acrylic
  * （按主题 tint）提供；切主题时由 data-theme 变更观察器重调。
@@ -24,20 +28,22 @@ interface WinState {
   max: boolean
 }
 
-export async function initDesktop(): Promise<void> {
-  if (!isDesktop) return
-  document.documentElement.classList.add('desktop-glass')
+/** primeWindow 只允许跑一次 */
+let primed = false
 
-  const [{ listen }, { getCurrentWindow }, { PhysicalPosition, PhysicalSize }] = await Promise.all([
-    import('@tauri-apps/api/event'),
-    import('@tauri-apps/api/window'),
-    import('@tauri-apps/api/dpi'),
-  ])
-  const win = getCurrentWindow()
+/** 取当前主窗口（延迟 import：浏览器形态完全不加载这部分代码） */
+async function mainWindow(): Promise<Window> {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  return getCurrentWindow()
+}
 
-  /* ---------- 窗口状态记忆：位置/尺寸跨启动恢复（最大化只记状态不覆盖常规尺寸） ----------
-     保存与恢复都做健康检查：最小化时读到的是屏幕外坐标（-32000, -32000, 276×45），
-     一旦存进去，之后每次启动窗口都会被"恢复"到屏幕外——恢复前校验，脏数据直接居中兜底 */
+/**
+ * 把窗口摆回上次关闭时的位置尺寸；没有有效记忆则居中。
+ *
+ * 保存与恢复都做健康检查：最小化时读到的是屏幕外坐标（-32000, -32000, 276×45），
+ * 一旦存进去，之后每次启动窗口都会被"恢复"到屏幕外——恢复前校验，脏数据居中兜底。
+ */
+async function restoreBounds(win: Window): Promise<void> {
   try {
     const saved = JSON.parse(localStorage.getItem(WIN_STATE_KEY) ?? 'null') as WinState | null
     const sane =
@@ -51,14 +57,54 @@ export async function initDesktop(): Promise<void> {
     if (saved?.max) {
       await win.maximize()
     } else if (sane) {
+      const { PhysicalPosition, PhysicalSize } = await import('@tauri-apps/api/dpi')
       await win.setPosition(new PhysicalPosition(saved!.x, saved!.y)).catch(() => {})
       await win.setSize(new PhysicalSize(saved!.w, saved!.h)).catch(() => {})
     } else {
       await win.center().catch(() => {})
     }
   } catch {
-    /* 脏数据忽略，用默认窗口 */
+    /* 脏数据忽略，退回 tauri.conf.json 的 center: true */
   }
+}
+
+/**
+ * 窗口「预定位 + 显示」，必须在入口脚本挂上过场后**立刻**调用（见 main.ts）。
+ *
+ * 窗口在 tauri.conf.json 里以 visible:false 且无 position 创建：出生时既不可见、
+ * 也没有位置。原来的定位写在 App.vue onMounted 里，而主应用要等过场生长拍收笔
+ * （840ms 后）才挂载——在那之前窗口早就按 Windows 默认位置显示出来了，用户看到的
+ * 就是「外框先落在右下角、过一会儿才跳到中间」。挪到这里后，定位发生在过场挂载后
+ * 的几十毫秒内，窗口第一次出现在屏幕上就已经在正确的位置和尺寸。
+ *
+ * 注意定时器节流：窗口隐藏时 Chromium 会把 setTimeout 压到 1s 粒度，而过场的时间轴
+ * 恰好是 setTimeout 驱动的（BootSplash 的 later()）。所以本函数必须在过场挂载后
+ * 立即调用，把隐藏窗口的时间压到百毫秒以内，不能让过场在隐藏状态下空等。
+ *
+ * 失败时窗口会留在隐藏态，因此不能只靠前端兜底：Rust 侧另有一个 2 秒保险
+ * （收到 mark_window_primed 回执即不动作）。
+ */
+export async function primeWindow(): Promise<void> {
+  if (!isDesktop || primed) return
+  primed = true
+  try {
+    const win = await mainWindow()
+    await restoreBounds(win)
+    await win.show()
+    // 回执：前端已把窗口显示出来，Rust 兜底线程不必再插手
+    void invoke('mark_window_primed').catch(() => {})
+  } catch {
+    /* 保持隐藏，交给 Rust 兜底显示 */
+  }
+}
+
+export async function initDesktop(): Promise<void> {
+  if (!isDesktop) return
+  document.documentElement.classList.add('desktop-glass')
+
+  const [{ listen }, win] = await Promise.all([import('@tauri-apps/api/event'), mainWindow()])
+
+  /* ---------- 窗口状态记忆（定位已在 primeWindow 做过，这里只负责记录） ---------- */
   let saveTimer: number | undefined
   const scheduleSave = () => {
     window.clearTimeout(saveTimer)

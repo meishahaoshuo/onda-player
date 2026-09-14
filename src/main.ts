@@ -31,6 +31,20 @@ const splashHost = document.createElement('div')
 document.body.appendChild(splashHost)
 createApp(BootSplash).mount(splashHost)
 
+/**
+ * 桌面端：窗口在 tauri.conf.json 里以 visible:false 创建，必须由前端定位后再 show。
+ *
+ * 必须紧跟过场挂载、立即执行：窗口隐藏期间 Chromium 会把 setTimeout 压到 1s 粒度，
+ * 而过场的时间轴恰好是 setTimeout 驱动的（BootSplash 的 later()），隐藏时间得压到
+ * 百毫秒以内才能保证那一拍不被拉长。
+ *
+ * 这里用最原始的运行时探测而非 import fs.ts 的 isDesktop——为的是让浏览器形态
+ * 连一个多余模块都不加载；动态 import 则是为了保住精简的入口 chunk（过场尽早上屏）。
+ */
+if ('__TAURI_INTERNALS__' in window) {
+  void import('./services/desktop').then((m) => m.primeWindow())
+}
+
 if (import.meta.env.DEV) {
   import('./services/testBridge').then((m) => m.installTestBridge())
 } else {

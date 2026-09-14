@@ -1,8 +1,8 @@
 [package]
 name = "app"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "1.0.0"
+description = "Onda Player - 本地音乐播放器"
+authors = ["Onda Player"]
 license = ""
 repository = ""
 edition = "2021"
@@ -27,3 +27,10 @@ tauri-plugin-dialog = "2"
 tauri-plugin-single-instance = "2"
 window-vibrancy = "0.6"
 urlencoding = "2"
+
+# release 构建：LTO 跨 crate 内联 + 单 codegen 单元 → 产物更小、启动略快；
+# strip 去掉符号表（只影响崩溃栈可读性，不影响运行）。代价是编译时间明显变长。
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

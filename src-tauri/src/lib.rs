@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::UNIX_EPOCH;
 use tauri::{Manager, Emitter};
 
@@ -126,6 +127,35 @@ fn show_main_window(app: &tauri::AppHandle) {
   }
 }
 
+/// 前端是否已完成窗口预定位（`primeWindow` 成功后回执置位）。
+/// 兜底线程据此区分「窗口还没被前端显示」与「窗口已被用户收起」。
+static WINDOW_PRIMED: AtomicBool = AtomicBool::new(false);
+
+/// 前端 `primeWindow` 的回执：置位后兜底线程不再干预窗口显示。
+#[tauri::command]
+fn mark_window_primed() {
+  WINDOW_PRIMED.store(true, Ordering::Relaxed);
+}
+
+/// 清掉历史版本在 WebView2 数据目录里留下的 Service Worker。
+///
+/// 路径规则：`%LOCALAPPDATA%\<identifier>\EBWebView\Default\Service Worker`。
+/// 只删这一个子目录 —— 歌曲库、播放列表等业务数据在同级的 `IndexedDB` 里，不受影响。
+fn purge_stale_service_worker(identifier: &str) {
+  let Ok(local) = std::env::var("LOCALAPPDATA") else {
+    return;
+  };
+  let dir = Path::new(&local)
+    .join(identifier)
+    .join("EBWebView")
+    .join("Default")
+    .join("Service Worker");
+  if dir.exists() {
+    // 失败也无妨（多实例占用 / 权限不足），下次启动再试
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+}
+
 fn ext_mime(path: &str) -> &'static str {
   let ext = Path::new(path)
     .extension()
@@ -184,6 +214,17 @@ fn media_response(status: u16, headers: Vec<(&str, String)>, body: Vec<u8>) -> t
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  let context = tauri::generate_context!();
+
+  // 桌面端不需要 Service Worker（前端资源已经内嵌进二进制），但历史版本注册过，
+  // 而 WebView2 的数据目录是跨版本保留的 —— 那个 SW 会一直活着，用「缓存优先」
+  // 规则把旧 index.html（连同旧 hash 的 JS）喂给页面，表现就是
+  // 「装了新版本，打开的却还是几周前的界面」。
+  //
+  // 必须在 WebView2 初始化**之前**清掉：数据目录一旦被它占用，里面的文件就锁了。
+  // 所以放在这里而不是 setup 回调（setup 执行时窗口已经建好）。
+  purge_stale_service_worker(context.config().identifier.as_str());
+
   tauri::Builder::default()
     // 单实例锁必须最先挂：二次启动时唤起已有窗口并置前
     .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -197,6 +238,23 @@ pub fn run() {
             .level(log::LevelFilter::Info)
             .build(),
         )?;
+      }
+
+      // 窗口是 visible:false 创建的，正常路径由前端 primeWindow 定位后 show。
+      // 万一前端脚本没跑起来（资源损坏 / JS 异常 / IPC 失败），窗口会永远不出现、
+      // 而进程还在后台驻留（托盘在跑），用户只会以为"点了没反应"。
+      // 2 秒后仍未收到前端回执就强制居中显示，兜住这条退路。
+      {
+        let handle = app.handle().clone();
+        std::thread::spawn(move || {
+          std::thread::sleep(std::time::Duration::from_millis(2000));
+          if !WINDOW_PRIMED.load(Ordering::Relaxed) {
+            if let Some(w) = handle.get_webview_window("main") {
+              let _ = w.center();
+              let _ = w.show();
+            }
+          }
+        });
       }
 
       // 托盘：左键唤起主窗口；菜单提供显示/播放控制/退出
@@ -302,8 +360,9 @@ pub fn run() {
       list_audio_files,
       read_head,
       read_text_file,
-      set_window_effect
+      set_window_effect,
+      mark_window_primed
     ])
-    .run(tauri::generate_context!())
+    .run(context)
     .expect("error while running tauri application");
 }
