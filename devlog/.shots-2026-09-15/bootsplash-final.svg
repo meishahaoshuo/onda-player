@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 320" role="img" aria-label="启动动画 logo 定稿">
+  <title>Onda 启动动画 logo 定稿（方案 C）</title>
+  <desc>左侧为浅色主题下的启动动画 logo，右侧为深色主题。</desc>
+  <rect x="0" y="0" width="680" height="320" fill="#FFFFFF"/>
+  <rect x="40" y="40" width="290" height="260" rx="12" fill="#F8F7F4"/>
+  
+  <g transform="translate(85,90) scale(0.2793) translate(-154,-224)">
+    <defs>
+      <linearGradient id="gl" gradientUnits="userSpaceOnUse" x1="0" y1="330" x2="0" y2="694">
+        <stop offset="0" stop-color="#3e5a98"/><stop offset="0.5" stop-color="#22356a"/><stop offset="1" stop-color="#172554"/>
+      </linearGradient>
+    </defs>
+    <path d="M210 512 Q 386 384 512 512 T 814 512" transform="translate(0,-168)" stroke-width="88" fill="none" stroke="url(#gl)" stroke-linecap="round"/>
+    <path d="M210 512 Q 386 384 512 512 T 814 512" transform="translate(0,168)" stroke-width="88" fill="none" stroke="url(#gl)" stroke-linecap="round"/>
+    <path d="M210 512 Q 386 384 512 512 T 814 512" stroke-width="88" fill="none" stroke="url(#gl)" stroke-linecap="round"/>
+  </g>
+  <text x="85" y="278" font-family="'Microsoft YaHei',sans-serif" font-size="13" fill="#5B6470">浅色主题 · 启动动画定稿</text>
+
+  <rect x="350" y="40" width="290" height="260" rx="12" fill="#1A1A1C"/>
+  
+  <g transform="translate(395,90) scale(0.2793) translate(-154,-224)">
+    <defs>
+      <linearGradient id="gd" gradientUnits="userSpaceOnUse" x1="0" y1="330" x2="0" y2="694">
+        <stop offset="0" stop-color="#8298db"/><stop offset="0.5" stop-color="#4a64a6"/><stop offset="1" stop-color="#2e4280"/>
+      </linearGradient>
+    </defs>
+    <path d="M210 512 Q 386 384 512 512 T 814 512" transform="translate(0,-168)" stroke-width="88" fill="none" stroke="url(#gd)" stroke-linecap="round"/>
+    <path d="M210 512 Q 386 384 512 512 T 814 512" transform="translate(0,168)" stroke-width="88" fill="none" stroke="url(#gd)" stroke-linecap="round"/>
+    <path d="M210 512 Q 386 384 512 512 T 814 512" stroke-width="88" fill="none" stroke="url(#gd)" stroke-linecap="round"/>
+  </g>
+  <text x="395" y="278" font-family="'Microsoft YaHei',sans-serif" font-size="13" fill="#9AA0A6">深色主题 · 深蓝在近黑底上提亮一档</text>
+</svg>

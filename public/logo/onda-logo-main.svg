@@ -5,7 +5,7 @@
       <stop offset="1" stop-color="#B9C8E6"/>
     </linearGradient>
   </defs>
-  <path d="M210 512 Q 386 352 512 512 T 814 512" transform="translate(0,-150)" fill="none" stroke="url(#wg)" stroke-width="64" stroke-linecap="round"/>
-  <path d="M210 512 Q 386 352 512 512 T 814 512" transform="translate(0,150)" fill="none" stroke="url(#wg)" stroke-width="64" stroke-linecap="round"/>
-  <path d="M210 512 Q 386 352 512 512 T 814 512" fill="none" stroke="url(#wg)" stroke-width="88" stroke-linecap="round"/>
+  <path d="M210 512 Q 386 384 512 512 T 814 512" transform="translate(0,-168)" fill="none" stroke="url(#wg)" stroke-width="88" stroke-linecap="round"/>
+  <path d="M210 512 Q 386 384 512 512 T 814 512" transform="translate(0,168)" fill="none" stroke="url(#wg)" stroke-width="88" stroke-linecap="round"/>
+  <path d="M210 512 Q 386 384 512 512 T 814 512" fill="none" stroke="url(#wg)" stroke-width="88" stroke-linecap="round"/>
 </svg>

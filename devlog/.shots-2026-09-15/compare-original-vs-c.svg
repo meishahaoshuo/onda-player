@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 650" role="img" aria-label="Onda logo 方案 C 与原版对比">
+  <title>Onda logo 方案 C 与原版对比</title>
+  <desc>三档对比：原版线宽 64/88/64，粗细统一版 88/88/88，方案 C 在统一线宽基础上放宽间距并收小振幅。</desc>
+  <defs>
+    <linearGradient id="wg" gradientUnits="userSpaceOnUse" x1="0" y1="330" x2="0" y2="694">
+      <stop offset="0" stop-color="#3E5A98"/>
+      <stop offset="0.5" stop-color="#22356A"/>
+      <stop offset="1" stop-color="#172554"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="680" height="650" fill="#FFFFFF"/>
+
+  <g transform="translate(60,47) scale(0.30726) translate(-154,-224)">
+    <path d="M210 512 Q386 352 512 512 T814 512" transform="translate(0,-150)" fill="none" stroke="url(#wg)" stroke-width="64" stroke-linecap="round"/>
+    <path d="M210 512 Q386 352 512 512 T814 512" fill="none" stroke="url(#wg)" stroke-width="88" stroke-linecap="round"/>
+    <path d="M210 512 Q386 352 512 512 T814 512" transform="translate(0,150)" fill="none" stroke="url(#wg)" stroke-width="64" stroke-linecap="round"/>
+  </g>
+  <text x="320" y="120" font-family="'Microsoft YaHei','PingFang SC',sans-serif" font-size="15" font-weight="500" fill="#15151A">原版（现在线上）</text>
+  <text x="320" y="146" font-family="'Microsoft YaHei','PingFang SC',sans-serif" font-size="13" fill="#5B6470">线宽 64 / 88 / 64 · 波形重叠 10px · 间隙 0.70×</text>
+
+  <line x1="40" y1="230" x2="640" y2="230" stroke="#E6E4DF" stroke-width="1"/>
+
+  <g transform="translate(60,237) scale(0.30726) translate(-154,-224)">
+    <path d="M210 512 Q386 352 512 512 T814 512" transform="translate(0,-150)" fill="none" stroke="url(#wg)" stroke-width="88" stroke-linecap="round"/>
+    <path d="M210 512 Q386 352 512 512 T814 512" fill="none" stroke="url(#wg)" stroke-width="88" stroke-linecap="round"/>
+    <path d="M210 512 Q386 352 512 512 T814 512" transform="translate(0,150)" fill="none" stroke="url(#wg)" stroke-width="88" stroke-linecap="round"/>
+  </g>
+  <text x="320" y="310" font-family="'Microsoft YaHei','PingFang SC',sans-serif" font-size="15" font-weight="500" fill="#15151A">粗细统一版（你已认可）</text>
+  <text x="320" y="336" font-family="'Microsoft YaHei','PingFang SC',sans-serif" font-size="13" fill="#5B6470">线宽 88 / 88 / 88 · 波形重叠 10px · 间隙 0.70×</text>
+
+  <line x1="40" y1="420" x2="640" y2="420" stroke="#E6E4DF" stroke-width="1"/>
+
+  <rect x="40" y="420" width="600" height="190" rx="12" fill="#F4F7FC"/>
+  <g transform="translate(60,427) scale(0.30726) translate(-154,-224)">
+    <path d="M210 512 Q386 384 512 512 T814 512" transform="translate(0,-168)" fill="none" stroke="url(#wg)" stroke-width="88" stroke-linecap="round"/>
+    <path d="M210 512 Q386 384 512 512 T814 512" fill="none" stroke="url(#wg)" stroke-width="88" stroke-linecap="round"/>
+    <path d="M210 512 Q386 384 512 512 T814 512" transform="translate(0,168)" fill="none" stroke="url(#wg)" stroke-width="88" stroke-linecap="round"/>
+  </g>
+  <text x="320" y="500" font-family="'Microsoft YaHei','PingFang SC',sans-serif" font-size="15" font-weight="500" fill="#15151A">方案 C · 疏朗均衡</text>
+  <text x="320" y="526" font-family="'Microsoft YaHei','PingFang SC',sans-serif" font-size="13" fill="#5B6470">线宽 88 / 88 / 88 · 净空 40px · 间隙 0.91×</text>
+  <text x="320" y="552" font-family="'Microsoft YaHei','PingFang SC',sans-serif" font-size="13" fill="#5B6470">三条起伏范围不再互相咬合，各自留出呼吸</text>
+</svg>

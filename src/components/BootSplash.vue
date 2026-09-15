@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
-/** 与 public/logo/onda-logo-app.svg 同源的波形容器：一条 S 形波浪，上下两条各偏移 150 */
-const WAVE_D = 'M210 512 Q 386 352 512 512 T 814 512'
+/** 与 public/logo/onda-logo-app.svg 同源的波形容器：一条 S 形波浪，上下两条各偏移 168 */
+const WAVE_D = 'M210 512 Q 386 384 512 512 T 814 512'
 
 /**
- * 三层声波：上、下两条细波，中间一条粗波（绘制顺序同品牌源文件）。
+ * 三层声波：三条等粗波浪（线宽、间距、振幅与品牌源文件完全一致）。
  * delay 是各自的起笔时间——主体（中波）先落笔，上下两条依次跟上，
  * 像一道声波扩散开、再分层成形。
  */
 const LAYERS = [
-  { dy: -150, w: 64, delay: 110 },
-  { dy: 150, w: 64, delay: 220 },
+  { dy: -168, w: 88, delay: 110 },
+  { dy: 168, w: 88, delay: 220 },
   { dy: 0, w: 88, delay: 0 },
 ]
 
