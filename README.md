@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4?logo=windows11&logoColor=white" />
+  <img alt="platform" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4" />
   <img alt="tauri" src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" />
   <img alt="vue" src="https://img.shields.io/badge/Vue-3%20%2B%20Vite%207-42B883?logo=vuedotjs&logoColor=white" />
   <img alt="version" src="https://img.shields.io/badge/version-1.0.0-172554" />
