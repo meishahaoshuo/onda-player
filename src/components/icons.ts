@@ -82,6 +82,8 @@ export const iconPaths = {
     '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
   download:
     '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
+  /* 退出应用用的电源符号（与「关闭窗口」的 close 区分开） */
+  power: '<path d="M12 3v9"/><path d="M7.5 6.5a7 7 0 1 0 9 0"/>',
 } as const
 
 export type IconName = keyof typeof iconPaths

@@ -177,6 +177,13 @@
   --dur-med: 220ms;
   --dur-slow: 380ms;
 
+  /* 托盘浮层菜单：窗口自身关掉了系统阴影（shadow:false），阴影得由 CSS 画。
+     两层叠加（贴地的紧阴影 + 远处的环境阴影）比单层大模糊自然得多。
+     ⚠️ 窗口只有 268 宽、内边距 16，扩散再大就会被窗口边界切掉，别调太大 */
+  --tray-menu-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.07),
+    0 10px 28px rgba(0, 0, 0, 0.14);
+
   --radius-panel: 16px;
   --radius-item: 10px;
 }
@@ -434,12 +441,14 @@ body.modal-open .ambient-blob {
   }
 }
 
-/* ---------- 桌面端磨砂（第 9 阶段 9.5，仅 Tauri 环境由 desktop.ts 加 .desktop-glass） ----------
-   窗口 transparent + Rust 侧 Acrylic 按主题 tint 提供真材质，
-   页面基底降为半透明让桌面透出；玻璃面板（--glass-bg）叠在其上即为磨砂。 */
-html.desktop-glass body {
-  background: color-mix(in srgb, var(--bg-base) 76%, transparent);
-}
+/* ---------- 桌面端「窗口透出桌面」材质：已移除（2026-09-15） ----------
+   原方案是「窗口 transparent + Rust 侧 Acrylic + 页面基底降为 76% 半透明」，
+   但那 24% 的缝隙底下压着的是**不透明白**（窗口材质没真正成形），
+   于是深色模式页面底色被抬到 #454545（= 0.76 × #0a0a0a + 0.24 × #ffffff，
+   分毫不差），比侧栏 / 面板这些玻璃层还亮 —— 层次整个反了，各区域看着不一致。
+   用户决定暂不做这个特性：窗口恢复不透明，body 直接铺实色 --bg-base，
+   各层关系随之恒定（基底最暗 → 面板 / 顶栏依次递亮）。
+   故 `--bg-base` 在 body 上不再做任何降透明处理。 */
 
 /* ---------- 启动过场期间：先藏起侧边栏的真实品牌区 ----------
    过场结束时 BootSplash 移除 html.is-booting，品牌由自身 200ms 过渡淡入，

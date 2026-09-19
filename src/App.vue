@@ -31,7 +31,8 @@ import { installTrackSwapWatcher } from '@/services/coverFlight'
 import { installHotkeys } from '@/services/hotkeys'
 import { installAbsorbFlight } from '@/services/absorbFlight'
 import { extractBrightColors } from '@/services/palette'
-import { initDesktop, isDesktop } from '@/services/desktop'
+import { initDesktop, isDesktop, showMainWindow } from '@/services/desktop'
+import { prepareTrayMenu, pushTrayState } from '@/services/trayMenu'
 import TitleBar from '@/components/TitleBar.vue'
 import type { ViewId } from '@/types'
 
@@ -128,6 +129,18 @@ function addFolder() {
   library.addFolder()
 }
 
+/** 把当前状态同步给托盘浮层（浮层是独立 webview，没有共享内存，只能靠事件推） */
+function syncTrayState() {
+  const song = player.current
+  pushTrayState({
+    title: song?.title ?? '',
+    artist: song?.artist ?? '',
+    coverId: song?.coverId ?? null,
+    playing: player.playing,
+    favorited: song ? favorites.has(song.path) : false,
+  })
+}
+
 onMounted(async () => {
   settings // 触发主题初始化
   playlistStore.load()
@@ -142,12 +155,35 @@ onMounted(async () => {
   installTrackSwapWatcher()
   installAbsorbFlight()
   installHotkeys()
-  // 桌面端（Tauri）：磨砂窗口、窗口状态记忆、托盘播放控制（浏览器形态零开销）
+  // 桌面端（Tauri）：磨砂窗口、窗口状态记忆、托盘浮层菜单（浏览器形态零开销）
   if (isDesktop) {
     void initDesktop()
+
+    /* ---------- 托盘浮层 → 主窗口：动作 ---------- */
     window.addEventListener('onda:tray-playpause', () => player.togglePlay())
     window.addEventListener('onda:tray-prev', () => player.prev())
     window.addEventListener('onda:tray-next', () => player.next())
+    window.addEventListener('onda:tray-favorite', () => {
+      if (player.currentPath) favorites.toggle(player.currentPath)
+    })
+    // 跳设置：得先把主窗口叫出来，否则改完状态用户也看不到
+    window.addEventListener('onda:tray-go', (e) => {
+      const target = (e as CustomEvent<{ target?: string }>).detail?.target
+      if (target === 'settings') ui.navigate('settings')
+      showMainWindow()
+    })
+
+    /* ---------- 主窗口 → 托盘浮层：状态 ----------
+       浮层常驻隐藏，只靠广播会漏掉「它被打开之前」发生的那次更新，
+       所以 Rust 侧会缓存最近一份、右键展开时回放。 */
+    watch(
+      () => [player.currentPath, player.playing, favorites.addedAt],
+      syncTrayState,
+      { immediate: true },
+    )
+
+    // 预热浮层窗口：压在启动过场收尾之后，不给开机路径添负担
+    window.setTimeout(prepareTrayMenu, 2500)
   }
 })
 

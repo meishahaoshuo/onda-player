@@ -5,17 +5,19 @@ import { isDesktop } from './fs'
 export { isDesktop }
 
 /**
- * 桌面端初始化（9.5）：窗口定位与显示、磨砂窗口效果、窗口状态记忆、托盘事件转发。
+ * 桌面端初始化（9.5）：窗口定位与显示、窗口状态记忆、托盘事件转发。
  * 浏览器形态零开销。
  *
  * 窗口显示时机见 primeWindow —— 窗口以 visible:false 创建，由它在最早时机
  * 定位后 show，避免"先在默认位置露脸、过一会儿才跳到记忆位置"。
  *
- * 磨砂：html 加 .desktop-glass 后基底变半透明，材质由 Rust 侧 Acrylic
- * （按主题 tint）提供；切主题时由 data-theme 变更观察器重调。
+ * 窗口材质（透出桌面 + Acrylic）已移除，见 main.css 同名注释：
+ * 窗口不再透明，页面底色是不透明的 --bg-base，各层关系恒定。
  *
- * 托盘播放控制：Rust emit `tray://playpause|prev|next` → 转发为 DOM 事件
- * `onda:tray-*`（App.vue 监听后调 player store，避免本服务反向依赖 store）。
+ * 托盘浮层菜单：自绘菜单是另一个 webview（Rust 的 `tray-menu` 窗口），
+ * 它的按钮广播 `tray://playpause|prev|next|favorite|go`，这里统一
+ * 转发为 DOM 事件 `onda:tray-*`（App.vue 监听后调 store）。
+ * 反方向的状态推送见 `services/trayMenu.ts` 的 `pushTrayState()`。
  */
 
 const WIN_STATE_KEY = 'desktop.winState'
@@ -100,7 +102,6 @@ export async function primeWindow(): Promise<void> {
 
 export async function initDesktop(): Promise<void> {
   if (!isDesktop) return
-  document.documentElement.classList.add('desktop-glass')
 
   const [{ listen }, win] = await Promise.all([import('@tauri-apps/api/event'), mainWindow()])
 
@@ -127,23 +128,27 @@ export async function initDesktop(): Promise<void> {
   void win.onMoved(scheduleSave)
   void win.onResized(scheduleSave)
 
-  /* ---------- 托盘播放控制事件 → DOM 自定义事件 ---------- */
+  /* ---------- 托盘浮层的动作事件 → DOM 自定义事件 ----------
+     浮层是另一个 webview，它的按钮广播 `tray://*`，这里统一转成 `onda:tray-*`
+     交给 App.vue 去调 store —— 本服务不反向依赖 store。
+     带参数的（收藏 / 跳转）把 payload 一并带过去。 */
   const relay = (trayEvent: string, domEvent: string) =>
-    listen(trayEvent, () => window.dispatchEvent(new CustomEvent(domEvent)))
+    listen<unknown>(trayEvent, (e) => {
+      window.dispatchEvent(new CustomEvent(domEvent, { detail: e.payload }))
+    })
   void relay('tray://playpause', 'onda:tray-playpause')
   void relay('tray://prev', 'onda:tray-prev')
   void relay('tray://next', 'onda:tray-next')
+  void relay('tray://favorite', 'onda:tray-favorite')
+  void relay('tray://go', 'onda:tray-go')
+}
 
-  /* ---------- 磨砂：随主题重调 Acrylic tint ---------- */
-  const applyEffect = () => {
-    const dark = document.documentElement.dataset.theme === 'dark'
-    void invoke('set_window_effect', { dark }).catch(() => {
-      /* 系统不支持时保持 CSS 半透明基底降级 */
-    })
-  }
-  applyEffect()
-  new MutationObserver(applyEffect).observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ['data-theme'],
-  })
+/* ------------------------------------------------------------------ *
+ * 托盘浮层的「显示主窗口」
+ * ------------------------------------------------------------------ */
+
+/** 唤起并聚焦主窗口（浮层的跳转动作都要先把窗口叫出来） */
+export function showMainWindow(): void {
+  if (!isDesktop) return
+  void invoke('tray_show_main').catch(() => {})
 }

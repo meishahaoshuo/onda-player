@@ -161,6 +161,13 @@ export const useSettingsStore = defineStore('settings', () => {
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', resolvedTheme.value === 'dark' ? '#0A0A0A' : '#172554')
+    // 同步首帧底色：index.html 的防闪脚本只在**页面加载时**写一次 html 内联背景，
+    // 运行中切换主题不会重写它。不跟着改，html 就会永远停在加载时那层颜色上
+    // （深色模式下 = 一块白），页面基底只要带一点透明度就会把它透出来 ——
+    // 曾经的「页面底色 #454545」正是 0.76 × #0a0a0a + 0.24 × 这层白。
+    // 与 data-theme 一起在这里写，保证两层底色永远同步。
+    document.documentElement.style.backgroundColor =
+      resolvedTheme.value === 'dark' ? '#0a0a0a' : '#ffffff'
     localStorage.setItem(STORAGE_KEY, themeMode.value)
   })
 

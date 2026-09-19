@@ -64,15 +64,16 @@ const brandLogo = computed(() =>
 const songCount = computed(() => library.songs.length)
 
 /** 主题色预设（首项"默认"在模板单独渲染） */
-/* 知名配色：简单亮度 0.42~0.52 区间（统一白字可读），色相覆盖常用口味 */
+/* 一整套「同一深度」的颜色：亮度统一在 44~47%、饱和度 30~48%。
+   不用彩虹式取点（高饱和七色各自为政会显得廉价），命名走传统颜料，
+   也避免把竞品名（网易云红 / QQ音乐绿）写进自己的主题色。
+   总数刻意压到 5，加上默认与自定义正好 7 键 = 一排不换行 */
 const ACCENT_PRESETS: { c: string; name: string }[] = [
-  { c: '#EC4141', name: '网易云红' },
-  { c: '#31C27C', name: 'QQ音乐绿' },
-  { c: '#0A84FF', name: '晴空蓝' },
-  { c: '#D97706', name: '芒果橙' },
-  { c: '#E64980', name: '玫红' },
-  { c: '#5B4BD5', name: '罗兰紫' },
-  { c: '#64748B', name: '石墨' },
+  { c: '#6B4E9E', name: '黛紫' },
+  { c: '#B0413E', name: '绛红' },
+  { c: '#B4762A', name: '琥珀' },
+  { c: '#45A07C', name: '松绿' },
+  { c: '#6B7078', name: '石墨' },
 ]
 
 /** 当前选中的是「预设之外」的颜色 → 高亮「自定义」按键 */
@@ -1106,10 +1107,13 @@ function onRecordKeydown(e: KeyboardEvent) {
 /* 当前预设名：标题旁的小字提示 */
 /* 主题色按键组：形态与「样式 / 材质」的分段选择一致（按键，不是色圆点），
    每键 = 色点 + 名称，末尾是「自定义」取色器（label 包 input，整键可点） */
+/* 一行放满：7 键（默认 + 5 预设 + 自定义）总宽必须塞进容器。
+   实测原内边距下是 534px > 容器约 510px 会折行，故把间距与左右内边距各收紧一档，
+   留出约 30px 余量（缩小的是留白不是字号，观感基本不变） */
 .accent-keys {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
   margin-top: 12px;
 }
 
@@ -1117,8 +1121,8 @@ function onRecordKeydown(e: KeyboardEvent) {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px 6px 8px;
+  gap: 5px;
+  padding: 5px 9px 5px 7px;
   border-radius: 9px;
   border: 1px solid var(--border-subtle);
   font-size: 12px;
@@ -1150,9 +1154,10 @@ function onRecordKeydown(e: KeyboardEvent) {
   background: linear-gradient(135deg, #172554, #5c7ce0);
 }
 
-/* 自定义：色轮小点作为标识（点击后由系统取色器决定具体颜色） */
+/* 自定义：色轮小点作为标识（点击后由系统取色器决定具体颜色）。
+   色相环取当前这套预设的颜色，跟着色板一起走 —— 别写死成已删除的旧色 */
 .accent-key-dot.custom {
-  background: conic-gradient(#ec4141, #d97706, #31c27c, #0a84ff, #5b4bd5, #e64980, #ec4141);
+  background: conic-gradient(#b0413e, #b4762a, #45a07c, #6b4e9e, #6b7078, #b0413e);
 }
 
 .accent-key-custom {

@@ -1,9 +1,12 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
-use tauri::{Manager, Emitter};
+use tauri::{
+  Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder,
+};
 
 /**
  * 原生文件接入（桌面端，docs/02「桌面端重要说明」）：
@@ -14,9 +17,9 @@ use tauri::{Manager, Emitter};
  *    二进制通道（JSON 数组通道对 MB 级字节太慢）
  *  - read_text_file：读 .lrc 等文本
  *
- * 桌面特性（9.5）：无边框窗口 + Acrylic 磨砂（set_window_effect 随主题调 tint）、
- * 托盘（左键唤窗，菜单控制播放；事件 emit 给前端转发到 player store）、
- * 关闭即隐藏到托盘（退出走托盘菜单）、单实例锁（二次启动唤起已有窗口）。
+ * 桌面特性（9.5）：无边框窗口（不透明，窗口材质已移除）、
+ * 托盘（左键唤窗、右键展开自绘浮层菜单，见下方 TrayStateCache 区段）、
+ * 关闭即隐藏到托盘（退出走浮层菜单）、单实例锁（二次启动唤起已有窗口）。
  */
 
 const AUDIO_EXTS: &[&str] = &["mp3", "flac", "ogg", "oga", "opus", "wav", "m4a", "aac", "webm", "wma"];
@@ -101,24 +104,6 @@ fn read_text_file(path: String) -> Result<String, String> {
   std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
-/// 窗口磨砂：按主题 tint 的 Acrylic（深色深灰、浅色浅灰）。
-/// 切主题时前端会重调；失败（不支持的系统）静默降级为不透明背景。
-#[tauri::command]
-fn set_window_effect(window: tauri::WebviewWindow, dark: bool) -> Result<(), String> {
-  #[cfg(target_os = "windows")]
-  {
-    let _ = window_vibrancy::clear_acrylic(&window);
-    let _ = window_vibrancy::clear_mica(&window);
-    let tint = if dark { (14, 14, 18, 125) } else { (242, 243, 245, 150) };
-    window_vibrancy::apply_acrylic(&window, Some(tint)).map_err(|e| e.to_string())
-  }
-  #[cfg(not(target_os = "windows"))]
-  {
-    let _ = (window, dark);
-    Ok(())
-  }
-}
-
 fn show_main_window(app: &tauri::AppHandle) {
   if let Some(w) = app.get_webview_window("main") {
     let _ = w.unminimize();
@@ -135,6 +120,198 @@ static WINDOW_PRIMED: AtomicBool = AtomicBool::new(false);
 #[tauri::command]
 fn mark_window_primed() {
   WINDOW_PRIMED.store(true, Ordering::Relaxed);
+}
+
+/* ------------------------------------------------------------------ *
+ * 托盘浮层菜单（自绘）
+ *
+ * 系统原生托盘菜单（tauri::menu）只能改文字与启用态：字体、行高、内边距、
+ * 圆角、配色全由 Windows 决定，也做不出「横向按钮行」和「正在播放」卡头。
+ * 所以改成自绘 —— 一个无边框、透明、置顶、跳过任务栏的小窗口（label
+ * `tray-menu`），右键托盘时定位到光标处展开，界面由前端 TrayMenu.vue 画。
+ *
+ * 交互闭环：
+ *   托盘右键 → open_tray_menu（定位 + show + 重发状态）
+ *   浮层点任意项 → 广播 tray 事件给主窗口 / 调命令 → invoke('tray_menu_hide')
+ *   浮层失焦 → Rust 侧直接 hide
+ * ------------------------------------------------------------------ */
+
+const TRAY_MENU_WIN: &str = "tray-menu";
+/// 浮层宽度固定（逻辑像素）；高度由前端按内容量出来回报
+const TRAY_MENU_W: f64 = 268.0;
+const TRAY_MENU_H_FALLBACK: f64 = 430.0;
+
+/// 主窗口推到浮层的状态。刻意保持精简：封面只传 coverId，浮层自己从
+/// IndexedDB 取图（同源、同 WebView2 数据目录），省掉 base64 来回搬运。
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TrayState {
+  title: String,
+  artist: String,
+  cover_id: Option<String>,
+  playing: bool,
+  favorited: bool,
+}
+
+/// 状态缓存：浮层常驻隐藏，单靠广播会漏掉「它打开之前」发生的那次更新，
+/// 所以展开时把最近一份重发过去，保证菜单一出现就是当前状态。
+#[derive(Default)]
+struct TrayStateCache(Mutex<Option<TrayState>>);
+
+/// 在独立线程上创建浮层窗口（幂等）。
+///
+/// ⚠️ **绝不能在同步 command 或托盘事件回调里直接建窗口**：Windows 上 webview 的
+/// 初始化必须回到主线程，而同步 command 正占着主线程 → 必死锁。
+/// 实测症状：前端启动 2.5 秒调 `tray_menu_prepare` 后，整窗「无响应」、机器跟着卡，
+/// 与 Tauri 文档「Creating windows in a sync command causes a deadlock on Windows」一致。
+/// 所以这里统一走 `std::thread::spawn`，让主线程空出来接 webview 初始化。
+fn spawn_tray_menu_window(app: &tauri::AppHandle) {
+  if app.get_webview_window(TRAY_MENU_WIN).is_some() {
+    return;
+  }
+  let app = app.clone();
+  std::thread::spawn(move || {
+    if let Ok(win) = ensure_tray_menu_window(&app) {
+      let _ = win.hide();
+    }
+  });
+}
+
+/// 创建浮层窗口本体。窗口以 visible:false 出生、初始位置在屏幕外，
+/// 之后只做「定位 + show」，绝不重建 —— 重建会有明显白闪。
+/// ⚠️ 只允许在独立线程上调用（见 `spawn_tray_menu_window`）。
+fn ensure_tray_menu_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+  if let Some(w) = app.get_webview_window(TRAY_MENU_WIN) {
+    return Ok(w);
+  }
+
+  let win = WebviewWindowBuilder::new(
+    app,
+    TRAY_MENU_WIN,
+    WebviewUrl::App("index.html?tray=1".into()),
+  )
+  .title("Onda 托盘菜单")
+  .inner_size(TRAY_MENU_W, TRAY_MENU_H_FALLBACK)
+  .position(-20000.0, -20000.0)
+  .decorations(false)
+  .transparent(true)
+  /* 背景色必须显式给全透明：`transparent(true)` 只让**窗口**透明，
+     Windows 上 webview 图层默认仍是**不透明白**（Tauri 配置 schema 原话：
+     「if alpha channel is not 0, it will be ignored for the webview layer」）。
+     不设的话，卡片圆角外那圈本该透明的地方会是一块白，阴影也糊在白底上。 */
+  .background_color(tauri::webview::Color(0, 0, 0, 0))
+  .resizable(false)
+  .maximizable(false)
+  .minimizable(false)
+  .skip_taskbar(true)
+  .always_on_top(true)
+  .shadow(false)
+  .visible(false)
+  .focused(false)
+  .build()?;
+
+  // 失焦即收起：托盘菜单最基本的交互预期
+  let w = win.clone();
+  win.on_window_event(move |e| {
+    if let tauri::WindowEvent::Focused(false) = e {
+      let _ = w.hide();
+    }
+  });
+
+  Ok(win)
+}
+
+/// 在光标处展开浮层：右下角对齐光标，并夹进所在显示器的可用区域（贴边不被切）。
+fn open_tray_menu(app: &tauri::AppHandle, cursor: PhysicalPosition<f64>) {
+  let Some(win) = app.get_webview_window(TRAY_MENU_WIN) else {
+    // 还没预热好：这次先不弹（交给独立线程去建），下一次右键就能用了。
+    // 在托盘回调里直接建窗口同样会死锁，见 spawn_tray_menu_window 的说明。
+    spawn_tray_menu_window(app);
+    return;
+  };
+
+  let size = win
+    .outer_size()
+    .unwrap_or(PhysicalSize::new(
+      TRAY_MENU_W as u32,
+      TRAY_MENU_H_FALLBACK as u32,
+    ));
+  let (mw, mh) = (size.width as f64, size.height as f64);
+  let mut x = cursor.x - mw;
+  let mut y = cursor.y - mh;
+
+  if let Ok(Some(mon)) = app.monitor_from_point(cursor.x, cursor.y) {
+    let (mp, ms) = (mon.position(), mon.size());
+    let (l, t) = (mp.x as f64, mp.y as f64);
+    let (r, b) = (l + ms.width as f64, t + ms.height as f64);
+    x = x.clamp(l + 4.0, (r - mw - 4.0).max(l + 4.0));
+    y = y.clamp(t + 4.0, (b - mh - 4.0).max(t + 4.0));
+  }
+
+  let _ = win.set_position(PhysicalPosition::new(x, y));
+  let _ = win.show();
+  let _ = win.set_focus();
+
+  if let Some(state) = app.state::<TrayStateCache>().0.lock().unwrap().clone() {
+    let _ = win.emit("tray://state", state);
+  }
+}
+
+/// 预热浮层窗口：前端在启动过场收尾后调用，让首次右键不等待。
+/// ⚠️ 这里只负责「派线程」，绝不在本线程上建窗口（同步 command 会死锁）。
+#[tauri::command]
+fn tray_menu_prepare(app: tauri::AppHandle) {
+  spawn_tray_menu_window(&app);
+}
+
+/// 浮层按内容高度自适应（宽度固定）。用逻辑像素，避免高 DPI 下尺寸错位。
+#[tauri::command]
+fn tray_menu_resize(window: tauri::WebviewWindow, height: f64) {
+  if window.label() != TRAY_MENU_WIN {
+    return;
+  }
+  let h = height.clamp(120.0, 900.0);
+  let _ = window.set_size(LogicalSize::new(TRAY_MENU_W, h));
+}
+
+/// 收起浮层（浮层点了任意一项、或按 Esc 时调）
+#[tauri::command]
+fn tray_menu_hide(window: tauri::WebviewWindow) {
+  if window.label() == TRAY_MENU_WIN {
+    let _ = window.hide();
+  }
+}
+
+/// 显示并聚焦主窗口（浮层的「显示主窗口」）
+#[tauri::command]
+fn tray_show_main(app: tauri::AppHandle) {
+  show_main_window(&app);
+}
+
+/// 退出应用（浮层的「退出」）
+#[tauri::command]
+fn tray_quit(app: tauri::AppHandle) {
+  app.exit(0);
+}
+
+/// 主窗口推送浮层状态：缓存一份，同时转发给浮层（浮层已在监听）
+#[tauri::command]
+fn tray_menu_state(app: tauri::AppHandle, state: TrayState) {
+  *app.state::<TrayStateCache>().0.lock().unwrap() = Some(state.clone());
+  if let Some(w) = app.get_webview_window(TRAY_MENU_WIN) {
+    let _ = w.emit("tray://state", state);
+  }
+}
+
+/// 浮层挂载好、监听注册完之后主动要一次状态。
+/// 防止「状态在它监听注册之前就被发出」—— 尤其首次右键时浮层可能刚建好还在加载。
+#[tauri::command]
+fn tray_menu_state_sync(app: tauri::AppHandle) {
+  if let Some(state) = app.state::<TrayStateCache>().0.lock().unwrap().clone() {
+    if let Some(w) = app.get_webview_window(TRAY_MENU_WIN) {
+      let _ = w.emit("tray://state", state);
+    }
+  }
 }
 
 /// 清掉历史版本在 WebView2 数据目录里留下的 Service Worker。
@@ -231,6 +408,8 @@ pub fn run() {
       show_main_window(app);
     }))
     .plugin(tauri_plugin_dialog::init())
+    // 托盘浮层的状态缓存（主窗口推送，展开时回放）
+    .manage(TrayStateCache::default())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -257,37 +436,25 @@ pub fn run() {
         });
       }
 
-      // 托盘：左键唤起主窗口；菜单提供显示/播放控制/退出
-      use tauri::menu::{Menu, MenuItem};
+      // 托盘：左键唤起主窗口；右键在光标处展开自绘浮层菜单（见 open_tray_menu）。
+      // 不再挂原生 menu —— 一旦挂了，右键会被系统菜单吃掉，我们的浮层就展不开。
       use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-      let show = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
-      let playpause = MenuItem::with_id(app, "playpause", "播放 / 暂停", true, None::<&str>)?;
-      let prev = MenuItem::with_id(app, "prev", "上一曲", true, None::<&str>)?;
-      let next = MenuItem::with_id(app, "next", "下一曲", true, None::<&str>)?;
-      let quit = MenuItem::with_id(app, "quit", "退出 Onda Player", true, None::<&str>)?;
-      let menu = Menu::with_items(app, &[&show, &playpause, &prev, &next, &quit])?;
       TrayIconBuilder::with_id("main-tray")
         .icon(app.default_window_icon().unwrap().clone())
         .tooltip("Onda Player")
-        .menu(&menu)
         .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray, event| {
           if let TrayIconEvent::Click {
-            button: MouseButton::Left,
+            button,
             button_state: MouseButtonState::Up,
+            position,
             ..
           } = event
           {
-            show_main_window(tray.app_handle());
-          }
-        })
-        .on_menu_event(|app, event| {
-          match event.id().as_ref() {
-            "show" => show_main_window(app),
-            "quit" => app.exit(0),
-            // 播放控制转发给前端（webview 隐藏时仍在运行）
-            id => {
-              let _ = app.emit(&format!("tray://{}", id), ());
+            match button {
+              MouseButton::Left => show_main_window(tray.app_handle()),
+              MouseButton::Right => open_tray_menu(tray.app_handle(), position),
+              _ => {}
             }
           }
         })
@@ -360,8 +527,14 @@ pub fn run() {
       list_audio_files,
       read_head,
       read_text_file,
-      set_window_effect,
-      mark_window_primed
+      mark_window_primed,
+      tray_menu_prepare,
+      tray_menu_resize,
+      tray_menu_hide,
+      tray_show_main,
+      tray_quit,
+      tray_menu_state,
+      tray_menu_state_sync
     ])
     .run(context)
     .expect("error while running tauri application");
