@@ -122,27 +122,23 @@ fn mark_window_primed() {
   WINDOW_PRIMED.store(true, Ordering::Relaxed);
 }
 
-/// 窗口玻璃：enabled = 挂/摘材质，dark = 仅在回退 Acrylic 时决定 tint。
-/// 材质首选 **BLURBEHIND 轻高斯**（无噪点、不抽饱和，blur 半径轻——参考效果的
-/// 「完全透明 + 一点点模糊」只有它能给；Acrylic 的重磨砂+噪点是系统写死的，
-/// 调数值也变不出来）。BLURBEHIND 不传 tint，色调全部交给页面 CSS，可调性最大。
-/// 已知代价：Windows 11 build 22621+ 拖动/缩放窗口可能掉帧（crate 文档明示的
-/// 未公开 API 问题）。BLURBEHIND 不可用时回退 Acrylic 重磨砂保底。
-/// 失败把错误传回，前端摘掉 .desktop-glass 降级为不透明实底。
+/// 窗口磨砂（桌面玻璃）：enabled = 挂/摘 Acrylic 材质，dark = 按主题取 tint。
+/// 前端在开关变化与主题切换时都会重调（settings store 的 watchEffect 驱动）。
+/// 失败（系统不支持/关闭了透明效果）把错误传回，前端摘掉 .desktop-glass
+/// 降级为不透明实底——不能静默吞掉，否则半透明基底下没有材质会直接透出桌面。
 #[tauri::command]
 fn set_window_effect(window: tauri::WebviewWindow, enabled: bool, dark: bool) -> Result<(), String> {
   #[cfg(target_os = "windows")]
   {
     let _ = window_vibrancy::clear_acrylic(&window);
     let _ = window_vibrancy::clear_mica(&window);
-    let _ = window_vibrancy::clear_blur(&window);
     if !enabled {
       return Ok(());
     }
-    if window_vibrancy::apply_blur(&window, None).is_ok() {
-      return Ok(());
-    }
-    let tint = if dark { (14, 14, 18, 90) } else { (242, 243, 245, 105) };
+    // tint 压到近裸（125/150 → 45/55）：「玻璃感、强调透明」——材质色底要与页面基底
+    // （35%/30%）叠乘，两者都高就叠回磨砂奶白；blur 半径由系统 Acrylic 固定，
+    // 能调的只有这层色底，压得越低越透
+    let tint = if dark { (14, 14, 18, 45) } else { (242, 243, 245, 55) };
     window_vibrancy::apply_acrylic(&window, Some(tint)).map_err(|e| e.to_string())
   }
   #[cfg(not(target_os = "windows"))]
