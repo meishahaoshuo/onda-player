@@ -161,6 +161,8 @@ Onda Player 是一个**完全本地**的音乐播放器：你把音乐文件夹�
 
 ## 快速开始
 
+> **只想用，不想配环境？** 直接到 [**Releases**](https://github.com/meishahaoshuo/onda-player/releases/latest) 下载安装包（`Onda.Player_…_x64-setup.exe`）双击安装即可，无需 Node / Rust 环境。以下步骤面向开发者。
+
 ### 环境要求
 
 - **桌面端**：Windows 10/11 + [Node.js](https://nodejs.org/) ≥ 20.19 + [Rust 工具链](https://rustup.rs/)（MSVC target）+ Visual Studio Build Tools（C++ 桌面开发）
