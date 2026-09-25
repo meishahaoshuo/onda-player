@@ -471,6 +471,10 @@ html:root.desktop-glass {
      且各模块（面板/铬层/详情层）通透程度参差 */
   --bg-panel: var(--glass-panel-bg);
   --glass-bg: var(--glass-chrome-bg);
+  /* 铬层（侧栏/播放条/顶栏）自己的 backdrop 也放轻放平：32px+1.4 的高斯强提饱和
+     会给侧栏自成一块「重磨砂」，是「侧栏与右侧通透不一致」的来源之一。
+     窗口材质（Acrylic/BLURBEHIND）负责桌面那层模糊，页面内玻璃层只做轻辅助 */
+  --glass-blur: blur(16px) saturate(1.08);
 }
 
 html.desktop-glass body {
