@@ -77,7 +77,6 @@ dependencies = [
  "tauri-plugin-log",
  "tauri-plugin-single-instance",
  "urlencoding",
- "window-vibrancy",
 ]
 
 [[package]]
