@@ -60,6 +60,16 @@ const title = computed(() => viewTitles[ui.activeView])
 const sectionEl = ref<HTMLElement | null>(null)
 
 /**
+ * 桌面玻璃：详情层落定后藏起底层网格，让透明的详情覆盖层直接透出磨砂基底。
+ * dolly 生命周期即信号——'enter'（开场引力坍缩）与 'exit'（返回折叠）期间
+ * 网格必须可见并参与过渡；落到 'idle' 且详情仍开着才是「已落定」。
+ * visibility:hidden 保布局与滚动记忆，非玻璃态该 class 永远不挂。
+ */
+const glassGridHidden = computed(
+  () => isDesktop && settings.desktopGlass && !!ui.detailKey && ui.dolly === 'idle',
+)
+
+/**
  * 底部安全空间：两种播放条形态（标准/胶囊）都是悬浮于内容上方的液态玻璃条
  * （标准条 absolute 贴底、胶囊 fixed 居中），滚动内容都会从玻璃后面穿过，
  * 因此 view-body 与详情覆盖层一律预留 96px 底部 padding，不再按形态区分。
@@ -279,7 +289,7 @@ watch(
             ref="sectionEl"
             :key="ui.activeView"
             class="view-body scroll-host"
-            :class="{ 'stable-gutter': ui.activeView === 'settings' }"
+            :class="{ 'stable-gutter': ui.activeView === 'settings', 'glass-grid-hidden': glassGridHidden }"
           >
             <!-- 搜索优先：有关键词时内容区显示搜索结果 -->
             <!-- 注意：这条 v-if / v-else-if 链必须从 SongsView 一路连通到 PlaceholderView。

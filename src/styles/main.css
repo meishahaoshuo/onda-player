@@ -94,6 +94,14 @@
   --dust-tint: #ffffff;
   /* 已播区间的氛围光浓度（与粒子共用一个封面色） */
   --wash-opacity: 0.22;
+
+  /* 桌面玻璃（html.desktop-glass，仅 Tauri 形态生效）：统一低透明体系。
+     深色：基底 55%，玻璃铬层（侧栏/播放条/顶栏）≈0.40，面板 0.30——
+     叠上 Acrylic tint（(14,14,18,90)≈35%）后总不透明度 ~70%，壁纸明显透出。
+     梯度刻意收窄：原 76/72/66 三层叠乘近 95%，就是「各模块通透程度不同」的根源 */
+  --glass-body-mix: 55%;
+  --glass-panel-bg: rgba(44, 44, 52, 0.3);
+  --glass-chrome-bg: linear-gradient(120deg, rgba(32, 32, 38, 0.42), rgba(40, 40, 46, 0.3) 55%, rgba(32, 32, 38, 0.36));
 }
 
 :root[data-theme='light'] {
@@ -158,6 +166,12 @@
   --dust-tint: #0b0b0d;
   /* 浅色白底上氛围光要更克制，避免变成一条「脏色带」 */
   --wash-opacity: 0.14;
+
+  /* 桌面玻璃统一低透明体系（浅色）：基底 50%，铬层 ≈0.36，面板 0.26；
+     叠上 Acrylic tint（(242,243,245,105)≈41%）后总不透明度 ~70%，与深色观感一致 */
+  --glass-body-mix: 50%;
+  --glass-panel-bg: rgba(255, 255, 255, 0.26);
+  --glass-chrome-bg: linear-gradient(120deg, rgba(255, 255, 255, 0.4), rgba(250, 250, 252, 0.28) 55%, rgba(255, 255, 255, 0.34));
 }
 
 /* ---------- 动效令牌 ---------- */
@@ -450,8 +464,30 @@ body.modal-open .ambient-blob {
    挂/摘 .desktop-glass；材质申请失败自动摘类降级为不透明实底。浏览器形态零感知。
    全窗覆盖的沉浸面（专辑/艺术家/歌单详情覆盖层、歌词页、启动过场）保持不透明
    ——它们盖住的是页面内容而非窗口，半透明会穿透出底下的网格。 */
+/* 特异性说明：主题块是 :root[data-theme=…] (0,2,0)，这里必须 (0,2,1) 才能压过它 */
+html:root.desktop-glass {
+  /* 统一低透明：面板与玻璃铬层换成玻璃态专用低 alpha 底（令牌定义在各主题块）。
+     不降低的话，原 66%/72% 的面板底叠在半透明基板上，总不透明度就近乎不透，
+     且各模块（面板/铬层/详情层）通透程度参差 */
+  --bg-panel: var(--glass-panel-bg);
+  --glass-bg: var(--glass-chrome-bg);
+}
+
 html.desktop-glass body {
-  background: color-mix(in srgb, var(--bg-base) 76%, transparent);
+  background: color-mix(in srgb, var(--bg-base) var(--glass-body-mix), transparent);
+}
+
+/* 详情覆盖层（专辑/艺术家/歌单）玻璃态改透明：落定后底层网格被
+   .glass-grid-hidden 藏起（App.vue 按 dolly 生命周期驱动），直接透出磨砂基底；
+   过渡期间网格可见、照常参与引力坍缩。非玻璃态不透明底不变。 */
+html.desktop-glass .detail-layer,
+html.desktop-glass .playlist-detail {
+  background: transparent;
+}
+
+/* 详情落定期藏底层网格（仅玻璃态；visibility 保布局与滚动记忆，折叠起步即恢复） */
+html.desktop-glass .view-body.glass-grid-hidden {
+  visibility: hidden;
 }
 
 /* ---------- 启动过场期间：先藏起侧边栏的真实品牌区 ----------
