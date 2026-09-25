@@ -95,13 +95,13 @@
   /* 已播区间的氛围光浓度（与粒子共用一个封面色） */
   --wash-opacity: 0.22;
 
-  /* 桌面玻璃（html.desktop-glass，仅 Tauri 形态生效）：统一低透明体系。
-     深色：基底 35%，玻璃铬层（侧栏/播放条/顶栏）≈0.22，面板 0.18——
-     叠上 Acrylic tint（(14,14,18,45)≈18%）后总不透明度 ~46%，清透玻璃感。
-     梯度刻意收窄：原 76/72/66 三层叠乘近 95%，就是「各模块通透程度不同」的根源 */
-  --glass-body-mix: 35%;
-  --glass-panel-bg: rgba(44, 44, 52, 0.18);
-  --glass-chrome-bg: linear-gradient(120deg, rgba(32, 32, 38, 0.26), rgba(40, 40, 46, 0.18) 55%, rgba(32, 32, 38, 0.22));
+  /* 桌面玻璃（html.desktop-glass，仅 Tauri 形态生效）：BLURBEHIND 轻高斯材质下
+     色调全由页面承担。深色：基底 22%，铬层 ≈0.14，面板 0.10——近裸 tint 叠轻模糊，
+     壁纸清晰可辨，即参考效果的「完全透明 + 一点点模糊」。
+     梯度拉平（铬层三站几乎同值）治「侧栏与右侧通透不一致」 */
+  --glass-body-mix: 22%;
+  --glass-panel-bg: rgba(44, 44, 52, 0.1);
+  --glass-chrome-bg: linear-gradient(120deg, rgba(32, 32, 38, 0.15), rgba(32, 32, 38, 0.13) 55%, rgba(32, 32, 38, 0.14));
 }
 
 :root[data-theme='light'] {
@@ -167,11 +167,11 @@
   /* 浅色白底上氛围光要更克制，避免变成一条「脏色带」 */
   --wash-opacity: 0.14;
 
-  /* 桌面玻璃统一低透明体系（浅色）：基底 30%，铬层 ≈0.2，面板 0.14；
-     叠上 Acrylic tint（(242,243,245,55)≈22%）后总不透明度 ~45%，与深色观感一致 */
-  --glass-body-mix: 30%;
-  --glass-panel-bg: rgba(255, 255, 255, 0.14);
-  --glass-chrome-bg: linear-gradient(120deg, rgba(255, 255, 255, 0.24), rgba(250, 250, 252, 0.16) 55%, rgba(255, 255, 255, 0.2));
+  /* 桌面玻璃（浅色）：基底 18%，铬层 ≈0.11，面板 0.08——BLURBEHIND 无系统 tint，
+     色调全由页面承担，近裸口径与深色一致 */
+  --glass-body-mix: 18%;
+  --glass-panel-bg: rgba(255, 255, 255, 0.08);
+  --glass-chrome-bg: linear-gradient(120deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.1) 55%, rgba(255, 255, 255, 0.11));
 }
 
 /* ---------- 动效令牌 ---------- */
@@ -471,6 +471,10 @@ html:root.desktop-glass {
      且各模块（面板/铬层/详情层）通透程度参差 */
   --bg-panel: var(--glass-panel-bg);
   --glass-bg: var(--glass-chrome-bg);
+  /* 玻璃铬层（侧栏/播放条/顶栏）自己的 backdrop 也放轻放平：
+     blur 32px + saturate 1.4 在轻模糊材质上会自成一块「重磨砂」，
+     正是「侧栏与右侧通透不一致」的来源；压到轻模糊弱提饱和与全局一致 */
+  --glass-blur: blur(14px) saturate(1.05);
 }
 
 html.desktop-glass body {
