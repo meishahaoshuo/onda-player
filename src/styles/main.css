@@ -96,12 +96,12 @@
   --wash-opacity: 0.22;
 
   /* 桌面玻璃（html.desktop-glass，仅 Tauri 形态生效）：统一低透明体系。
-     深色：基底 55%，玻璃铬层（侧栏/播放条/顶栏）≈0.40，面板 0.30——
-     叠上 Acrylic tint（(14,14,18,90)≈35%）后总不透明度 ~70%，壁纸明显透出。
+     深色：基底 35%，玻璃铬层（侧栏/播放条/顶栏）≈0.22，面板 0.18——
+     叠上 Acrylic tint（(14,14,18,45)≈18%）后总不透明度 ~46%，清透玻璃感。
      梯度刻意收窄：原 76/72/66 三层叠乘近 95%，就是「各模块通透程度不同」的根源 */
-  --glass-body-mix: 55%;
-  --glass-panel-bg: rgba(44, 44, 52, 0.3);
-  --glass-chrome-bg: linear-gradient(120deg, rgba(32, 32, 38, 0.42), rgba(40, 40, 46, 0.3) 55%, rgba(32, 32, 38, 0.36));
+  --glass-body-mix: 35%;
+  --glass-panel-bg: rgba(44, 44, 52, 0.18);
+  --glass-chrome-bg: linear-gradient(120deg, rgba(32, 32, 38, 0.26), rgba(40, 40, 46, 0.18) 55%, rgba(32, 32, 38, 0.22));
 }
 
 :root[data-theme='light'] {
@@ -167,11 +167,11 @@
   /* 浅色白底上氛围光要更克制，避免变成一条「脏色带」 */
   --wash-opacity: 0.14;
 
-  /* 桌面玻璃统一低透明体系（浅色）：基底 50%，铬层 ≈0.36，面板 0.26；
-     叠上 Acrylic tint（(242,243,245,105)≈41%）后总不透明度 ~70%，与深色观感一致 */
-  --glass-body-mix: 50%;
-  --glass-panel-bg: rgba(255, 255, 255, 0.26);
-  --glass-chrome-bg: linear-gradient(120deg, rgba(255, 255, 255, 0.4), rgba(250, 250, 252, 0.28) 55%, rgba(255, 255, 255, 0.34));
+  /* 桌面玻璃统一低透明体系（浅色）：基底 30%，铬层 ≈0.2，面板 0.14；
+     叠上 Acrylic tint（(242,243,245,55)≈22%）后总不透明度 ~45%，与深色观感一致 */
+  --glass-body-mix: 30%;
+  --glass-panel-bg: rgba(255, 255, 255, 0.14);
+  --glass-chrome-bg: linear-gradient(120deg, rgba(255, 255, 255, 0.24), rgba(250, 250, 252, 0.16) 55%, rgba(255, 255, 255, 0.2));
 }
 
 /* ---------- 动效令牌 ---------- */
@@ -485,9 +485,16 @@ html.desktop-glass .playlist-detail {
   background: transparent;
 }
 
-/* 详情落定期藏底层网格（仅玻璃态；visibility 保布局与滚动记忆，折叠起步即恢复） */
-html.desktop-glass .view-body.glass-grid-hidden {
+/* 详情落定期藏底层网格（仅玻璃态；visibility 保布局与滚动记忆，折叠起步即恢复）。
+   注意：歌单详情 .playlist-detail 是 PlaylistsView 的子元素，即 .view-body 的**后代**，
+   会被这里的 visibility:hidden 连带藏掉（歌单页整页空白的根因），显式恢复可见——
+   藏在它下面的只有网格兄弟节点。专辑/艺术家详情层在 .view-body 外，无此问题。 */
+html:root.desktop-glass .view-body.glass-grid-hidden {
   visibility: hidden;
+}
+
+html:root.desktop-glass .view-body.glass-grid-hidden .playlist-detail {
+  visibility: visible;
 }
 
 /* ---------- 启动过场期间：先藏起侧边栏的真实品牌区 ----------

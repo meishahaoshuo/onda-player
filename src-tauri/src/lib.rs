@@ -135,9 +135,10 @@ fn set_window_effect(window: tauri::WebviewWindow, enabled: bool, dark: bool) ->
     if !enabled {
       return Ok(());
     }
-    // tint 压低（125/150 → 90/105）：材质自带色底要与页面基底（55%/50%）叠乘，
-    // 两者都高就会叠回近不透明——上一版「透不出壁纸」的元凶之一
-    let tint = if dark { (14, 14, 18, 90) } else { (242, 243, 245, 105) };
+    // tint 压到近裸（125/150 → 45/55）：「玻璃感、强调透明」——材质色底要与页面基底
+    // （35%/30%）叠乘，两者都高就叠回磨砂奶白；blur 半径由系统 Acrylic 固定，
+    // 能调的只有这层色底，压得越低越透
+    let tint = if dark { (14, 14, 18, 45) } else { (242, 243, 245, 55) };
     window_vibrancy::apply_acrylic(&window, Some(tint)).map_err(|e| e.to_string())
   }
   #[cfg(not(target_os = "windows"))]
