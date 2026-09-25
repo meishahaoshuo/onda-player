@@ -20,9 +20,7 @@
         "fullscreen": false,
       "decorations": false,
       "center": true,
-      "visible": false,
-      "transparent": true,
-      "backgroundColor": "#00000000"
+      "visible": false
       }
     ],
     "security": {

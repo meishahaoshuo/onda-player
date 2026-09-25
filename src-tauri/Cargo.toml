@@ -25,8 +25,6 @@ tauri = { version = "2.11.3", features = ["tray-icon"] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-single-instance = "2"
-# 窗口磨砂（桌面玻璃）：apply_acrylic 按主题 tint 让整窗透出桌面并实时模糊
-window-vibrancy = "0.6"
 urlencoding = "2"
 
 # release 构建：LTO 跨 crate 内联 + 单 codegen 单元 → 产物更小、启动略快；

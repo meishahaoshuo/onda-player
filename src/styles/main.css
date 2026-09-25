@@ -94,14 +94,6 @@
   --dust-tint: #ffffff;
   /* 已播区间的氛围光浓度（与粒子共用一个封面色） */
   --wash-opacity: 0.22;
-
-  /* 桌面玻璃（html.desktop-glass，仅 Tauri 形态生效）：统一低透明体系。
-     深色：基底 35%，玻璃铬层（侧栏/播放条/顶栏）≈0.22，面板 0.18——
-     叠上 Acrylic tint（(14,14,18,45)≈18%）后总不透明度 ~46%，清透玻璃感。
-     梯度刻意收窄：原 76/72/66 三层叠乘近 95%，就是「各模块通透程度不同」的根源 */
-  --glass-body-mix: 35%;
-  --glass-panel-bg: rgba(44, 44, 52, 0.18);
-  --glass-chrome-bg: linear-gradient(120deg, rgba(32, 32, 38, 0.26), rgba(40, 40, 46, 0.18) 55%, rgba(32, 32, 38, 0.22));
 }
 
 :root[data-theme='light'] {
@@ -166,12 +158,6 @@
   --dust-tint: #0b0b0d;
   /* 浅色白底上氛围光要更克制，避免变成一条「脏色带」 */
   --wash-opacity: 0.14;
-
-  /* 桌面玻璃统一低透明体系（浅色）：基底 30%，铬层 ≈0.2，面板 0.14；
-     叠上 Acrylic tint（(242,243,245,55)≈22%）后总不透明度 ~45%，与深色观感一致 */
-  --glass-body-mix: 30%;
-  --glass-panel-bg: rgba(255, 255, 255, 0.14);
-  --glass-chrome-bg: linear-gradient(120deg, rgba(255, 255, 255, 0.24), rgba(250, 250, 252, 0.16) 55%, rgba(255, 255, 255, 0.2));
 }
 
 /* ---------- 动效令牌 ---------- */
@@ -455,51 +441,13 @@ body.modal-open .ambient-blob {
   }
 }
 
-/* ---------- 桌面端「窗口透出桌面」材质（桌面玻璃，2026-09-25 重做） ----------
-   三层结构缺一不可：① 窗口 transparent（tauri.conf.json）② webview 图层 alpha 0
-   （同文件 backgroundColor "#00000000"——上次回退的根因就是漏了这层，不透明白
-   把材质压成 #454545，明暗层次整个反掉）③ Rust 侧 Acrylic 按主题 tint 提供真
-   模糊。本规则只负责最后一环：页面基底降为 76% 半透明让材质透出。
-   开关在 设置→外观「窗口磨砂」，由 settings.desktopGlass 经 desktop.setWindowGlass
-   挂/摘 .desktop-glass；材质申请失败自动摘类降级为不透明实底。浏览器形态零感知。
-   全窗覆盖的沉浸面（专辑/艺术家/歌单详情覆盖层、歌词页、启动过场）保持不透明
-   ——它们盖住的是页面内容而非窗口，半透明会穿透出底下的网格。 */
-/* 特异性说明：主题块是 :root[data-theme=…] (0,2,0)，这里必须 (0,2,1) 才能压过它 */
-html:root.desktop-glass {
-  /* 统一低透明：面板与玻璃铬层换成玻璃态专用低 alpha 底（令牌定义在各主题块）。
-     不降低的话，原 66%/72% 的面板底叠在半透明基板上，总不透明度就近乎不透，
-     且各模块（面板/铬层/详情层）通透程度参差 */
-  --bg-panel: var(--glass-panel-bg);
-  --glass-bg: var(--glass-chrome-bg);
-  /* 铬层（侧栏/播放条/顶栏）自己的 backdrop 也放轻放平：32px+1.4 的高斯强提饱和
-     会给侧栏自成一块「重磨砂」，是「侧栏与右侧通透不一致」的来源之一。
-     窗口材质（Acrylic/BLURBEHIND）负责桌面那层模糊，页面内玻璃层只做轻辅助 */
-  --glass-blur: blur(16px) saturate(1.08);
-}
-
-html.desktop-glass body {
-  background: color-mix(in srgb, var(--bg-base) var(--glass-body-mix), transparent);
-}
-
-/* 详情覆盖层（专辑/艺术家/歌单）玻璃态改透明：落定后底层网格被
-   .glass-grid-hidden 藏起（App.vue 按 dolly 生命周期驱动），直接透出磨砂基底；
-   过渡期间网格可见、照常参与引力坍缩。非玻璃态不透明底不变。 */
-html.desktop-glass .detail-layer,
-html.desktop-glass .playlist-detail {
-  background: transparent;
-}
-
-/* 详情落定期藏底层网格（仅玻璃态；visibility 保布局与滚动记忆，折叠起步即恢复）。
-   注意：歌单详情 .playlist-detail 是 PlaylistsView 的子元素，即 .view-body 的**后代**，
-   会被这里的 visibility:hidden 连带藏掉（歌单页整页空白的根因），显式恢复可见——
-   藏在它下面的只有网格兄弟节点。专辑/艺术家详情层在 .view-body 外，无此问题。 */
-html:root.desktop-glass .view-body.glass-grid-hidden {
-  visibility: hidden;
-}
-
-html:root.desktop-glass .view-body.glass-grid-hidden .playlist-detail {
-  visibility: visible;
-}
+/* ---------- 桌面端「窗口透出桌面」材质：已整体移除（2026-09-25 用户决定） ----------
+   曾四轮尝试：① Acrylic + 页面基底半透明（真机翻车：webview 图层不透明白压住材质，
+   页面底色被抬成 #454545）→ 回退；② 重做版修复漏白点后历经三轮调透明度（BLURBEHIND
+   轻高斯也在 build 22631 静默失效渲染不透明黑）——结论：系统合成层效果「API 成功」
+   ≠「真的渲染了」，必须人眼验收，且轻模糊的参考观感在现有 Windows 公开 API 上拿不到。
+   窗口恢复不透明，body 直接铺实色 --bg-base，各层关系恒定（基底最暗 → 面板/顶栏递亮），
+   `--bg-base` 在 body 上不做任何降透明处理。历史过程见 devlog 2026-09-25。 */
 
 /* ---------- 启动过场期间：先藏起侧边栏的真实品牌区 ----------
    过场结束时 BootSplash 移除 html.is-booting，品牌由自身 200ms 过渡淡入，

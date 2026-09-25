@@ -1,8 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watchEffect } from 'vue'
 import type { ThemeMode } from '@/types'
-import { isDesktop } from '@/services/fs'
-import { setWindowGlass } from '@/services/desktop'
 
 const STORAGE_KEY = 'settings.themeMode'
 const LYRIC_FS_KEY = 'settings.lyricFontSize'
@@ -60,12 +58,6 @@ function loadAutoResume(): boolean {
   return localStorage.getItem(AUTO_RESUME_KEY) === '1'
 }
 
-/** 桌面玻璃：整窗 Acrylic 磨砂、透出桌面（仅桌面形态生效，浏览器 no-op），默认开 */
-const DESKTOP_GLASS_KEY = 'settings.desktopGlass'
-function loadDesktopGlass(): boolean {
-  return localStorage.getItem(DESKTOP_GLASS_KEY) !== '0'
-}
-
 /* ---------- 自定义主题色 ----------
    accentColor 为空字符串表示使用 CSS 默认（海军蓝）；非空则运行时写 override 变量。 */
 const ACCENT_KEY = 'settings.accentColor'
@@ -94,6 +86,9 @@ function darken(hex: string, f = 0.78): string {
 
 /* ---------- 遗留清理：封面氛围光开关已下线（默认常开，不再可关） ---------- */
 localStorage.removeItem('settings.ambientGlow')
+
+/* 遗留清理：桌面玻璃（窗口磨砂）功能已整体移除（2026-09-25） */
+localStorage.removeItem('settings.desktopGlass')
 
 // 遗留清理：导入动画样式选择器已下线（固定液态玻璃）；交错滚动/歌词页音频可视化已下线
 localStorage.removeItem('settings.absorbStyle')
@@ -148,8 +143,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const locateFabStyle = ref<LocateFabStyle>(loadLocateFabStyle())
   const autoRestoreQueue = ref(loadAutoRestore())
   const autoResume = ref(loadAutoResume())
-  /** 桌面玻璃（窗口磨砂）：默认开；仅桌面形态有实际效果 */
-  const desktopGlass = ref(loadDesktopGlass())
   /** 自定义主题色：出厂默认海军蓝；'' = 默认海军蓝（设置页「默认海军蓝」色板）；非空 hex 为自定义色 */
   const accentColor = ref(loadAccent())
 
@@ -176,18 +169,9 @@ export const useSettingsStore = defineStore('settings', () => {
     // （深色模式下 = 一块白），页面基底只要带一点透明度就会把它透出来 ——
     // 曾经的「页面底色 #454545」正是 0.76 × #0a0a0a + 0.24 × 这层白。
     // 与 data-theme 一起在这里写，保证两层底色永远同步。
-    // 桌面玻璃开启时 html 这层必须是 **transparent**：它压在 Acrylic 材质与
-    // body 半透明基底之间，不透明就会把材质整个盖死（上次回退的第二个漏白点）。
-    // 浏览器形态与玻璃关闭时维持不透明实底（防闪白）。
     document.documentElement.style.backgroundColor =
-      isDesktop && desktopGlass.value
-        ? 'transparent'
-        : resolvedTheme.value === 'dark'
-          ? '#0a0a0a'
-          : '#ffffff'
+      resolvedTheme.value === 'dark' ? '#0a0a0a' : '#ffffff'
     localStorage.setItem(STORAGE_KEY, themeMode.value)
-    // 玻璃开关与主题切换都会重跑本 effect：挂/摘材质 + 按当前主题重调 tint
-    setWindowGlass(isDesktop && desktopGlass.value)
   })
 
   media.addEventListener('change', (e) => {
@@ -264,12 +248,6 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(AUTO_RESUME_KEY, v ? '1' : '0')
   }
 
-  /** 设置桌面玻璃（窗口磨砂）开关 */
-  function setDesktopGlass(v: boolean) {
-    desktopGlass.value = v
-    localStorage.setItem(DESKTOP_GLASS_KEY, v ? '1' : '0')
-  }
-
   /** 设置自定义主题色：'' 恢复默认 */
   function setAccentColor(c: string) {
     accentColor.value = /^#[0-9a-fA-F]{6}$/.test(c) ? c : ''
@@ -307,8 +285,6 @@ export const useSettingsStore = defineStore('settings', () => {
     setAutoRestoreQueue,
     autoResume,
     setAutoResume,
-    desktopGlass,
-    setDesktopGlass,
     accentColor,
     setAccentColor,
   }

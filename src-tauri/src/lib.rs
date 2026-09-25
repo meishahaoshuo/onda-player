@@ -122,32 +122,6 @@ fn mark_window_primed() {
   WINDOW_PRIMED.store(true, Ordering::Relaxed);
 }
 
-/// 窗口磨砂（桌面玻璃）：enabled = 挂/摘 Acrylic 材质，dark = 按主题取 tint。
-/// 前端在开关变化与主题切换时都会重调（settings store 的 watchEffect 驱动）。
-/// 失败（系统不支持/关闭了透明效果）把错误传回，前端摘掉 .desktop-glass
-/// 降级为不透明实底——不能静默吞掉，否则半透明基底下没有材质会直接透出桌面。
-#[tauri::command]
-fn set_window_effect(window: tauri::WebviewWindow, enabled: bool, dark: bool) -> Result<(), String> {
-  #[cfg(target_os = "windows")]
-  {
-    let _ = window_vibrancy::clear_acrylic(&window);
-    let _ = window_vibrancy::clear_mica(&window);
-    if !enabled {
-      return Ok(());
-    }
-    // tint 压到近裸（125/150 → 45/55）：「玻璃感、强调透明」——材质色底要与页面基底
-    // （35%/30%）叠乘，两者都高就叠回磨砂奶白；blur 半径由系统 Acrylic 固定，
-    // 能调的只有这层色底，压得越低越透
-    let tint = if dark { (14, 14, 18, 45) } else { (242, 243, 245, 55) };
-    window_vibrancy::apply_acrylic(&window, Some(tint)).map_err(|e| e.to_string())
-  }
-  #[cfg(not(target_os = "windows"))]
-  {
-    let _ = (window, enabled, dark);
-    Ok(())
-  }
-}
-
 /* ------------------------------------------------------------------ *
  * 托盘浮层菜单（自绘）
  *
@@ -554,7 +528,6 @@ pub fn run() {
       read_head,
       read_text_file,
       mark_window_primed,
-      set_window_effect,
       tray_menu_prepare,
       tray_menu_resize,
       tray_menu_hide,

@@ -14,7 +14,6 @@ import {
 } from '@/services/hotkeys'
 import type { ThemeMode } from '@/types'
 import AppIcon from '@/components/AppIcon.vue'
-import AppSwitch from '@/components/AppSwitch.vue'
 import { canInstall, isStandalone, promptInstall, installState } from '@/services/pwa'
 import { isDesktop } from '@/services/fs'
 
@@ -233,22 +232,6 @@ function onRecordKeydown(e: KeyboardEvent) {
               />
             </label>
           </div>
-
-          <!-- 桌面玻璃：整窗透出桌面 + Acrylic 磨砂。仅桌面形态显示；
-               系统不支持材质时 desktop.ts 会自动摘类回退不透明实底 -->
-          <template v-if="isDesktop">
-            <p class="panel-sub accent-heading">桌面玻璃</p>
-            <div class="opt-row">
-              <div class="opt-text">
-                <span class="opt-name">窗口磨砂</span>
-                <span class="opt-desc">整窗透出桌面壁纸并实时模糊；系统不支持时自动回退实底</span>
-              </div>
-              <AppSwitch
-                :model-value="settings.desktopGlass"
-                @update:model-value="settings.setDesktopGlass"
-              />
-            </div>
-          </template>
 
           <!-- 播放条 -->
           <p class="panel-sub accent-heading">播放条</p>

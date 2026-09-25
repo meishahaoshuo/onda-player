@@ -11,10 +11,10 @@ export { isDesktop }
  * 窗口显示时机见 primeWindow —— 窗口以 visible:false 创建，由它在最早时机
  * 定位后 show，避免"先在默认位置露脸、过一会儿才跳到记忆位置"。
  *
- * 窗口材质（透出桌面 + Acrylic）：由 settings store 的 desktopGlass 开关经
- * setWindowGlass 驱动——html 挂 .desktop-glass 后页面基底降为半透明（main.css），
- * 真材质由 Rust 侧 Acrylic 按主题 tint 提供；webview 图层的透白由
- * tauri.conf.json 的 backgroundColor "#00000000" 解决（上次回退的两个漏白点）。
+ * 窗口材质（透出桌面 + Acrylic/BLURBEHIND）已尝试四轮并于 2026-09-25 按用户决定
+ * 整体移除：窗口恢复不透明，页面底色是不透明的 --bg-base，各层关系恒定。
+ * 过程结论沉淀在 devlog 2026-09-25 与 docs/03（系统合成层效果「API 成功」≠
+ * 「真的渲染了」，必须人眼验收；BLURBEHIND 在 build 22631 静默渲染为不透明黑）。
  *
  * 托盘浮层菜单：自绘菜单是另一个 webview（Rust 的 `tray-menu` 窗口），
  * 它的按钮广播 `tray://playpause|prev|next|favorite|go`，这里统一
@@ -143,33 +143,6 @@ export async function initDesktop(): Promise<void> {
   void relay('tray://next', 'onda:tray-next')
   void relay('tray://favorite', 'onda:tray-favorite')
   void relay('tray://go', 'onda:tray-go')
-}
-
-/* ------------------------------------------------------------------ *
- * 窗口玻璃（透出桌面 + Acrylic）
- * ------------------------------------------------------------------ */
-
-/**
- * 挂/摘桌面玻璃：`.desktop-glass` 让页面基底降为半透明（规则在 main.css），
- * 真材质由 Rust 侧 `set_window_effect` 按当前主题 tint 提供。
- * 调用时机由 settings store 的 watchEffect 统一驱动——开关变化与主题切换都会
- * 重跑到那里再进到这里，因此这里不需要单独观察 data-theme。
- * 材质申请失败（系统不支持/关闭了透明效果）自动摘类，回退不透明实底；
- * 浏览器形态 no-op。
- */
-export function setWindowGlass(enabled: boolean): void {
-  if (!isDesktop) return
-  const root = document.documentElement
-  if (!enabled) {
-    root.classList.remove('desktop-glass')
-    void invoke('set_window_effect', { enabled: false, dark: false }).catch(() => {})
-    return
-  }
-  root.classList.add('desktop-glass')
-  const dark = root.dataset.theme === 'dark'
-  void invoke('set_window_effect', { enabled: true, dark }).catch(() => {
-    root.classList.remove('desktop-glass')
-  })
 }
 
 /* ------------------------------------------------------------------ *
